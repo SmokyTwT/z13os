@@ -123,12 +123,12 @@ clock-show-weekday=true
 button-layout='close,minimize,maximize:appmenu'
 
 [org.gnome.desktop.background]
-picture-uri='file:///usr/share/backgrounds/z13os/smokyos-light.png'
-picture-uri-dark='file:///usr/share/backgrounds/z13os/smokyos-dark.png'
+picture-uri='file:///usr/share/backgrounds/z13os/smokyos.jpg'
+picture-uri-dark='file:///usr/share/backgrounds/z13os/smokyos.jpg'
 picture-options='zoom'
 
 [org.gnome.desktop.screensaver]
-picture-uri='file:///usr/share/backgrounds/z13os/smokyos-dark.png'
+picture-uri='file:///usr/share/backgrounds/z13os/smokyos.jpg'
 
 [org.gnome.shell.extensions.dash-to-dock]
 dock-position='BOTTOM'

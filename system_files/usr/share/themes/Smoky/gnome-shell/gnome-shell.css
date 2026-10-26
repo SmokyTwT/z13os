@@ -1,19 +1,20 @@
 /* Smoky OS — thème GNOME Shell « fumée » : noir, gris, blanc.
    Repose sur le thème sombre officiel de GNOME : seules les formes et les
    couleurs ci-dessous changent (aucun effet recalculé en continu).
-   Un bouton actif s'allume en blanc, comme une volute dans le noir. */
+   Inspiré du fond d'écran : volutes argentées et lumineuses sur noir profond.
+   Un bouton actif s'allume en argent, avec un léger halo. */
 @import url("resource:///org/gnome/shell/theme/gnome-shell-dark.css");
 
 /* --- Centre de contrôle : grands boutons faciles au doigt --- */
 .quick-settings {
   background-color: rgba(18, 18, 20, 0.95);
   background-gradient-direction: vertical;
-  background-gradient-start: rgba(46, 46, 50, 0.96);
-  background-gradient-end: rgba(14, 14, 16, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-gradient-start: rgba(38, 38, 42, 0.97);
+  background-gradient-end: rgba(10, 10, 11, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
   padding: 16px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.40);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
 }
 .quick-settings-grid { spacing-rows: 12px; spacing-columns: 12px; }
 
@@ -26,10 +27,14 @@
 .quick-toggle:hover { background-color: rgba(255, 255, 255, 0.12); }
 .quick-toggle:checked,
 .quick-toggle-has-menu:checked .quick-toggle {
-  background-color: #ececee;
-  color: #111113;
+  background-color: #e6e6ea;
+  background-gradient-direction: vertical;
+  background-gradient-start: #ffffff;
+  background-gradient-end: #c9c9d0;
+  color: #0e0e10;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.28);
 }
-.quick-toggle:checked:hover { background-color: #ffffff; }
+.quick-toggle:checked:hover { background-gradient-end: #dcdce2; }
 .quick-toggle:checked .quick-toggle-subtitle { color: rgba(17, 17, 19, 0.65); }
 .quick-toggle-has-menu .quick-toggle:ltr { border-radius: 20px 0 0 20px; }
 .quick-toggle-has-menu .quick-toggle-arrow:ltr { border-radius: 0 20px 20px 0; }
@@ -41,7 +46,7 @@
 .quick-slider .slider-bin { border-radius: 18px; padding: 6px; }
 .quick-slider .slider {
   -barlevel-height: 26px;
-  -barlevel-active-background-color: #ececee;
+  -barlevel-active-background-color: #f2f2f5;
   -barlevel-background-color: rgba(255, 255, 255, 0.12);
   -slider-handle-radius: 13px;
   color: #ffffff;
@@ -75,6 +80,35 @@
 .world-clocks-button,
 .weather-button { border-radius: 18px; }
 
-/* --- Barre du haut : boutons en pastilles, heure en gras --- */
-#panel .clock-display-box .clock { font-weight: 700; }
+/* --- Barre du haut : noire et discrète, heure en gras argentée --- */
+#panel { background-color: rgba(8, 8, 9, 0.55); }
+#panel .clock-display-box .clock { font-weight: 700; color: #f4f4f7; text-shadow: 0 0 8px rgba(255, 255, 255, 0.35); }
 #panel .panel-button { border-radius: 999px; margin: 3px 2px; }
+
+/* --- Vue d'ensemble, recherche, dossiers d'applis : verre fumé --- */
+.search-entry {
+  background-color: rgba(20, 20, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.search-entry:focus { border-color: rgba(255, 255, 255, 0.45); box-shadow: 0 0 12px rgba(255, 255, 255, 0.15); }
+.app-folder-dialog {
+  background-color: rgba(16, 16, 18, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 30px;
+}
+.app-well-app:hover .overview-icon,
+.app-well-app:focus .overview-icon,
+.grid-search-result:hover .overview-icon { background-color: rgba(255, 255, 255, 0.10); border-radius: 22px; }
+.workspace-thumbnail { border-radius: 10px; }
+
+/* --- Notifications : fenêtres sombres à liseré argenté --- */
+.notification-banner,
+.message {
+  background-color: rgba(22, 22, 25, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* --- Écran de verrouillage : heure lumineuse --- */
+.unlock-dialog-clock-time { font-weight: 300; text-shadow: 0 0 24px rgba(255, 255, 255, 0.35); }
+.unlock-dialog-clock-date { color: rgba(255, 255, 255, 0.75); }
