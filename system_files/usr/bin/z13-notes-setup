@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Relie le dossier ~/Notes à un dossier « Notes Z13 » de ton Google Drive (une seule fois)
+set -euo pipefail
+NOTES="$HOME/Notes"
+REMOTE="gdrive:Notes Z13"
+mkdir -p "$NOTES"
+
+echo "=== Synchronisation des notes avec Google Drive ==="
+if ! rclone listremotes | grep -q '^gdrive:$'; then
+  echo "Ton navigateur va s'ouvrir : connecte-toi à Google et clique sur « Autoriser »."
+  echo "(Accès limité aux seuls fichiers créés par la synchro, pas à tout ton Drive.)"
+  rclone config create gdrive drive scope=drive.file
+fi
+
+rclone mkdir "$REMOTE"
+echo "Première synchronisation…"
+rclone bisync "$NOTES" "$REMOTE" --resync --create-empty-src-dirs
+systemctl --user daemon-reload
+systemctl --user enable --now z13-notes-sync.timer
+
+echo
+echo "C'est fait ! Range tes cahiers Rnote dans le dossier « Notes » :"
+echo "ils seront copiés dans Google Drive > « Notes Z13 » toutes les 5 minutes."
+read -rp "Appuie sur Entrée pour fermer."

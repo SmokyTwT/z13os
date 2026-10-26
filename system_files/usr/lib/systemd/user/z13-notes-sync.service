@@ -1,0 +1,7 @@
+[Unit]
+Description=Synchronisation des notes avec Google Drive
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/z13os/notes-sync.sh

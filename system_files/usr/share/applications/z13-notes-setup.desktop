@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Synchroniser mes notes avec Google Drive
+Comment=Relie le dossier Notes à Google Drive (à faire une fois)
+Exec=/usr/bin/z13-notes-setup
+Icon=folder-remote
+Terminal=true
+Categories=Utility;Education;
