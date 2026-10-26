@@ -168,8 +168,8 @@ sed -i 's/^Categories=.*/Categories=Education;Office;/' "$APPS_DIR"/z13-{drive,c
 
 # Spotify (version officielle via Flathub)
 flatpak install -y --noninteractive flathub com.spotify.Client
-# Lecteur vidéo local + lecteur PDF annotable au stylet (cours)
-flatpak install -y --noninteractive flathub io.mpv.Mpv com.github.xournalpp.xournalpp
+# Lecteur vidéo local + Rnote (prise de notes au stylet)
+flatpak install -y --noninteractive flathub io.mpv.Mpv com.github.flxzt.rnote
 update-desktop-database "$APPS_DIR" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
