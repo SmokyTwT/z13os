@@ -72,8 +72,10 @@ if [[ -n "$MOODLE_URL" ]]; then
 fi
 FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
-# --- Look « façon Apple » : dock + flou statique (calculé une fois, quasi gratuit)
-for ext in dash-to-dock blur-my-shell appindicator; do
+# --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
+# gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)
+# caffeine : empêche la veille d'un clic (cours en visio, lecture)
+for ext in dash-to-dock blur-my-shell appindicator gsconnect caffeine; do
   dnf -y install "gnome-shell-extension-$ext" || echo "AVERTISSEMENT : extension $ext indisponible"
 done
 
@@ -113,7 +115,7 @@ show-battery-percentage=true
 cursor-size=32
 icon-theme='WhiteSur'
 cursor-theme='WhiteSur-cursors'
-accent-color='blue'
+accent-color='purple'
 clock-show-weekday=true
 
 [org.gnome.desktop.wm.preferences]
@@ -167,7 +169,7 @@ idle-delay=uint32 300
 
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com']
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info']
 
 [org.gnome.shell.extensions.user-theme]
 name='Smoky'
