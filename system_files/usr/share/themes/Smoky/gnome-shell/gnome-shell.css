@@ -1,15 +1,15 @@
-/* Smoky OS — thème GNOME Shell « verre fumé ».
+/* Smoky OS — thème GNOME Shell « fumée » : noir, gris, blanc.
    Repose sur le thème sombre officiel de GNOME : seules les formes et les
    couleurs ci-dessous changent (aucun effet recalculé en continu).
-   Les éléments actifs suivent la couleur d'accent choisie dans Paramètres. */
+   Un bouton actif s'allume en blanc, comme une volute dans le noir. */
 @import url("resource:///org/gnome/shell/theme/gnome-shell-dark.css");
 
 /* --- Centre de contrôle : grands boutons faciles au doigt --- */
 .quick-settings {
-  background-color: rgba(22, 22, 30, 0.95);
+  background-color: rgba(18, 18, 20, 0.95);
   background-gradient-direction: vertical;
-  background-gradient-start: rgba(44, 40, 62, 0.96);
-  background-gradient-end: rgba(20, 20, 28, 0.96);
+  background-gradient-start: rgba(46, 46, 50, 0.96);
+  background-gradient-end: rgba(14, 14, 16, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 28px;
   padding: 16px;
@@ -26,9 +26,11 @@
 .quick-toggle:hover { background-color: rgba(255, 255, 255, 0.12); }
 .quick-toggle:checked,
 .quick-toggle-has-menu:checked .quick-toggle {
-  background-color: -st-accent-color;
-  color: -st-accent-fg-color;
+  background-color: #ececee;
+  color: #111113;
 }
+.quick-toggle:checked:hover { background-color: #ffffff; }
+.quick-toggle:checked .quick-toggle-subtitle { color: rgba(17, 17, 19, 0.65); }
 .quick-toggle-has-menu .quick-toggle:ltr { border-radius: 20px 0 0 20px; }
 .quick-toggle-has-menu .quick-toggle-arrow:ltr { border-radius: 0 20px 20px 0; }
 .quick-toggle-has-menu .quick-toggle:ltr:last-child { border-radius: 20px; }
@@ -39,14 +41,14 @@
 .quick-slider .slider-bin { border-radius: 18px; padding: 6px; }
 .quick-slider .slider {
   -barlevel-height: 26px;
-  -barlevel-active-background-color: -st-accent-color;
+  -barlevel-active-background-color: #ececee;
   -barlevel-background-color: rgba(255, 255, 255, 0.12);
   -slider-handle-radius: 13px;
   color: #ffffff;
 }
 
 .quick-toggle-menu {
-  background-color: rgba(34, 32, 46, 0.98);
+  background-color: rgba(30, 30, 33, 0.98);
   border-radius: 22px;
 }
 .quick-settings .icon-button {
@@ -57,7 +59,7 @@
 
 /* --- Menus de la barre du haut --- */
 .popup-menu-content {
-  background-color: rgba(24, 24, 32, 0.96);
+  background-color: rgba(20, 20, 22, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
 }

@@ -115,19 +115,20 @@ show-battery-percentage=true
 cursor-size=32
 icon-theme='WhiteSur'
 cursor-theme='WhiteSur-cursors'
-accent-color='purple'
+accent-color='slate'
+color-scheme='prefer-dark'
 clock-show-weekday=true
 
 [org.gnome.desktop.wm.preferences]
 button-layout='close,minimize,maximize:appmenu'
 
 [org.gnome.desktop.background]
-picture-uri='file:///usr/share/backgrounds/z13os/z13os-light.svg'
-picture-uri-dark='file:///usr/share/backgrounds/z13os/z13os-dark.svg'
+picture-uri='file:///usr/share/backgrounds/z13os/smokyos-light.png'
+picture-uri-dark='file:///usr/share/backgrounds/z13os/smokyos-dark.png'
 picture-options='zoom'
 
 [org.gnome.desktop.screensaver]
-picture-uri='file:///usr/share/backgrounds/z13os/z13os-dark.svg'
+picture-uri='file:///usr/share/backgrounds/z13os/smokyos-dark.png'
 
 [org.gnome.shell.extensions.dash-to-dock]
 dock-position='BOTTOM'

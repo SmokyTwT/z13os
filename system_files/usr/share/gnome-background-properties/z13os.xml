@@ -3,8 +3,8 @@
 <wallpapers>
   <wallpaper deleted="false">
     <name>Smoky OS</name>
-    <filename>/usr/share/backgrounds/z13os/z13os-light.svg</filename>
-    <filename-dark>/usr/share/backgrounds/z13os/z13os-dark.svg</filename-dark>
+    <filename>/usr/share/backgrounds/z13os/smokyos-light.png</filename>
+    <filename-dark>/usr/share/backgrounds/z13os/smokyos-dark.png</filename-dark>
     <options>zoom</options>
     <shade_type>solid</shade_type>
   </wallpaper>

@@ -15,7 +15,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Claude | Claude Code installé à la 1re connexion (`claude` dans un terminal) + appli Claude |
 | Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto |
 | Prise de notes façon GoodNotes | **Rnote** (cahiers infinis, stylet avec pression, import PDF, export PDF) |
-| Interface Smoky | Dock en bas, flou *statique* sur la barre et le dock (calculé une fois, ~0 % de batterie), icônes et curseurs WhiteSur (versions figées) pour toutes les applis, y compris le streaming, centre de contrôle « verre fumé » avec grands boutons tactiles, GSConnect (téléphone), Caffeine (anti-veille), boutons de fenêtre à gauche, fond d'écran clair/sombre maison |
+| Interface Smoky | Dock en bas, flou *statique* sur la barre et le dock (calculé une fois, ~0 % de batterie), icônes et curseurs WhiteSur (versions figées) pour toutes les applis, y compris le streaming, grands boutons tactiles dans le centre de contrôle, GSConnect (téléphone), Caffeine (anti-veille), boutons de fenêtre à gauche, thème « fumée » noir/gris/blanc : fond d'écran de volutes (version claire et sombre, mode sombre par défaut), centre de contrôle où les boutons actifs s'allument en blanc |
 | Notes sauvegardées | Dossier **Notes** synchronisé toutes les 5 min avec Google Drive > « Notes Z13 » |
 
 ## Obtenir l'ISO (GitHub la construit pour toi, gratuitement)
