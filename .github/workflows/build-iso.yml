@@ -1,0 +1,54 @@
+name: build-iso
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [build-image]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  iso:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Libérer de l'espace disque
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: Construire l'ISO
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}:latest"
+          sed -i "s|@IMAGE@|$IMAGE|" iso.toml
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman pull "$IMAGE"
+          mkdir -p output
+          sudo podman run --rm --privileged --pull=newer \
+            --security-opt label=type:unconfined_t \
+            -v ./iso.toml:/config.toml:ro \
+            -v ./output:/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type anaconda-iso --rootfs btrfs --use-librepo=True \
+            "$IMAGE"
+          sudo mv output/bootiso/install.iso z13os.iso
+          sudo chown "$USER" z13os.iso
+          sha256sum z13os.iso | tee z13os.iso.sha256
+          ls -lh z13os.iso
+
+      - name: Mettre l'ISO à disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: z13os-iso
+          path: |
+            z13os.iso
+            z13os.iso.sha256
+          compression-level: 0
+          retention-days: 14

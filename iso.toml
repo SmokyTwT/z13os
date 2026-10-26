@@ -1,0 +1,21 @@
+# Installateur Anaconda : tu choisis seulement le disque, le compte est créé
+# au premier démarrage (assistant GNOME). @IMAGE@ est remplacé par le workflow.
+[customizations.installer.kickstart]
+contents = """
+%post
+bootc switch --mutate-in-place --transport registry @IMAGE@
+%end
+"""
+
+[customizations.installer.modules]
+enable = [
+  "org.fedoraproject.Anaconda.Modules.Storage"
+]
+disable = [
+  "org.fedoraproject.Anaconda.Modules.Network",
+  "org.fedoraproject.Anaconda.Modules.Security",
+  "org.fedoraproject.Anaconda.Modules.Services",
+  "org.fedoraproject.Anaconda.Modules.Users",
+  "org.fedoraproject.Anaconda.Modules.Subscription",
+  "org.fedoraproject.Anaconda.Modules.Timezone"
+]

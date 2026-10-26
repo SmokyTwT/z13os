@@ -1,0 +1,10 @@
+[Unit]
+Description=Z13 OS - économies d'énergie (audio, PCIe)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sh -c 'echo 1 > /sys/module/snd_hda_intel/parameters/power_save 2>/dev/null; for f in /sys/bus/pci/devices/*/power/control; do echo auto > "$f"; done; true'
+
+[Install]
+WantedBy=multi-user.target

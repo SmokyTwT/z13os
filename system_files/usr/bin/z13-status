@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+echo "Système  : $(. /etc/os-release; echo "$PRETTY_NAME")"
+echo "Image    : $(rpm-ostree status --booted 2>/dev/null | grep -m1 -oE '(ostree-[^ ]+|ghcr\.io[^ ]+)')"
+echo "GPU      : $(supergfxctl -g 2>/dev/null || echo ?)"
+echo "Profil   : $(powerprofilesctl get 2>/dev/null || echo ?)"
+echo "Batterie : $(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null)% ($(cat /sys/class/power_supply/BAT0/status 2>/dev/null)), limite $(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null)%"
+echo "VA-API   : $(vainfo 2>/dev/null | grep -m1 'Driver version' | sed 's/.*: //')"
+echo "Noyau    : $(uname -r)"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Z13 OS - limite de charge batterie à 80 %
+After=multi-user.target asusd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sh -c 'f=/sys/class/power_supply/BAT0/charge_control_end_threshold; [ -w "$f" ] && echo 80 > "$f"; true'
+
+[Install]
+WantedBy=multi-user.target

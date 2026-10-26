@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Z13 OS - configuration utilisateur
+Exec=/usr/libexec/z13os/user-setup.sh
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications
