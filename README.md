@@ -20,8 +20,8 @@ revenir à la version précédente depuis le menu de démarrage.
 1. Crée un compte sur https://github.com, puis un dépôt **public** nommé `z13os`.
 2. Envoie tout le contenu de ce dossier dans le dépôt, y compris le dossier caché `.github`.
    Le plus simple : *Add file → Upload files*, puis glisser-déposer.
-3. *Settings → Secrets and variables → Actions → Variables* : ajoute `MOODLE_URL`
-   avec l'adresse de ton Moodle.
+3. Moodle : l'UPHF (`https://moodle.uphf.fr/`) est réglé par défaut. Pour en changer, ajoute
+   une variable `MOODLE_URL` dans *Settings → Secrets and variables → Actions → Variables*.
 4. Onglet **Actions** : lance `build-image` (environ 20 min). `build-iso` démarre ensuite
    tout seul (environ 30 min).
 5. *Your profile → Packages → z13os → Package settings* : mets la visibilité sur

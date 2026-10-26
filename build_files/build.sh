@@ -72,7 +72,7 @@ make_webapp drive   "Google Drive" "https://drive.google.com"         drive.goog
 make_webapp claude  "Claude"       "https://claude.ai"                claude.ai        "Office;Education;"
 FAVS="'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
-  make_webapp moodle "Moodle" "$MOODLE_URL" moodle.org "Education;"
+  make_webapp moodle "Moodle" "$MOODLE_URL" "$(echo "$MOODLE_URL" | sed -E 's#^https?://([^/]+).*#\1#')" "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
 FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"

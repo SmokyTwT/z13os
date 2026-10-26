@@ -7,6 +7,10 @@ on:
     - cron: '20 4 * * 1'   # chaque lundi : mises à jour de sécurité
   workflow_dispatch:
 
+concurrency:
+  group: build-image
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
@@ -29,8 +33,9 @@ jobs:
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          sudo podman build --pull=newer \
-            --build-arg MOODLE_URL="$MOODLE_URL" \
+          ARGS=()
+          [[ -n "$MOODLE_URL" ]] && ARGS+=(--build-arg "MOODLE_URL=$MOODLE_URL")
+          sudo podman build --pull=newer "${ARGS[@]}" \
             --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
             -t "$IMAGE:latest" -t "$IMAGE:$(date +%Y%m%d)" .
 
