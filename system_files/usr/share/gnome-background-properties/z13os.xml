@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
+<wallpapers>
+  <wallpaper deleted="false">
+    <name>Z13 OS</name>
+    <filename>/usr/share/backgrounds/z13os/z13os-light.svg</filename>
+    <filename-dark>/usr/share/backgrounds/z13os/z13os-dark.svg</filename-dark>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+  </wallpaper>
+</wallpapers>

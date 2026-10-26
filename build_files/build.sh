@@ -77,7 +77,12 @@ if [[ -n "$MOODLE_URL" ]]; then
 fi
 FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
-# --- Réglages GNOME par défaut (tactile / tablette) ----------------------------
+# --- Look « façon Apple » : dock + flou statique (calculé une fois, quasi gratuit)
+for ext in dash-to-dock blur-my-shell appindicator; do
+  dnf -y install "gnome-shell-extension-$ext" || echo "AVERTISSEMENT : extension $ext indisponible"
+done
+
+# --- Réglages GNOME par défaut (tactile / tablette + look) --------------------
 cat > /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override <<EOF
 [org.gnome.mutter]
 experimental-features=['scale-monitor-framebuffer', 'xwayland-native-scaling']
@@ -90,9 +95,51 @@ disable-while-typing=true
 [org.gnome.desktop.interface]
 show-battery-percentage=true
 cursor-size=32
+accent-color='blue'
+clock-show-weekday=true
 
 [org.gnome.desktop.wm.preferences]
-button-layout='appmenu:minimize,maximize,close'
+button-layout='close,minimize,maximize:appmenu'
+
+[org.gnome.desktop.background]
+picture-uri='file:///usr/share/backgrounds/z13os/z13os-light.svg'
+picture-uri-dark='file:///usr/share/backgrounds/z13os/z13os-dark.svg'
+picture-options='zoom'
+
+[org.gnome.desktop.screensaver]
+picture-uri='file:///usr/share/backgrounds/z13os/z13os-dark.svg'
+
+[org.gnome.shell.extensions.dash-to-dock]
+dock-position='BOTTOM'
+dock-fixed=false
+intellihide=true
+extend-height=false
+dash-max-icon-size=52
+show-apps-at-top=false
+show-trash=false
+show-mounts=false
+running-indicator-style='DOTS'
+transparency-mode='FIXED'
+background-opacity=0.35
+custom-theme-shrink=true
+click-action='minimize-or-previews'
+
+[org.gnome.shell.extensions.blur-my-shell.panel]
+blur=true
+static-blur=true
+
+[org.gnome.shell.extensions.blur-my-shell.dash-to-dock]
+blur=true
+static-blur=true
+
+[org.gnome.shell.extensions.blur-my-shell.overview]
+blur=true
+
+[org.gnome.shell.extensions.blur-my-shell.appfolder]
+blur=true
+
+[org.gnome.shell.extensions.blur-my-shell.applications]
+blur=false
 
 [org.gnome.settings-daemon.plugins.power]
 ambient-enabled=true
@@ -102,6 +149,7 @@ idle-delay=uint32 300
 
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com']
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
