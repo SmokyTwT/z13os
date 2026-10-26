@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Code
+Comment=Claude dans le terminal : il comprend ta demande et agit sur ton système
+Exec=/usr/bin/smoky-claude
+Icon=claude
+Terminal=false
+Categories=Utility;Development;
+Keywords=claude;ia;assistant;terminal;

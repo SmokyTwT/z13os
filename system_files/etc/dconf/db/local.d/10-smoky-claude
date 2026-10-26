@@ -1,0 +1,8 @@
+# Super + C : ouvrir Claude Code dans le terminal
+[org/gnome/settings-daemon/plugins/media-keys]
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/smoky-claude/']
+
+[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/smoky-claude]
+name='Claude Code'
+command='/usr/bin/smoky-claude'
+binding='<Super>c'

@@ -70,7 +70,7 @@ if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
+FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
 # --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
 # gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)
@@ -178,9 +178,10 @@ enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'ap
 name='Smoky'
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
+dconf update   # raccourci Super+C → Claude Code (etc/dconf/db/local.d)
 
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/libexec/smokynotes/server.py
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-claude /usr/libexec/smokynotes/server.py
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-battery-limit.service z13-firstboot.service \
   rpm-ostreed-automatic.timer
