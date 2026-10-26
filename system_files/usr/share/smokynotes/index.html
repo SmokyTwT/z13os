@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="smoky-token" content="__SMOKY_TOKEN__">
+  <title>Smoky Notes</title>
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <!-- Bibliothèque -->
+  <section id="library" class="view">
+    <header class="lib-header">
+      <div class="brand"><img src="icon.svg" alt=""><span>Smoky Notes</span></div>
+      <div class="search"><span data-icon="search"></span><input id="lib-search" type="search" placeholder="Rechercher un carnet"></div>
+      <div class="lib-actions">
+        <button id="lib-import" class="btn ghost" title="Importer un PDF"><span data-icon="import"></span><span>Importer un PDF</span></button>
+        <button id="lib-new" class="btn primary"><span data-icon="plus"></span><span>Nouveau carnet</span></button>
+      </div>
+    </header>
+    <nav class="lib-tabs">
+      <button class="tab active" data-filter="all">Tous</button>
+      <button class="tab" data-filter="fav">Favoris</button>
+      <select id="lib-sort" class="sort">
+        <option value="updated">Récents</option>
+        <option value="title">Nom</option>
+        <option value="created">Date de création</option>
+      </select>
+    </nav>
+    <div id="lib-grid" class="lib-grid"></div>
+    <div id="lib-empty" class="lib-empty hidden">
+      <div class="empty-art"></div>
+      <h2>Aucun carnet pour l'instant</h2>
+      <p>Crée ton premier carnet ou importe le PDF d'un cours pour l'annoter.</p>
+    </div>
+  </section>
+
+  <!-- Éditeur -->
+  <section id="editor" class="view hidden">
+    <header class="ed-top">
+      <div class="ed-left">
+        <button id="ed-back" class="icon-btn" title="Bibliothèque"><span data-icon="back"></span></button>
+        <button id="ed-pages-btn" class="icon-btn" title="Pages"><span data-icon="pages"></span></button>
+        <input id="ed-title" class="ed-title" spellcheck="false">
+        <span id="ed-save" class="save-state">Enregistré</span>
+      </div>
+      <div class="ed-tools" id="ed-tools">
+        <button class="tool" data-tool="pen" title="Stylo (P)"><span data-icon="pen"></span></button>
+        <button class="tool" data-tool="highlighter" title="Surligneur (H)"><span data-icon="highlighter"></span></button>
+        <button class="tool" data-tool="eraser" title="Gomme (E)"><span data-icon="eraser"></span></button>
+        <button class="tool" data-tool="lasso" title="Lasso (L)"><span data-icon="lasso"></span></button>
+        <button class="tool" data-tool="shape" title="Formes (S)"><span data-icon="shape"></span></button>
+        <button class="tool" data-tool="text" title="Texte (T)"><span data-icon="text"></span></button>
+        <button class="tool" data-tool="laser" title="Pointeur laser"><span data-icon="laser"></span></button>
+        <button class="tool-sep"></button>
+        <button id="ed-image" class="icon-btn" title="Insérer une image"><span data-icon="image"></span></button>
+      </div>
+      <div class="ed-right">
+        <button id="ed-undo" class="icon-btn" title="Annuler (Ctrl+Z)"><span data-icon="undo"></span></button>
+        <button id="ed-redo" class="icon-btn" title="Rétablir (Ctrl+Maj+Z)"><span data-icon="redo"></span></button>
+        <button id="ed-finger" class="icon-btn" title="Dessiner au doigt"><span data-icon="finger"></span></button>
+        <button id="ed-more" class="icon-btn" title="Plus"><span data-icon="more"></span></button>
+      </div>
+    </header>
+
+    <div class="ed-sub" id="ed-sub">
+      <div class="colors" id="ed-colors"></div>
+      <div class="sizes" id="ed-sizes"></div>
+      <div class="sub-extra" id="ed-sub-extra"></div>
+    </div>
+
+    <div class="ed-body">
+      <aside id="ed-sidebar" class="sidebar hidden">
+        <div class="side-head">
+          <button class="tab active" data-side="all">Pages</button>
+          <button class="tab" data-side="marked">Signets</button>
+        </div>
+        <div id="ed-thumbs" class="thumbs"></div>
+        <div class="side-foot">
+          <button id="ed-add-page" class="btn ghost small"><span data-icon="plus"></span>Page</button>
+        </div>
+      </aside>
+      <main id="ed-scroll" class="scroller">
+        <div id="ed-pages" class="pages"></div>
+      </main>
+      <div id="ed-zoom" class="zoom-pill">100 %</div>
+      <div id="ed-pageno" class="page-pill">1 / 1</div>
+    </div>
+
+    <div id="sel-bar" class="sel-bar hidden">
+      <button data-sel="color" title="Couleur"><span data-icon="palette"></span></button>
+      <button data-sel="copy" title="Copier"><span data-icon="copy"></span></button>
+      <button data-sel="duplicate" title="Dupliquer"><span data-icon="duplicate"></span></button>
+      <button data-sel="delete" title="Supprimer"><span data-icon="trash"></span></button>
+    </div>
+  </section>
+
+  <div id="menu" class="menu hidden"></div>
+  <div id="modal" class="modal hidden"><div class="modal-card" id="modal-card"></div></div>
+  <div id="toast" class="toast hidden"></div>
+  <input id="file-pdf" type="file" accept="application/pdf" hidden multiple>
+  <input id="file-img" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+</body>
+</html>

@@ -65,7 +65,7 @@ make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
 make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
-FAVS="'com.github.flxzt.rnote.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
+FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
@@ -178,7 +178,7 @@ EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/libexec/smokynotes/server.py
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-battery-limit.service z13-firstboot.service \
   rpm-ostreed-automatic.timer

@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""Smoky Notes — petit serveur local (127.0.0.1 uniquement).
+
+Sert l'interface web et enregistre les carnets dans ~/Notes/Smoky Notes/,
+dossier synchronisé avec Google Drive. Seule la page servie ici peut écrire :
+chaque requête d'API doit porter l'en-tête X-Smoky-Token (un site externe ne
+peut pas l'ajouter sans autorisation CORS, que ce serveur ne donne jamais) et
+l'en-tête Host doit être exactement 127.0.0.1:PORT (protection anti-rebinding).
+"""
+import json
+import os
+import re
+import secrets
+import shutil
+import sys
+import time
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+from urllib.parse import unquote
+
+PORT = int(os.environ.get("SMOKYNOTES_PORT", "47813"))
+APP_DIR = Path(os.environ.get("SMOKYNOTES_APP", "/usr/share/smokynotes")).resolve()
+NOTES_ROOT = Path(os.environ.get("SMOKYNOTES_NOTES", Path.home() / "Notes")).resolve()
+DATA_DIR = NOTES_ROOT / "Smoky Notes"
+TRASH_DIR = DATA_DIR / ".corbeille"
+TOKEN = secrets.token_urlsafe(24)
+HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+ASSET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}\.(pdf|png|jpg|jpeg|webp)$")
+PDF_NAME_RE = re.compile(r"^[^/\\\x00]{1,120}\.pdf$")
+MAX_BODY = 300 * 1024 * 1024  # 300 Mo (gros PDF de cours)
+MIME = {
+    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg", ".webp": "image/webp", ".pdf": "application/pdf",
+    ".json": "application/json", ".woff2": "font/woff2",
+}
+
+
+def write_atomic(path: Path, data: bytes):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "SmokyNotes/1.0"
+
+    def log_message(self, fmt, *args):  # silencieux (journal systemd inutile)
+        pass
+
+    # --- réponses ----------------------------------------------------------
+    def send(self, code, body=b"", ctype="application/json", extra=None):
+        if isinstance(body, (dict, list)):
+            body = json.dumps(body).encode()
+        elif isinstance(body, str):
+            body = body.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def fail(self, code, msg):
+        self.send(code, {"error": msg})
+
+    def body(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BODY:
+            raise ValueError("trop gros")
+        return self.rfile.read(n)
+
+    # --- sécurité ----------------------------------------------------------
+    def host_ok(self):
+        return self.headers.get("Host", "") in HOST_OK
+
+    def api_ok(self):
+        return self.host_ok() and secrets.compare_digest(
+            self.headers.get("X-Smoky-Token", ""), TOKEN)
+
+    # --- routage -----------------------------------------------------------
+    def do_GET(self):
+        if not self.host_ok():
+            return self.fail(403, "hôte refusé")
+        path = unquote(self.path.split("?", 1)[0])
+        if path.startswith("/api/"):
+            if not self.api_ok():
+                return self.fail(403, "jeton manquant")
+            return self.api_get(path[5:])
+        return self.static(path)
+
+    do_HEAD = do_GET
+
+    def do_PUT(self):
+        if not self.api_ok():
+            return self.fail(403, "refusé")
+        try:
+            return self.api_put(unquote(self.path.split("?", 1)[0])[5:])
+        except ValueError as e:
+            return self.fail(400, str(e))
+
+    def do_DELETE(self):
+        if not self.api_ok():
+            return self.fail(403, "refusé")
+        return self.api_delete(unquote(self.path.split("?", 1)[0])[5:])
+
+    def do_POST(self):
+        if not self.api_ok():
+            return self.fail(403, "refusé")
+        return self.api_post(unquote(self.path.split("?", 1)[0])[5:])
+
+    # --- fichiers de l'appli -------------------------------------------------
+    def static(self, path):
+        if path in ("", "/"):
+            path = "/index.html"
+        target = (APP_DIR / path.lstrip("/")).resolve()
+        if APP_DIR not in target.parents or not target.is_file():
+            return self.fail(404, "introuvable")
+        data = target.read_bytes()
+        if target.name == "index.html":
+            data = data.replace(b"__SMOKY_TOKEN__", TOKEN.encode())
+        csp = ("default-src 'self'; img-src 'self' blob: data:; "
+               "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
+               "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:")
+        self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
+                  {"Content-Security-Policy": csp})
+
+    # --- API ---------------------------------------------------------------
+    def nb_dir(self, nid):
+        if not ID_RE.match(nid):
+            raise ValueError("identifiant invalide")
+        return DATA_DIR / nid
+
+    def api_get(self, route):
+        parts = route.split("/")
+        try:
+            if route == "notebooks":
+                out = []
+                if DATA_DIR.is_dir():
+                    for d in DATA_DIR.iterdir():
+                        meta = d / "meta.json"
+                        if d.is_dir() and ID_RE.match(d.name) and meta.is_file():
+                            try:
+                                out.append(json.loads(meta.read_text()))
+                            except (OSError, ValueError):
+                                pass
+                return self.send(200, out)
+            if parts[0] == "notebooks" and len(parts) == 2:
+                f = self.nb_dir(parts[1]) / "notebook.json"
+                if not f.is_file():
+                    return self.fail(404, "carnet introuvable")
+                return self.send(200, f.read_bytes())
+            if parts[0] == "assets" and len(parts) == 3 and ASSET_RE.match(parts[2]):
+                f = self.nb_dir(parts[1]) / "assets" / parts[2]
+                if not f.is_file():
+                    return self.fail(404, "fichier introuvable")
+                return self.send(200, f.read_bytes(), MIME.get(f.suffix, "application/octet-stream"))
+        except ValueError as e:
+            return self.fail(400, str(e))
+        return self.fail(404, "route inconnue")
+
+    def api_put(self, route):
+        parts = route.split("/")
+        if parts[0] == "notebooks" and len(parts) == 2:
+            d = self.nb_dir(parts[1])
+            nb = json.loads(self.body())
+            if nb.get("id") != parts[1]:
+                raise ValueError("identifiant incohérent")
+            nb["updated"] = int(time.time() * 1000)
+            meta = {k: nb.get(k) for k in ("id", "title", "cover", "created", "updated", "favorite", "folder")}
+            meta["pages"] = len(nb.get("pages", []))
+            write_atomic(d / "notebook.json", json.dumps(nb, separators=(",", ":")).encode())
+            write_atomic(d / "meta.json", json.dumps(meta).encode())
+            return self.send(200, {"ok": True, "updated": nb["updated"]})
+        if parts[0] == "assets" and len(parts) == 3 and ASSET_RE.match(parts[2]):
+            write_atomic(self.nb_dir(parts[1]) / "assets" / parts[2], self.body())
+            return self.send(200, {"ok": True})
+        if parts[0] == "export" and len(parts) == 2 and PDF_NAME_RE.match(parts[1]):
+            name = parts[1].replace("..", "_").lstrip(".")
+            dest = NOTES_ROOT / "PDF" / name
+            write_atomic(dest, self.body())
+            return self.send(200, {"ok": True, "path": str(dest)})
+        return self.fail(404, "route inconnue")
+
+    def api_post(self, route):
+        parts = route.split("/")
+        try:
+            if parts[0] == "duplicate" and len(parts) == 3:
+                src, dst = self.nb_dir(parts[1]), self.nb_dir(parts[2])
+                if not src.is_dir() or dst.exists():
+                    return self.fail(409, "copie impossible")
+                shutil.copytree(src, dst)
+                return self.send(200, {"ok": True})
+        except ValueError as e:
+            return self.fail(400, str(e))
+        return self.fail(404, "route inconnue")
+
+    def api_delete(self, route):
+        parts = route.split("/")
+        try:
+            if parts[0] == "notebooks" and len(parts) == 2:
+                d = self.nb_dir(parts[1])
+                if d.is_dir():
+                    TRASH_DIR.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(d), str(TRASH_DIR / f"{d.name}-{int(time.time())}"))
+                return self.send(200, {"ok": True})
+        except ValueError as e:
+            return self.fail(400, str(e))
+        return self.fail(404, "route inconnue")
+
+
+def main():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    print(f"Smoky Notes : http://127.0.0.1:{PORT}/ — carnets dans {DATA_DIR}", file=sys.stderr)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

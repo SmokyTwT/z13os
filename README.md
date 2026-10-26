@@ -14,7 +14,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Moodle, Google Drive | Applis dans le dock + Drive dans Fichiers (Paramètres > Comptes en ligne) |
 | Claude | Claude Code installé à la 1re connexion (`claude` dans un terminal) + appli Claude |
 | Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto |
-| Prise de notes façon GoodNotes | **Rnote** (cahiers infinis, stylet avec pression, import PDF, export PDF) |
+| Prise de notes façon GoodNotes | **Smoky Notes**, appli maison : bibliothèque de carnets avec couvertures, classeurs et favoris ; papiers ligné, quadrillé, pointillé, Cornell, Seyès, portées (blanc, ivoire, cendre, fumée) ; stylo sensible à la pression, surligneur, gomme (trait entier ou précise), bout gomme du stylet ; lasso (déplacer, agrandir, recolorer, copier, dupliquer) ; formes parfaites en maintenant le stylet ; texte, images, pointeur laser ; import de PDF à annoter ; export PDF vectoriel dans Notes/PDF ; signets et miniatures des pages ; zoom à deux doigts, toucher à 2 doigts = annuler, 3 doigts = rétablir ; rejet de la paume ; tout est enregistré dans Notes/Smoky Notes (synchronisé avec Google Drive) |
 | Interface Smoky | Dock en bas, flou *statique* sur la barre et le dock (calculé une fois, ~0 % de batterie), icônes et curseurs WhiteSur (versions figées) pour toutes les applis, y compris le streaming, grands boutons tactiles dans le centre de contrôle, GSConnect (téléphone), Caffeine (anti-veille), boutons de fenêtre à gauche, thème « fumée » noir/gris/blanc : fond d'écran avec le mot « Smoky » qui part en fumée (version claire et sombre, mode sombre par défaut), centre de contrôle où les boutons actifs s'allument en blanc |
 | Notes sauvegardées | Dossier **Notes** synchronisé toutes les 5 min avec Google Drive > « Notes Z13 » |
 
@@ -41,10 +41,10 @@ télécharge seul et les applique au redémarrage suivant.
 3. Allume le Z13 en maintenant **Échap** (ou **F2** → Boot), puis choisis la clé.
 4. L'installateur demande seulement le disque. Choisis « récupérer tout l'espace » pour
    remplacer Windows.
-5. Au redémarrage, l'assistant GNOME crée ton compte. Branche le Wi-Fi : Spotify, Rnote et
+5. Au redémarrage, l'assistant GNOME crée ton compte. Branche le Wi-Fi : Spotify et
    Claude Code s'installent tout seuls dans les minutes qui suivent.
 6. Ouvre l'appli **Synchroniser mes notes avec Google Drive** et autorise l'accès (une seule fois).
-   Enregistre ensuite tes cahiers Rnote dans le dossier **Notes**.
+   Les carnets Smoky Notes et leurs exports PDF sont dans le dossier **Notes**, donc synchronisés.
 7. `z13-status` dans un terminal affiche l'état de la machine.
 
 ## À savoir (honnêtement)

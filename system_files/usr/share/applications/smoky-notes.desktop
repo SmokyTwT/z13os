@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Smoky Notes
+Comment=Prise de notes manuscrites au stylet, annotation de PDF
+Exec=/usr/bin/smoky-notes
+Icon=smoky-notes
+StartupWMClass=smoky-notes
+Categories=Office;Education;
+Keywords=notes;stylet;cahier;pdf;goodnotes;
+Terminal=false
