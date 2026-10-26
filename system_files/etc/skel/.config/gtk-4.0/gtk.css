@@ -1,0 +1,45 @@
+/* Smoky OS — fenêtres des applis GNOME (GTK 4 / libadwaita) assorties au fond
+   d'écran « smoky » : noir profond, argent lumineux. Supprimer ce fichier
+   rend l'apparence GNOME d'origine. */
+
+/* libadwaita récent : variables CSS */
+:root {
+  --accent-bg-color: #d9d9df;
+  --accent-fg-color: #0e0e10;
+  --accent-color: #e4e4ea;
+  --window-bg-color: #111113;
+  --window-fg-color: #ececef;
+  --view-bg-color: #0c0c0d;
+  --view-fg-color: #ececef;
+  --headerbar-bg-color: #161618;
+  --headerbar-fg-color: #f2f2f5;
+  --headerbar-backdrop-color: #111113;
+  --sidebar-bg-color: #141416;
+  --sidebar-backdrop-color: #111113;
+  --secondary-sidebar-bg-color: #121214;
+  --card-bg-color: rgba(255, 255, 255, 0.05);
+  --dialog-bg-color: #18181a;
+  --popover-bg-color: #18181a;
+}
+
+/* anciennes versions : couleurs nommées */
+@define-color accent_bg_color #d9d9df;
+@define-color accent_fg_color #0e0e10;
+@define-color accent_color #e4e4ea;
+@define-color window_bg_color #111113;
+@define-color view_bg_color #0c0c0d;
+@define-color headerbar_bg_color #161618;
+@define-color sidebar_bg_color #141416;
+@define-color card_bg_color rgba(255, 255, 255, 0.05);
+@define-color dialog_bg_color #18181a;
+@define-color popover_bg_color #18181a;
+
+/* boutons principaux : dégradé argent avec un léger halo, comme les volutes */
+button.suggested-action,
+switch:checked,
+checkbutton check:checked,
+scale highlight {
+  background-image: linear-gradient(180deg, #ffffff, #c4c4cc);
+  color: #0e0e10;
+}
+button.suggested-action { box-shadow: 0 0 12px rgba(255, 255, 255, 0.18); }

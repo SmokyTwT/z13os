@@ -140,8 +140,10 @@ show-apps-at-top=false
 show-trash=false
 show-mounts=false
 running-indicator-style='DOTS'
-transparency-mode='FIXED'
-background-opacity=0.35
+custom-theme-customize-running-dots=true
+custom-theme-running-dots-color='#ffffff'
+transparency-mode='DEFAULT'
+apply-custom-theme=false
 custom-theme-shrink=true
 click-action='minimize-or-previews'
 

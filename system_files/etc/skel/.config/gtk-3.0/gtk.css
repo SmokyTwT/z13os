@@ -1,0 +1,7 @@
+/* Smoky OS — applis GTK 3 assorties au fond d'écran « smoky ». */
+@define-color theme_selected_bg_color #d9d9df;
+@define-color theme_selected_fg_color #0e0e10;
+@define-color accent_bg_color #d9d9df;
+@define-color accent_fg_color #0e0e10;
+@define-color theme_bg_color #111113;
+@define-color theme_base_color #0c0c0d;
