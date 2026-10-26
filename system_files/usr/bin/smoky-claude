@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Ouvre Claude Code dans une nouvelle fenêtre de terminal (dock, Super + C).
-RUN='claude || { echo; read -rp "Appuie sur Entrée pour fermer."; }'
+# Ouvre le terminal de Smoky OS (dock, Super + C) : Claude Code y démarre tout seul
+# (voir /etc/profile.d/smoky-claude.sh).
 if command -v ptyxis >/dev/null; then
-  exec ptyxis --new-window -- bash -lc "$RUN"
+  exec ptyxis --new-window
 elif command -v xdg-terminal-exec >/dev/null; then
-  exec xdg-terminal-exec bash -lc "$RUN"
+  exec xdg-terminal-exec
 elif command -v kgx >/dev/null; then
-  exec kgx -- bash -lc "$RUN"
+  exec kgx
 else
-  exec gnome-terminal -- bash -lc "$RUN"
+  exec gnome-terminal
 fi

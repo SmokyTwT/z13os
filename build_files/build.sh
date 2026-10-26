@@ -70,7 +70,7 @@ if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
+FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'smoky-claude.desktop'"
 
 # --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
 # gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)

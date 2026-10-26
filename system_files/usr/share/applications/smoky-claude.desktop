@@ -1,9 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Claude Code
-Comment=Claude dans le terminal : il comprend ta demande et agit sur ton système
+Name=Terminal
+GenericName=Claude Code
+Comment=Le terminal de Smoky OS : Claude Code t'y attend, quitte-le pour un terminal classique
 Exec=/usr/bin/smoky-claude
 Icon=claude
 Terminal=false
 Categories=Utility;Development;
-Keywords=claude;ia;assistant;terminal;
+Keywords=claude;ia;assistant;terminal;console;shell;
