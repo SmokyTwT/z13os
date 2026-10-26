@@ -1,0 +1,73 @@
+/* Smoky OS — thème GNOME Shell façon « Centre de contrôle » macOS.
+   Repose sur le thème sombre officiel de GNOME : seules les formes et
+   les couleurs ci-dessous changent, rien n'est recalculé en continu. */
+@import url("resource:///org/gnome/shell/theme/gnome-shell-dark.css");
+
+/* --- Centre de contrôle (réglages rapides) --- */
+.quick-settings {
+  background-color: rgba(28, 28, 32, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 24px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.quick-settings-grid { spacing-rows: 10px; spacing-columns: 10px; }
+
+.quick-toggle,
+.quick-toggle-has-menu {
+  border-radius: 16px;
+  min-height: 52px;
+  background-color: rgba(255, 255, 255, 0.09);
+}
+.quick-toggle:hover { background-color: rgba(255, 255, 255, 0.14); }
+.quick-toggle:checked,
+.quick-toggle-has-menu:checked .quick-toggle {
+  background-color: #0a84ff;
+  color: #ffffff;
+}
+.quick-toggle:checked:hover { background-color: #2a95ff; }
+.quick-toggle-has-menu .quick-toggle:ltr { border-radius: 16px 0 0 16px; }
+.quick-toggle-has-menu .quick-toggle-arrow:ltr { border-radius: 0 16px 16px 0; }
+.quick-toggle-has-menu .quick-toggle:ltr:last-child { border-radius: 16px; }
+.quick-toggle .quick-toggle-title { font-weight: 600; }
+
+.quick-slider .slider-bin { border-radius: 14px; }
+.quick-slider .slider {
+  -barlevel-height: 22px;
+  -barlevel-active-background-color: #ffffff;
+  -barlevel-background-color: rgba(255, 255, 255, 0.16);
+  -slider-handle-radius: 11px;
+  color: #ffffff;
+}
+
+.quick-toggle-menu {
+  background-color: rgba(44, 44, 50, 0.98);
+  border-radius: 18px;
+}
+.quick-settings-system-item .icon-button,
+.quick-settings .icon-button {
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.09);
+}
+
+/* --- Menus de la barre du haut --- */
+.popup-menu-content {
+  background-color: rgba(28, 28, 32, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px;
+}
+.popup-menu-item { border-radius: 10px; }
+.popup-menu-item:selected,
+.popup-menu-item:hover { background-color: rgba(255, 255, 255, 0.10); }
+
+/* --- Notifications et calendrier --- */
+.message { border-radius: 18px; }
+.message-list-clear-button { border-radius: 999px; }
+.datemenu-today-button,
+.events-button,
+.world-clocks-button,
+.weather-button { border-radius: 16px; }
+
+/* --- Barre du haut : texte un peu plus net, heure en gras --- */
+#panel .clock-display-box .clock { font-weight: 700; }
+#panel .panel-button { border-radius: 999px; }

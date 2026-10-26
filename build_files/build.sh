@@ -44,14 +44,9 @@ sed -i "s|^Exec=/usr/bin/google-chrome-stable|Exec=/usr/bin/google-chrome-stable
   /usr/share/applications/google-chrome.desktop
 
 # --- Applis web (streaming, cours, Claude) ------------------------------------
-ICONS=/usr/share/icons/hicolor/256x256/apps
-mkdir -p "$ICONS"
-make_webapp() { # id  nom  url  domaine-icône  catégories
-  local id="$1" name="$2" url="$3" domain="$4" cats="$5" icon="web-browser"
-  if curl -fsSL --max-time 20 -o "$ICONS/z13-$id.png" \
-       "https://www.google.com/s2/favicons?domain=${domain}&sz=256"; then
-    icon="z13-$id"
-  fi
+# Icônes : celles du thème WhiteSur quand il en a une, sinon les nôtres (hicolor)
+make_webapp() { # id  nom  url  icône  catégories
+  local id="$1" name="$2" url="$3" icon="$4" cats="$5"
   cat > "/usr/share/applications/z13-$id.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -63,16 +58,16 @@ Categories=$cats
 Terminal=false
 EOF
 }
-make_webapp netflix "Netflix"      "https://www.netflix.com/browse"   netflix.com      "AudioVideo;Video;"
-make_webapp disney  "Disney+"      "https://www.disneyplus.com/fr-fr" disneyplus.com   "AudioVideo;Video;"
-make_webapp prime   "Prime Video"  "https://www.primevideo.com"       primevideo.com   "AudioVideo;Video;"
-make_webapp tf1     "TF1+"         "https://www.tf1.fr"               tf1.fr           "AudioVideo;Video;"
-make_webapp m6      "M6+"          "https://www.m6.fr"                m6.fr            "AudioVideo;Video;"
-make_webapp drive   "Google Drive" "https://drive.google.com"         drive.google.com "Office;Education;"
-make_webapp claude  "Claude"       "https://claude.ai"                claude.ai        "Office;Education;"
+make_webapp netflix "Netflix"      "https://www.netflix.com/browse"   netflix        "AudioVideo;Video;"
+make_webapp disney  "Disney+"      "https://www.disneyplus.com/fr-fr" disney         "AudioVideo;Video;"
+make_webapp prime   "Prime Video"  "https://www.primevideo.com"       primevideo     "AudioVideo;Video;"
+make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf1    "AudioVideo;Video;"
+make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
+make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
+make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
 FAVS="'com.github.flxzt.rnote.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
-  make_webapp moodle "Moodle" "$MOODLE_URL" "$(echo "$MOODLE_URL" | sed -E 's#^https?://([^/]+).*#\1#')" "Education;"
+  make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
 FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
@@ -92,6 +87,16 @@ bash "$WS/WhiteSur-icon-theme-${WHITESUR_ICONS_REV}/install.sh" -d /usr/share/ic
 curl -fsSL "https://github.com/vinceliuice/WhiteSur-cursors/archive/${WHITESUR_CURSORS_REV}.tar.gz" | tar -xz -C "$WS"
 cp -r "$WS/WhiteSur-cursors-${WHITESUR_CURSORS_REV}/dist" /usr/share/icons/WhiteSur-cursors
 rm -rf "$WS"
+# Icône WhiteSur pour Spotify (Flatpak) + caches d'icônes à jour
+for t in WhiteSur WhiteSur-dark WhiteSur-light; do
+  [[ -f /usr/share/icons/$t/apps/scalable/spotify-client.svg ]] &&
+    ln -sf spotify-client.svg /usr/share/icons/$t/apps/scalable/com.spotify.Client.svg
+  gtk-update-icon-cache -f /usr/share/icons/$t || true
+done
+gtk-update-icon-cache -f /usr/share/icons/hicolor || true
+
+# Thème « Smoky » du centre de contrôle (fichier CSS dans system_files)
+dnf -y install gnome-shell-extension-user-theme
 
 # --- Réglages GNOME par défaut (tactile / tablette + look) --------------------
 cat > /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override <<EOF
@@ -162,7 +167,10 @@ idle-delay=uint32 300
 
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com']
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com']
+
+[org.gnome.shell.extensions.user-theme]
+name='Smoky'
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
