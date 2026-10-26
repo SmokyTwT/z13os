@@ -1,5 +1,5 @@
 [Unit]
-Description=Z13 OS - configuration au premier démarrage (Spotify, mode GPU)
+Description=Z13 OS - configuration au premier démarrage (Spotify, Rnote, mode GPU)
 Wants=network-online.target
 After=network-online.target supergfxd.service
 ConditionPathExists=!/var/lib/z13os/firstboot.done

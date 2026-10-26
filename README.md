@@ -14,7 +14,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Moodle, Google Drive | Applis dans le dock + Drive dans Fichiers (Paramètres > Comptes en ligne) |
 | Claude | Claude Code installé à la 1re connexion (`claude` dans un terminal) + appli Claude |
 | Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto |
-| Notes au stylet | Xournal++ |
+| Prise de notes façon GoodNotes | **Rnote** (cahiers infinis, stylet avec pression, import PDF, export PDF) + Xournal++ pour annoter les PDF de cours |
 
 ## Obtenir l'ISO (GitHub la construit pour toi, gratuitement)
 1. Crée un compte sur https://github.com, puis un dépôt **public** nommé `z13os`.
@@ -39,7 +39,7 @@ télécharge seul et les applique au redémarrage suivant.
 3. Allume le Z13 en maintenant **Échap** (ou **F2** → Boot), puis choisis la clé.
 4. L'installateur demande seulement le disque. Choisis « récupérer tout l'espace » pour
    remplacer Windows.
-5. Au redémarrage, l'assistant GNOME crée ton compte. Branche le Wi-Fi : Spotify et
+5. Au redémarrage, l'assistant GNOME crée ton compte. Branche le Wi-Fi : Spotify, Rnote et
    Claude Code s'installent tout seuls dans les minutes qui suivent.
 6. `z13-status` dans un terminal affiche l'état de la machine.
 

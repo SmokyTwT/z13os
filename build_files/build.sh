@@ -70,7 +70,7 @@ make_webapp tf1     "TF1+"         "https://www.tf1.fr"               tf1.fr    
 make_webapp m6      "M6+"          "https://www.m6.fr"                m6.fr            "AudioVideo;Video;"
 make_webapp drive   "Google Drive" "https://drive.google.com"         drive.google.com "Office;Education;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude.ai        "Office;Education;"
-FAVS="'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
+FAVS="'com.github.flxzt.rnote.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" "$(echo "$MOODLE_URL" | sed -E 's#^https?://([^/]+).*#\1#')" "Education;"
   FAVS+=", 'z13-moodle.desktop'"
