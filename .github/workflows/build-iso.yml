@@ -6,10 +6,6 @@ on:
     types: [completed]
     branches: [main]
 
-concurrency:
-  group: build-iso
-  cancel-in-progress: true
-
 permissions:
   contents: read
   packages: read
@@ -17,6 +13,10 @@ permissions:
 jobs:
   iso:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # au niveau du job : une exécution ignorée (image annulée) n'annule plus l'ISO en cours
+    concurrency:
+      group: build-iso
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
