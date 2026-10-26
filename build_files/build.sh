@@ -5,7 +5,7 @@ set -euxo pipefail
 FEDORA_VER="$(rpm -E %fedora)"
 DISTRO_NAME="${DISTRO_NAME:-Smoky OS}"
 MOODLE_URL="${MOODLE_URL:-}"
-CHROME_FLAGS="--ozone-platform-hint=auto --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder --enable-wayland-ime"
+CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder --enable-wayland-ime"
 
 # --- Dépôts ------------------------------------------------------------------
 dnf -y install \
@@ -114,7 +114,7 @@ disable-while-typing=true
 show-battery-percentage=true
 cursor-size=32
 icon-theme='WhiteSur'
-cursor-theme='WhiteSur-cursors'
+cursor-theme='Smoky-cursors'
 accent-color='slate'
 color-scheme='prefer-dark'
 clock-show-weekday=true
