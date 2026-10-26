@@ -14,7 +14,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Moodle, Google Drive | Applis dans le dock + Drive dans Fichiers (Paramètres > Comptes en ligne) |
 | Claude | Claude Code installé à la 1re connexion (`claude` dans un terminal) + appli Claude |
 | Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto |
-| Prise de notes façon GoodNotes | **Rnote** (cahiers infinis, stylet avec pression, import PDF, export PDF) + Xournal++ pour annoter les PDF de cours |
+| Prise de notes façon GoodNotes | **Rnote** (cahiers infinis, stylet avec pression, import PDF, export PDF) |
 | Notes sauvegardées | Dossier **Notes** synchronisé toutes les 5 min avec Google Drive > « Notes Z13 » |
 
 ## Obtenir l'ISO (GitHub la construit pour toi, gratuitement)

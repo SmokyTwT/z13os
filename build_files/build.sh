@@ -32,8 +32,8 @@ dnf -y install intel-media-driver libva-utils
 dnf -y install asusctl supergfxctl thermald powertop
 dnf -y install asusctl-rog-gui || dnf -y install rog-control-center || echo "AVERTISSEMENT : pas d'interface ROG"
 
-# --- Outils de cours ---------------------------------------------------------
-dnf -y install xournalpp rclone
+# --- Synchro des notes avec Google Drive -------------------------------------
+dnf -y install rclone
 
 # --- Google Chrome (s'installe dans /opt : on le déplace dans /usr pour l'image atomique)
 mkdir -p /var/opt
