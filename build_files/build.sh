@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Construit Z13 OS à l'intérieur de l'image Fedora Silverblue (exécuté par le Containerfile)
+# Construit Smoky OS à l'intérieur de l'image Fedora Silverblue (exécuté par le Containerfile)
 set -euxo pipefail
 
 FEDORA_VER="$(rpm -E %fedora)"
-DISTRO_NAME="${DISTRO_NAME:-Z13 OS}"
+DISTRO_NAME="${DISTRO_NAME:-Smoky OS}"
 MOODLE_URL="${MOODLE_URL:-}"
 CHROME_FLAGS="--ozone-platform-hint=auto --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder --enable-wayland-ime"
 
@@ -82,6 +82,17 @@ for ext in dash-to-dock blur-my-shell appindicator; do
   dnf -y install "gnome-shell-extension-$ext" || echo "AVERTISSEMENT : extension $ext indisponible"
 done
 
+# Icônes et curseurs WhiteSur, versions figées (relues avant intégration)
+WHITESUR_ICONS_REV=73d8040da51a9ed74e47c7366e7e9ff437601a5c    # tag 2026-09-10
+WHITESUR_CURSORS_REV=e190baf618ed95ee217d2fd45589bd309b37672b  # 2025-04-05
+dnf -y install gtk-update-icon-cache
+WS=$(mktemp -d)
+curl -fsSL "https://github.com/vinceliuice/WhiteSur-icon-theme/archive/${WHITESUR_ICONS_REV}.tar.gz" | tar -xz -C "$WS"
+bash "$WS/WhiteSur-icon-theme-${WHITESUR_ICONS_REV}/install.sh" -d /usr/share/icons
+curl -fsSL "https://github.com/vinceliuice/WhiteSur-cursors/archive/${WHITESUR_CURSORS_REV}.tar.gz" | tar -xz -C "$WS"
+cp -r "$WS/WhiteSur-cursors-${WHITESUR_CURSORS_REV}/dist" /usr/share/icons/WhiteSur-cursors
+rm -rf "$WS"
+
 # --- Réglages GNOME par défaut (tactile / tablette + look) --------------------
 cat > /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override <<EOF
 [org.gnome.mutter]
@@ -95,6 +106,8 @@ disable-while-typing=true
 [org.gnome.desktop.interface]
 show-battery-percentage=true
 cursor-size=32
+icon-theme='WhiteSur'
+cursor-theme='WhiteSur-cursors'
 accent-color='blue'
 clock-show-weekday=true
 
@@ -165,7 +178,7 @@ grep -q '^AutomaticUpdatePolicy=' /etc/rpm-ostreed.conf || echo 'AutomaticUpdate
 
 # --- Identité ----------------------------------------------------------------
 sed -i "s|^PRETTY_NAME=.*|PRETTY_NAME=\"${DISTRO_NAME} (Fedora ${FEDORA_VER})\"|" /usr/lib/os-release
-echo "z13os" > /etc/hostname
+echo "smokyos" > /etc/hostname
 
 # --- Ménage ------------------------------------------------------------------
 dnf clean all

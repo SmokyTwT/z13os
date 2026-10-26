@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Z13 OS — distrib perso basée sur Fedora Workstation (GNOME / Wayland)
+#  Smoky OS — distrib perso basée sur Fedora Workstation (GNOME / Wayland)
 #  Cible : ASUS ROG Flow Z13 2022 (GZ301ZE) — i9-12900H + RTX 3050 Ti, tactile
 #
 #  À lancer APRÈS une installation fraîche de Fedora Workstation, en tant
@@ -9,11 +9,11 @@
 #  Options :
 #    --nvidia          installe aussi le pilote NVIDIA propriétaire (jeux/CUDA)
 #    --moodle URL      adresse de ton Moodle (ex: https://moodle.univ-xxx.fr)
-#    --name NOM        nom de ta distrib (défaut : "Z13 OS")
+#    --name NOM        nom de ta distrib (défaut : "Smoky OS")
 # =============================================================================
 set -euo pipefail
 
-DISTRO_NAME="Z13 OS"
+DISTRO_NAME="Smoky OS"
 MOODLE_URL=""
 WITH_NVIDIA=0
 
@@ -106,7 +106,7 @@ sudo fwupdmgr update -y --no-reboot-check 2>/dev/null || true
 # Réglages d'économie supplémentaires (audio, PCIe, USB autosuspend) au démarrage
 sudo tee /etc/systemd/system/z13-powertune.service >/dev/null <<'EOF'
 [Unit]
-Description=Z13 OS - réglages d'économie d'énergie
+Description=Smoky OS - réglages d'économie d'énergie
 After=multi-user.target
 
 [Service]
@@ -205,7 +205,7 @@ gsettings set org.gnome.shell favorite-apps "$FAVS"
 sudo dnf install -y gvfs-goa gnome-online-accounts
 
 # Identité
-sudo hostnamectl set-hostname z13os
+sudo hostnamectl set-hostname smokyos
 sudo hostnamectl set-hostname --pretty "$DISTRO_NAME"
 sudo tee /etc/motd >/dev/null <<EOF
   ${DISTRO_NAME} — ROG Flow Z13 (GZ301ZE)

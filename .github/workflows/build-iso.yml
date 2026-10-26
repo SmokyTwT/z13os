@@ -42,17 +42,17 @@ jobs:
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type anaconda-iso --rootfs btrfs --use-librepo=True \
             "$IMAGE"
-          sudo mv output/bootiso/install.iso z13os.iso
-          sudo chown "$USER" z13os.iso
-          sha256sum z13os.iso | tee z13os.iso.sha256
-          ls -lh z13os.iso
+          sudo mv output/bootiso/install.iso smokyos.iso
+          sudo chown "$USER" smokyos.iso
+          sha256sum smokyos.iso | tee smokyos.iso.sha256
+          ls -lh smokyos.iso
 
       - name: Mettre l'ISO à disposition
         uses: actions/upload-artifact@v4
         with:
-          name: z13os-iso
+          name: smokyos-iso
           path: |
-            z13os.iso
-            z13os.iso.sha256
+            smokyos.iso
+            smokyos.iso.sha256
           compression-level: 0
           retention-days: 14

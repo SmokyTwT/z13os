@@ -1,4 +1,4 @@
-# Z13 OS — ta distrib Linux perso pour ROG Flow Z13 (GZ301ZE)
+# Smoky OS — ta distrib Linux perso pour ROG Flow Z13 (GZ301ZE)
 
 Une image **Fedora Silverblue** (GNOME / Wayland) préparée pour ton Z13. Le système est
 « atomique » : chaque mise à jour remplace l'image complète. En cas de souci, tu peux
@@ -15,7 +15,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Claude | Claude Code installé à la 1re connexion (`claude` dans un terminal) + appli Claude |
 | Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto |
 | Prise de notes façon GoodNotes | **Rnote** (cahiers infinis, stylet avec pression, import PDF, export PDF) |
-| Look façon macOS | Dock en bas, flou *statique* sur la barre et le dock (calculé une fois, ~0 % de batterie), boutons de fenêtre à gauche, fond d'écran clair/sombre maison |
+| Look façon macOS | Dock en bas, flou *statique* sur la barre et le dock (calculé une fois, ~0 % de batterie), icônes et curseurs WhiteSur (versions figées), boutons de fenêtre à gauche, fond d'écran clair/sombre maison |
 | Notes sauvegardées | Dossier **Notes** synchronisé toutes les 5 min avec Google Drive > « Notes Z13 » |
 
 ## Obtenir l'ISO (GitHub la construit pour toi, gratuitement)
@@ -28,15 +28,15 @@ revenir à la version précédente depuis le menu de démarrage.
    tout seul (environ 30 min).
 5. *Your profile → Packages → z13os → Package settings* : mets la visibilité sur
    **Public**. C'est nécessaire pour que ton PC reçoive les mises à jour.
-6. Dans Actions → `build-iso` → la dernière exécution, télécharge **z13os-iso**
-   (environ 4 Go, contient `z13os.iso`).
+6. Dans Actions → `build-iso` → la dernière exécution, télécharge **smokyos-iso**
+   (environ 4 Go, contient `smokyos.iso`).
 
 Chaque lundi, GitHub reconstruit l'image avec les derniers correctifs. Ton Z13 les
 télécharge seul et les applique au redémarrage suivant.
 
 ## Installer sur le Z13
 1. **Sous Windows d'abord** : mets à jour le BIOS avec MyASUS et **sauvegarde tes fichiers**.
-2. Copie `z13os.iso` sur une clé USB (8 Go ou plus) avec **Fedora Media Writer** ou
+2. Copie `smokyos.iso` sur une clé USB (8 Go ou plus) avec **Fedora Media Writer** ou
    **balenaEtcher** (option « image personnalisée »).
 3. Allume le Z13 en maintenant **Échap** (ou **F2** → Boot), puis choisis la clé.
 4. L'installateur demande seulement le disque. Choisis « récupérer tout l'espace » pour

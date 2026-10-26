@@ -1,5 +1,5 @@
 [Unit]
-Description=Z13 OS - économies d'énergie (audio, PCIe)
+Description=Smoky OS - économies d'énergie (audio, PCIe)
 After=multi-user.target
 
 [Service]

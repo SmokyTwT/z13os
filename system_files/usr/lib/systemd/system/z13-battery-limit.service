@@ -1,5 +1,5 @@
 [Unit]
-Description=Z13 OS - limite de charge batterie à 80 %
+Description=Smoky OS - limite de charge batterie à 80 %
 After=multi-user.target asusd.service
 
 [Service]
