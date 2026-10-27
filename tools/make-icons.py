@@ -163,6 +163,11 @@ icons.update({
 
 FILES = {"notes": "smoky-notes.svg"}
 
+# Les autres applis reçoivent la version Smoky de leur vrai logo (smoky-autoicons) ;
+# on ne dessine à la main que celles qui n'ont pas de logo d'origine exploitable.
+KEEP = {"tf1", "m6", "moodle", "notes"}
+icons = {k: v for k, v in icons.items() if k in KEEP}
+
 os.makedirs(OUT, exist_ok=True)
 for name, (glyph, accent) in icons.items():
     icon(name, glyph, accent, FILES.get(name))

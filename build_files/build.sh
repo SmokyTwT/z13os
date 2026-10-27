@@ -58,13 +58,13 @@ Categories=$cats
 Terminal=false
 EOF
 }
-make_webapp netflix "Netflix"      "https://www.netflix.com/browse"   smokyos-netflix "AudioVideo;Video;"
-make_webapp disney  "Disney+"      "https://www.disneyplus.com/fr-fr" smokyos-disney "AudioVideo;Video;"
-make_webapp prime   "Prime Video"  "https://www.primevideo.com"       smokyos-prime  "AudioVideo;Video;"
+make_webapp netflix "Netflix"      "https://www.netflix.com/browse"   netflix        "AudioVideo;Video;"
+make_webapp disney  "Disney+"      "https://www.disneyplus.com/fr-fr" disney         "AudioVideo;Video;"
+make_webapp prime   "Prime Video"  "https://www.primevideo.com"       primevideo     "AudioVideo;Video;"
 make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf1    "AudioVideo;Video;"
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
-make_webapp drive   "Google Drive" "https://drive.google.com"         smokyos-drive  "Office;Education;"
-make_webapp claude  "Claude"       "https://claude.ai"                smokyos-claude "Office;Education;"
+make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
+make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
 FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'com.valvesoftware.Steam.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
@@ -97,19 +97,15 @@ for t in WhiteSur WhiteSur-dark WhiteSur-light; do
 done
 for t in WhiteSur WhiteSur-dark WhiteSur-light; do gtk-update-icon-cache -f /usr/share/icons/$t || true; done
 
-# Thème d'icônes « Smoky-icons » : nos logos faits main (correspondances dans
-# smokyos-icon-map.txt), le reste hérite de WhiteSur. Les applis installées plus
-# tard reçoivent un logo Smoky généré automatiquement (smoky-autoicons, ~/.local/share/icons).
-d=/usr/share/icons/Smoky-icons/apps/scalable
-while read -r logo targets; do
-  [[ -z $logo || $logo == \#* ]] && continue
-  for target in $targets; do
-    cp "/usr/share/icons/hicolor/scalable/apps/smokyos-$logo.svg" "$d/$target.svg"
-  done
-done < /usr/share/icons/hicolor/smokyos-icon-map.txt
+# Thème d'icônes « Smoky-icons » : chaque appli livrée avec le système reçoit la
+# version Smoky de son vrai logo (argent, carré noir, trait néon à sa couleur),
+# générée par smoky-autoicons. Les applis installées plus tard (Flatpak : Spotify,
+# Steam…) sont traitées sur la machine, à la connexion et à chaque installation.
+# Seuls TF1+, M6+, Moodle et Smoky Notes sont dessinés à la main (pas de logo d'origine).
+dnf -y install python3-pillow librsvg2-tools
 rm -f /usr/share/icons/Smoky-icons/apps/256/.keep
+python3 /usr/libexec/smokyos/smoky-autoicons.py --system /usr/share/icons/Smoky-icons/apps/256
 gtk-update-icon-cache -f /usr/share/icons/Smoky-icons || true
-dnf -y install python3-pillow librsvg2-tools   # pour smoky-autoicons
 gtk-update-icon-cache -f /usr/share/icons/hicolor || true
 
 # Thème « Smoky » du centre de contrôle (fichier CSS dans system_files)

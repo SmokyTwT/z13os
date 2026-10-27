@@ -8,6 +8,8 @@ avec un halo et un trait néon à la couleur principale du logo d'origine.
 Résultat : ~/.local/share/icons/Smoky-icons/apps/256/<nom>.png
 
 Lancé à la connexion et dès qu'une appli est installée (smoky-autoicons.path).
+Pendant la construction de l'image : « --system DOSSIER » fait de même pour toutes
+les applis livrées avec Smoky OS (logos d'origine → version Smoky).
 """
 import colorsys
 import configparser
@@ -55,7 +57,9 @@ def find_icon(name):
         p = Path("/usr/share/pixmaps") / f"{name}.{ext}"
         if p.is_file():
             return p
-    return None
+    # applis web (Netflix, Disney+…) : pas de logo officiel installé, on part de WhiteSur
+    p = Path("/usr/share/icons/WhiteSur/apps/scalable") / f"{name}.svg"
+    return p if p.is_file() else None
 
 
 def already_smoky(name):
@@ -234,7 +238,10 @@ def desktop_icons():
             yield e.get("Icon").strip()
 
 
-def main():
+def main(system_out=None):
+    global OUT_DIR, APP_DIRS
+    if system_out:                     # construction de l'image : applis livrées avec le système
+        OUT_DIR, APP_DIRS = Path(system_out), [Path("/usr/share/applications")]
     # Pas d'index.theme ici : celui du système (/usr/share/icons/Smoky-icons) déclare
     # déjà apps/256, et GTK cherche ce dossier dans ~/.local/share/icons aussi.
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,7 +258,7 @@ def main():
             made += 1
         except Exception as e:  # un logo illisible ne doit pas bloquer les autres
             print(f"{name} : {e}", file=sys.stderr)
-    if made:
+    if made and not system_out:
         os.utime(OUT_DIR.parent.parent)          # signale le changement aux applis
         # GNOME Shell recharge les logos quand le thème d'icônes change
         cur = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "icon-theme"],
@@ -263,7 +270,9 @@ def main():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3:            # test : smoky-autoicons.py entrée.png sortie.png
+    if len(sys.argv) == 3 and sys.argv[1] == "--system":
+        main(sys.argv[2])
+    elif len(sys.argv) == 3:          # test : smoky-autoicons.py entrée.png sortie.png
         smoky_icon(Image.open(sys.argv[1]).convert("RGBA")).save(sys.argv[2])
     else:
         main()
