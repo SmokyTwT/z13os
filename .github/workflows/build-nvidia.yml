@@ -30,6 +30,7 @@ jobs:
       - name: Construire l'image (variante pilote NVIDIA)
         env:
           MOODLE_URL: ${{ vars.MOODLE_URL }}
+        shell: bash -o pipefail -e {0}
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}-nvidia"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
@@ -39,9 +40,11 @@ jobs:
           for essai in 1 2 3; do
             if sudo podman build --pull=newer "${ARGS[@]}" \
                  --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
-                 -t "$IMAGE:latest" -t "$IMAGE:$(date +%Y%m%d)" .; then
+                 -t "$IMAGE:latest" -t "$IMAGE:$(date +%Y%m%d)" . 2>&1 | tee build.log; then
               exit 0
             fi
+            # fin du journal en annotation : lisible sans télécharger les logs
+            echo "::error title=Essai $essai::$(tail -40 build.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
             echo "::warning::Essai $essai échoué, nouvel essai dans 60 s"
             sleep 60
           done
