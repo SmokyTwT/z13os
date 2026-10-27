@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Génère le thème de curseurs « Smoky » (format Xcursor) pour Smoky OS.
 
-Flèche noire au liseré argenté avec un léger halo ; curseur d'attente animé :
-une volute argentée qui tourne. Les autres curseurs (main, redimensionnement…)
+Pointeur : un point blanc lumineux, effet néon (halo doux en deux couches),
+cerné d'un liseré sombre très fin pour rester visible sur les pages blanches.
+Attente : une volute argentée qui tourne autour du point. Les autres curseurs (main, redimensionnement…)
 sont hérités de WhiteSur-cursors (noir et blanc, assortis).
 Usage : python3 make-cursors.py DOSSIER_DU_THEME [aperçu.png]
 """
@@ -65,6 +66,30 @@ def arrow(n, offset=(0, 0)):
     return glow(img, 2.2 * s, 0.45)
 
 
+def dot(n, r=3.3, ring=False):
+    """Point blanc néon : cœur blanc, liseré sombre fin, double halo lumineux."""
+    s = n * SS / 32
+    c = 16 * s
+    core = canvas(n)
+    d = ImageDraw.Draw(core)
+    if ring:   # survol d'un lien : anneau lumineux autour du point
+        rr = (r + 4.2) * s
+        d.ellipse([c - rr, c - rr, c + rr, c + rr], outline=(245, 245, 250, 230), width=max(2, round(1.3 * s)))
+    edge = (r + 0.7) * s
+    d.ellipse([c - edge, c - edge, c + edge, c + edge], fill=(10, 10, 12, 150))
+    rc = r * s
+    d.ellipse([c - rc, c - rc, c + rc, c + rc], fill=(255, 255, 255, 255))
+    # néon : halo serré très lumineux + halo large plus doux
+    a = core.split()[3]
+    out = Image.new("RGBA", core.size, (255, 255, 255, 0))
+    for radius, alpha in ((4.2 * s, 0.5), (2.0 * s, 0.9)):
+        h = Image.new("RGBA", core.size, (255, 255, 255, 0))
+        h.putalpha(a.filter(ImageFilter.GaussianBlur(radius)).point(lambda v, al=alpha: int(min(255, v * al * 1.6))))
+        out.alpha_composite(h)
+    out.alpha_composite(core)
+    return out
+
+
 def swirl(n, phase, cx=16, cy=16, r=9.5, width=3.2, small=False):
     """Anneau de fumée : arc argenté à traîne qui s'estompe, plus un halo."""
     s = n * SS / 32
@@ -109,12 +134,20 @@ def hot(n, x, y):
 
 os.makedirs(os.path.join(OUT, "cursors"), exist_ok=True)
 
-# Flèche
+# Pointeur : point blanc néon (point chaud au centre)
 frames = []
 for n in SIZES:
-    xh, yh = hot(n, 3, 2)
-    frames.append((n, down(arrow(n), n), xh, yh, 0))
+    xh, yh = hot(n, 16, 16)
+    frames.append((n, down(dot(n), n), xh, yh, 0))
 write("left_ptr", frames, ["default", "arrow", "top_left_arrow", "left-arrow"])
+
+# Lien / bouton cliquable : point néon entouré d'un anneau
+frames = []
+for n in SIZES:
+    xh, yh = hot(n, 16, 16)
+    frames.append((n, down(dot(n, r=3.0, ring=True), n), xh, yh, 0))
+write("hand2", frames, ["pointer", "hand1", "hand", "pointing_hand",
+                        "9d800788f1b08800ae810202380a0822", "e29285e634086352946a0e7090d73106"])
 
 # Attente : volute qui tourne (24 images, 40 ms → 1 tour / ~1 s)
 NF = 24
@@ -125,13 +158,13 @@ for n in SIZES:
         frames.append((n, down(swirl(n, k * 360 / NF), n), xh, yh, 40))
 write("watch", frames, ["wait", "clock"])
 
-# Travail en arrière-plan (ouverture d'une appli) : flèche + petite volute
+# Ouverture d'une appli : le point néon, entouré d'une volute qui tourne
 frames = []
 for n in SIZES:
-    xh, yh = hot(n, 3, 2)
+    xh, yh = hot(n, 16, 16)
     for k in range(NF):
-        img = arrow(n)
-        img.alpha_composite(swirl(n, k * 360 / NF, cx=23.5, cy=24, r=5.2, width=2.2, small=True))
+        img = dot(n)
+        img.alpha_composite(swirl(n, k * 360 / NF, r=9.5, width=2.2, small=True))
         frames.append((n, down(img, n), xh, yh, 40))
 write("left_ptr_watch", frames, ["progress", "half-busy",
                                  "00000000000000020006000e7e9ffc3f", "08e8e1c95fe2fc01f976f1e063a24ccd",
@@ -154,16 +187,18 @@ for n in SIZES:
 write("xterm", frames, ["text", "ibeam"])
 
 with open(os.path.join(OUT, "index.theme"), "w") as f:
-    f.write("[Icon Theme]\nName=Smoky-cursors\nComment=Curseurs de Smoky OS : flèche noire et argent, attente en volute de fumée\nInherits=WhiteSur-cursors\n")
+    f.write("[Icon Theme]\nName=Smoky-cursors\nComment=Curseurs de Smoky OS : point blanc néon, attente en volute de fumée\nInherits=WhiteSur-cursors\n")
 
 # Aperçu (planche) pour contrôle visuel, si demandé
 if len(sys.argv) < 3:
     sys.exit(0)
-sheet = Image.new("RGBA", (64 * 4 + 50, 120), (17, 17, 17, 255))
-sheet.alpha_composite(down(arrow(64), 64), (10, 10))
-sheet.alpha_composite(down(swirl(64, 0), 64), (84, 10))
-sheet.alpha_composite(down(swirl(64, 120), 64), (158, 10))
-pw = arrow(64)
-pw.alpha_composite(swirl(64, 60, cx=23.5, cy=24, r=5.2, width=2.2, small=True))
+sheet = Image.new("RGBA", (64 * 5 + 60, 84), (17, 17, 17, 255))
+for i, img in enumerate([dot(64), dot(64, r=3.0, ring=True), swirl(64, 0)]):
+    sheet.alpha_composite(down(img, 64), (10 + 74 * i, 10))
+pw = dot(64)
+pw.alpha_composite(swirl(64, 60, r=9.5, width=2.2, small=True))
 sheet.alpha_composite(down(pw, 64), (232, 10))
+white = Image.new("RGBA", (64, 64), (250, 250, 250, 255))   # sur une page blanche
+white.alpha_composite(down(dot(64), 64))
+sheet.alpha_composite(white, (306, 10))
 sheet.save(sys.argv[2])

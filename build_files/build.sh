@@ -58,13 +58,13 @@ Categories=$cats
 Terminal=false
 EOF
 }
-make_webapp netflix "Netflix"      "https://www.netflix.com/browse"   netflix        "AudioVideo;Video;"
-make_webapp disney  "Disney+"      "https://www.disneyplus.com/fr-fr" disney         "AudioVideo;Video;"
-make_webapp prime   "Prime Video"  "https://www.primevideo.com"       primevideo     "AudioVideo;Video;"
+make_webapp netflix "Netflix"      "https://www.netflix.com/browse"   smokyos-netflix "AudioVideo;Video;"
+make_webapp disney  "Disney+"      "https://www.disneyplus.com/fr-fr" smokyos-disney "AudioVideo;Video;"
+make_webapp prime   "Prime Video"  "https://www.primevideo.com"       smokyos-prime  "AudioVideo;Video;"
 make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf1    "AudioVideo;Video;"
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
-make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
-make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
+make_webapp drive   "Google Drive" "https://drive.google.com"         smokyos-drive  "Office;Education;"
+make_webapp claude  "Claude"       "https://claude.ai"                smokyos-claude "Office;Education;"
 FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
@@ -93,6 +93,16 @@ rm -rf "$WS"
 for t in WhiteSur WhiteSur-dark WhiteSur-light; do
   [[ -f /usr/share/icons/$t/apps/scalable/spotify-client.svg ]] &&
     ln -sf spotify-client.svg /usr/share/icons/$t/apps/scalable/com.spotify.Client.svg
+  gtk-update-icon-cache -f /usr/share/icons/$t || true
+done
+# Logos Smoky pour les applis qui ont leur propre icône (Chrome, Spotify, Fichiers, Paramètres)
+for t in WhiteSur WhiteSur-dark WhiteSur-light; do
+  d=/usr/share/icons/$t/apps/scalable
+  [[ -d $d ]] || continue
+  for pair in google-chrome:chrome com.spotify.Client:spotify spotify-client:spotify \
+              org.gnome.Nautilus:files org.gnome.Settings:settings; do
+    cp --remove-destination "/usr/share/icons/hicolor/scalable/apps/smokyos-${pair#*:}.svg" "$d/${pair%%:*}.svg"
+  done
   gtk-update-icon-cache -f /usr/share/icons/$t || true
 done
 gtk-update-icon-cache -f /usr/share/icons/hicolor || true

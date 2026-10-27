@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2a2f"/><stop offset="1" stop-color="#070708"/>
+    </linearGradient>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="14" x2="0" y2="46">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b4b4be"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".45" r=".55">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blur" filterUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><feGaussianBlur stdDeviation="1.5"/></filter>
+    <filter id="sh" filterUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity=".4"/></filter>
+    <g id="glyph"><text x="29" y="38" text-anchor="middle" font-family="Inter, Adwaita Sans, Helvetica Neue, Arial, sans-serif" font-weight="800" fill="url(#ink)" font-size="22">D</text><text x="42" y="31" text-anchor="middle" font-family="Inter, Adwaita Sans, Helvetica Neue, Arial, sans-serif" font-weight="800" fill="url(#ink)" font-size="14">+</text><path d="M14 30 C 20 14, 44 12, 50 24" stroke="url(#ink)" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" opacity=".8"/></g>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="12.5" fill="url(#bg)" filter="url(#sh)"/>
+  <rect x="4" y="4" width="56" height="56" rx="12.5" fill="url(#glow)"/>
+  <rect x="4.5" y="4.5" width="55" height="55" rx="12" fill="none" stroke="#fff" stroke-opacity=".16"/>
+  <rect x="20" y="50" width="24" height="2.2" rx="1.1" fill="#2f6bff" filter="url(#blur)" opacity=".9"/>
+  <rect x="22" y="50.4" width="20" height="1.4" rx=".7" fill="#2f6bff"/>
+  <g filter="url(#blur)" opacity=".4"><use href="#glyph"/></g>
+  <use href="#glyph"/>
+</svg>
