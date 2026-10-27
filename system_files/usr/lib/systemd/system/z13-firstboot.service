@@ -1,5 +1,5 @@
 [Unit]
-Description=Smoky OS - configuration au premier démarrage (Spotify, mode GPU)
+Description=Smoky OS - configuration au premier démarrage (Spotify, Steam, mode GPU)
 Wants=network-online.target
 After=network-online.target supergfxd.service
 ConditionPathExists=!/var/lib/z13os/firstboot.done

@@ -2,7 +2,7 @@
 import { api, hashName } from './api.js';
 import { INK_COLORS, HIGHLIGHT_COLORS, PAPERS, TEMPLATES, cloneItems, itemBounds, newPage } from './model.js';
 import { drawPaper, drawItems, drawStroke, TEXT_FONT } from './render.js';
-import { strokeHit, eraseFromStroke, itemInLasso, shapePoints, recognize, transformItem } from './geometry.js';
+import { strokeHit, eraseFromStroke, itemInLasso, shapePoints, recognize, transformItem, isScribble, scribbleTargets } from './geometry.js';
 import { renderPdfPage, importPdf } from './pdfdoc.js';
 import { exportById } from './library.js';
 import { icon, hydrateIcons } from './icons.js';
@@ -12,7 +12,7 @@ const DPR = () => Math.min(window.devicePixelRatio || 1, 3);
 const MIN_ZOOM = 0.3, MAX_ZOOM = 4;
 
 const TOOL_DEFAULTS = {
-  pen: { color: '#111113', width: 1.8 },
+  pen: { color: '#111113', width: 1.8, scribble: true },
   highlighter: { color: '#ffe066', width: 14 },
   eraser: { width: 12, mode: 'stroke' },
   shape: { color: '#111113', width: 1.8, kind: 'rect' },
@@ -426,6 +426,7 @@ function buildSubBar() {
   } else if (t === 'laser') {
     for (const [c, l] of [['#ff3b30', 'Rouge'], ['#ffffff', 'Blanc'], ['#34c759', 'Vert']]) chip(l, cfg.color === c, () => { cfg.color = c; setTool(t); });
   } else if (t === 'pen') {
+    chip('Gribouiller = effacer', cfg.scribble !== false, () => { cfg.scribble = cfg.scribble === false; setTool(t); });
     extra.insertAdjacentHTML('beforeend', '<span style="color:var(--fg-3);font-size:12px">Astuce : garde le stylet immobile à la fin d’un trait pour en faire une forme parfaite</span>');
   }
 }
@@ -674,6 +675,17 @@ function endAction(e) {
   const v = a.v;
   const live = v.live.getContext('2d');
   live.clearRect(0, 0, v.live.width, v.live.height);
+  if (a.tool === 'pen' && a.item && !a.shaped && S.cfg.pen.scribble !== false && isScribble(a.item.points)) {
+    // gribouillis sur de l'écriture : on efface ce qu'il recouvre au lieu d'ajouter le trait
+    const gone = new Set(scribbleTargets(v.page.items, a.item.points, itemBounds));
+    if (gone.size) {
+      v.page.items = v.page.items.filter((it) => !gone.has(it));
+      renderInk(v);
+      recordItems(v, a.before);
+      toast(gone.size > 1 ? `${gone.size} éléments effacés` : 'Effacé', 900);
+      return;
+    }
+  }
   if ((a.tool === 'pen' || a.tool === 'highlighter' || a.tool === 'shape') && a.item) {
     v.page.items.push(a.item);
     drawStroke(v.ink.getContext('2d'), a.item, v.scale);

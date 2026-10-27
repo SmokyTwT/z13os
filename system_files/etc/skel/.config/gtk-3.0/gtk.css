@@ -5,3 +5,24 @@
 @define-color accent_fg_color #0e0e10;
 @define-color theme_bg_color #111113;
 @define-color theme_base_color #0c0c0d;
+
+/* contour des fenêtres et boutons de titre en blanc néon */
+decoration {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 0 20px rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6);
+}
+.maximized decoration, .tiled decoration, .fullscreen decoration { box-shadow: none; }
+headerbar button.titlebutton, .titlebar button.titlebutton {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  -gtk-icon-shadow: 0 0 4px rgba(255, 255, 255, 0.9);
+}
+headerbar button.titlebutton:hover, .titlebar button.titlebutton:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.75), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+headerbar button.titlebutton.close:hover, .titlebar button.titlebutton.close:hover {
+  background-color: #ffffff;
+  color: #0e0e10;
+}

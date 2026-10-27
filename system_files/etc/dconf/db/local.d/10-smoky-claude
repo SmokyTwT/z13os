@@ -1,8 +1,0 @@
-# Super + C : ouvrir le terminal de Smoky OS (Claude Code y démarre tout seul)
-[org/gnome/settings-daemon/plugins/media-keys]
-custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/smoky-claude/']
-
-[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/smoky-claude]
-name='Terminal (Claude)'
-command='/usr/bin/smoky-claude'
-binding='<Super>c'

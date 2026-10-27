@@ -97,6 +97,70 @@ icons["moodle"] = ('<path d="M21 15 L32 9.5 L43 15 L32 20.5 Z" ' + F + '/>'
                    f'<text x="32" y="43" {TXT} font-size="30">m</text>', "#ff9a2e")
 icons["notes"] = ('<path d="M14 42 C 20 28, 24 28, 26 36 S 32 44, 36 34 S 42 20, 46 24 C 50 27, 47 32, 44 30 C 41 28, 44 22, 49 18" ' + S + ' stroke-width="2.8"/>'
                   '<path d="M49 18 C 51 14, 48 11, 51 8" ' + S + ' stroke-width="1.6" opacity=".5"/>', "#ffffff")
+
+# --- Autres applis du système (grille des applications) -----------------------------
+D = 'fill="#141416"'   # « trou » sombre dans un motif plein
+icons.update({
+    "steam": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
+              '<circle cx="37" cy="24.5" r="4.6" ' + S + ' stroke-width="2.4"/>'
+              '<circle cx="25" cy="35" r="3.3" ' + F + '/><path d="M25 35 L33.6 27.6" ' + S + ' stroke-width="2.6"/>', "#66c0f4"),
+    "software": ('<path d="M18 24 h28 l-2.5 19 a2 2 0 0 1 -2 1.7 h-19 a2 2 0 0 1 -2 -1.7 z" ' + F + '/>'
+                 '<path d="M25 24 v-3 a7 7 0 0 1 14 0 v3" ' + S + ' stroke-width="2.6"/>', "#c9c9d2"),
+    "texteditor": ('<path d="M19 13 h18 l8 8 v24 a2 2 0 0 1 -2 2 h-24 a2 2 0 0 1 -2 -2 v-30 a2 2 0 0 1 2 -2 z" ' + F + '/>'
+                   '<path d="M23 25 h17 M23 30.5 h17 M23 36 h11" stroke="#141416" stroke-width="2" stroke-linecap="round"/>', "#c9c9d2"),
+    "calculator": ('<rect x="19" y="13" width="26" height="33" rx="4" ' + F + '/>'
+                   '<rect x="23" y="17" width="18" height="7" rx="1.5" ' + D + '/>'
+                   + "".join(f'<circle cx="{x}" cy="{y}" r="2.2" {D}/>' for x in (26, 32, 38) for y in (30, 36.5, 42)), "#ff9a2e"),
+    "calendar": ('<rect x="16" y="16" width="32" height="30" rx="4" ' + F + '/>'
+                 '<rect x="16" y="16" width="32" height="8" rx="4" fill="#9a9aa4"/>'
+                 '<path d="M23 13 v6 M41 13 v6" ' + S + ' stroke-width="2.6"/>'
+                 + f'<text x="32" y="42" text-anchor="middle" font-family="{FONT}" font-weight="800" font-size="15" fill="#141416">27</text>', "#ff4d6d"),
+    "clocks": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
+               '<path d="M32 20 v9.5 l6 4" ' + S + ' stroke-width="2.6"/>', "#c9c9d2"),
+    "weather": ('<circle cx="38" cy="22" r="6" ' + S + ' stroke-width="2.4"/>'
+                '<path d="M20 41 a6 6 0 0 1 0 -12 a8.5 8.5 0 0 1 16.5 -1.5 a6.8 6.8 0 1 1 1.5 13.5 z" ' + F + '/>', "#ffd23a"),
+    "maps": ('<path d="M16 19 l10 -4 l12 4 l10 -4 v26 l-10 4 l-12 -4 l-10 4 z" ' + F + ' opacity=".55"/>'
+             '<path d="M32 15 a7 7 0 0 1 7 7 c0 6 -7 13 -7 13 s-7 -7 -7 -13 a7 7 0 0 1 7 -7 z" ' + F + '/>'
+             '<circle cx="32" cy="22" r="2.6" ' + D + '/>', "#34a853"),
+    "contacts": ('<circle cx="32" cy="22" r="7" ' + F + '/>'
+                 '<path d="M18 44 a14 12 0 0 1 28 0 z" ' + F + '/>', "#c9c9d2"),
+    "characters": (f'<text x="32" y="40" text-anchor="middle" font-family="{FONT}" font-weight="700" font-size="28" fill="url(#ink)">Ω</text>', "#c9c9d2"),
+    "images": ('<rect x="15" y="15" width="34" height="28" rx="4" ' + S + ' stroke-width="2.6"/>'
+               '<path d="M18 40 l9 -10 l6 6 l4 -4 l9 8 z" ' + F + '/>'
+               '<circle cx="39" cy="22" r="3" ' + F + '/>', "#3b82ff"),
+    "documents": ('<path d="M19 13 h18 l8 8 v24 a2 2 0 0 1 -2 2 h-24 a2 2 0 0 1 -2 -2 v-30 a2 2 0 0 1 2 -2 z" ' + F + '/>'
+                  '<path d="M37 13 v8 h8" fill="#9a9aa4"/>'
+                  f'<text x="31" y="40" text-anchor="middle" font-family="{FONT}" font-weight="800" font-size="10" fill="#141416">PDF</text>', "#ff4d6d"),
+    "camera": ('<path d="M15 22 a3 3 0 0 1 3 -3 h6 l3 -4 h10 l3 4 h6 a3 3 0 0 1 3 3 v18 a3 3 0 0 1 -3 3 h-28 a3 3 0 0 1 -3 -3 z" ' + F + '/>'
+               '<circle cx="32" cy="30.5" r="7.5" ' + D + '/><circle cx="32" cy="30.5" r="4.5" ' + F + '/>', "#c9c9d2"),
+    "disk-usage": ('<circle cx="32" cy="29" r="14" ' + F + ' opacity=".5"/>'
+                   '<path d="M32 29 v-14 a14 14 0 0 1 13.3 18.3 z" ' + F + '/>', "#2fd4a8"),
+    "logs": ('<rect x="16" y="14" width="32" height="31" rx="4" ' + S + ' stroke-width="2.6"/>'
+             '<path d="M22 22 h20 M22 28 h20 M22 34 h14 M22 40 h9" ' + S + ' stroke-width="2.2"/>', "#c9c9d2"),
+    "monitor": ('<rect x="14" y="15" width="36" height="28" rx="4" ' + S + ' stroke-width="2.6"/>'
+                '<path d="M18 32 h6 l3 -8 l5 14 l4 -10 l2 4 h8" ' + S + ' stroke-width="2.4"/>', "#2fd4a8"),
+    "disks": ('<ellipse cx="32" cy="20" rx="14" ry="5" ' + F + '/>'
+              '<path d="M18 20 v18 a14 5 0 0 0 28 0 v-18" ' + S + ' stroke-width="2.6"/>'
+              '<path d="M18 29 a14 5 0 0 0 28 0" ' + S + ' stroke-width="2"/>', "#c9c9d2"),
+    "extensions": ('<path d="M20 22 h7 a4 4 0 1 1 8 0 h7 v7 a4 4 0 1 1 0 8 v7 h-22 z" ' + F + '/>', "#3b82ff"),
+    "firefox": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
+                '<path d="M22 22 c2 -6 10 -9 16 -5 c-5 -1 -9 2 -9 6 c4 -2 9 0 10 5 c1 6 -5 10 -10 9 c5 -2 6 -7 3 -9" ' + S + ' stroke-width="2.4"/>', "#ff7139"),
+    "tour": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
+             '<path d="M32 18 l4 11 l-4 11 l-4 -11 z" ' + F + '/>', "#c9c9d2"),
+    "help": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
+             f'<text x="32" y="36" text-anchor="middle" font-family="{FONT}" font-weight="800" font-size="19" fill="url(#ink)">?</text>', "#3b82ff"),
+    "rog": (f'<text x="32" y="35" text-anchor="middle" font-family="{FONT}" font-weight="800" font-size="16" fill="url(#ink)" letter-spacing="1">ROG</text>'
+            '<path d="M17 39 h30" ' + S + ' stroke-width="1.4" opacity=".6"/>', "#ff2a3a"),
+    "player": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
+               '<path d="M28.5 22 l10 7 l-10 7 z" ' + F + '/>', "#a06bff"),
+    "fonts": (f'<text x="32" y="38" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="22" fill="url(#ink)">Aa</text>', "#c9c9d2"),
+    "connections": ('<rect x="13" y="16" width="22" height="16" rx="2.5" ' + S + ' stroke-width="2.4"/>'
+                    '<rect x="29" y="25" width="22" height="16" rx="2.5" ' + F + '/>', "#3b82ff"),
+    "scanner": ('<rect x="15" y="27" width="34" height="14" rx="3" ' + F + '/>'
+                '<path d="M19 27 l4 -10 h18 l4 10" ' + S + ' stroke-width="2.4"/>'
+                '<path d="M20 34 h24" stroke="#141416" stroke-width="2" stroke-linecap="round"/>', "#c9c9d2"),
+})
+
 FILES = {"notes": "smoky-notes.svg"}
 
 os.makedirs(OUT, exist_ok=True)

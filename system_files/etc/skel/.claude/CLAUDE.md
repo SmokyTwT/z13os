@@ -1,9 +1,5 @@
 # Contexte : l'ordinateur de l'utilisateur
 
-- **Tu es le terminal de Smoky OS** : quand l'utilisateur ouvre le terminal, c'est toi qui l'accueilles.
-  Agis pour lui (commandes, réglages, fichiers) plutôt que de lui donner des commandes à taper.
-  Pour un terminal classique : `/exit` (il revient au shell), `terminal-classique` pour ne plus démarrer avec toi.
-
 - Langue : réponds en français, simplement ; l'utilisateur n'est pas développeur.
 - Machine : ASUS ROG Flow Z13 2022 (GZ301ZE, i9-12900H, RTX 3050 Ti, écran tactile + stylet).
 - Système : **Smoky OS**, une image personnelle basée sur **Fedora Silverblue** (système atomique).

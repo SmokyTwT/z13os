@@ -65,12 +65,12 @@ make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
 make_webapp drive   "Google Drive" "https://drive.google.com"         smokyos-drive  "Office;Education;"
 make_webapp claude  "Claude"       "https://claude.ai"                smokyos-claude "Office;Education;"
-FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop'"
+FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'com.valvesoftware.Steam.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'smoky-claude.desktop'"
+FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
 # --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
 # gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)
@@ -95,14 +95,16 @@ for t in WhiteSur WhiteSur-dark WhiteSur-light; do
     ln -sf spotify-client.svg /usr/share/icons/$t/apps/scalable/com.spotify.Client.svg
   gtk-update-icon-cache -f /usr/share/icons/$t || true
 done
-# Logos Smoky pour les applis qui ont leur propre icône (Chrome, Spotify, Fichiers, Paramètres)
+# Logos Smoky pour toutes les applis du système (correspondances dans smokyos-icon-map.txt)
 for t in WhiteSur WhiteSur-dark WhiteSur-light; do
   d=/usr/share/icons/$t/apps/scalable
   [[ -d $d ]] || continue
-  for pair in google-chrome:chrome com.spotify.Client:spotify spotify-client:spotify \
-              org.gnome.Nautilus:files org.gnome.Settings:settings; do
-    cp --remove-destination "/usr/share/icons/hicolor/scalable/apps/smokyos-${pair#*:}.svg" "$d/${pair%%:*}.svg"
-  done
+  while read -r logo targets; do
+    [[ -z $logo || $logo == \#* ]] && continue
+    for target in $targets; do
+      cp --remove-destination "/usr/share/icons/hicolor/scalable/apps/smokyos-$logo.svg" "$d/$target.svg"
+    done
+  done < /usr/share/icons/hicolor/smokyos-icon-map.txt
   gtk-update-icon-cache -f /usr/share/icons/$t || true
 done
 gtk-update-icon-cache -f /usr/share/icons/hicolor || true
@@ -188,10 +190,9 @@ enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'ap
 name='Smoky'
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
-dconf update   # raccourci Super+C → Claude Code (etc/dconf/db/local.d)
 
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-claude /usr/libexec/smokynotes/server.py
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/libexec/smokynotes/server.py
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-battery-limit.service z13-firstboot.service \
   rpm-ostreed-automatic.timer

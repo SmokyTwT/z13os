@@ -154,3 +154,54 @@ export function transformItem(it, fn) {
   if (it.type === 'text') out.size = Math.max(6, it.size * (out.w / it.w));
   return out;
 }
+
+// --- Gribouiller pour effacer -----------------------------------------------------
+// Un trait est un gribouillis s'il fait plusieurs allers-retours rapides sur
+// une petite zone (au moins 4 demi-tours, et un tracé bien plus long que la zone).
+export function isScribble(flat) {
+  const n = flat.length / 3;
+  if (n < 12) return false;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, len = 0;
+  for (let i = 0; i < flat.length; i += 3) {
+    x0 = Math.min(x0, flat[i]); x1 = Math.max(x1, flat[i]);
+    y0 = Math.min(y0, flat[i + 1]); y1 = Math.max(y1, flat[i + 1]);
+    if (i) len += Math.hypot(flat[i] - flat[i - 3], flat[i + 1] - flat[i - 2]);
+  }
+  const big = Math.max(x1 - x0, y1 - y0);
+  if (big < 8 || len < 2.8 * big) return false;
+  const axis = x1 - x0 >= y1 - y0 ? 0 : 1;            // allers-retours sur l'axe le plus long
+  const step = Math.max(3, big * 0.15);
+  let reversals = 0, dir = 0, acc = 0;
+  for (let i = 3; i < flat.length; i += 3) {
+    acc += flat[i + axis] - flat[i - 3 + axis];
+    if (Math.abs(acc) >= step) {
+      const s = Math.sign(acc);
+      if (dir && s !== dir) reversals++;
+      dir = s;
+      acc = 0;
+    }
+  }
+  return reversals >= 4;
+}
+
+// Éléments effacés par un gribouillis : touchés par le trait ET recouverts
+// au moins à moitié par la zone gribouillée (on ne mord pas sur les voisins).
+export function scribbleTargets(items, flat, boundsOf) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < flat.length; i += 3) {
+    x0 = Math.min(x0, flat[i]); x1 = Math.max(x1, flat[i]);
+    y0 = Math.min(y0, flat[i + 1]); y1 = Math.max(y1, flat[i + 1]);
+  }
+  const pad = 4;
+  x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  return items.filter((it) => {
+    const b = boundsOf(it);
+    const bh = b.h || 20;
+    const ix = Math.max(0, Math.min(x1, b.x + b.w) - Math.max(x0, b.x));
+    const iy = Math.max(0, Math.min(y1, b.y + bh) - Math.max(y0, b.y));
+    if ((ix * iy) / Math.max(1, b.w * bh) < 0.5) return false;
+    if (it.type !== 'stroke') return true;
+    for (let i = 0; i < flat.length; i += 3) if (strokeHit(it, flat[i], flat[i + 1], 3)) return true;
+    return false;
+  });
+}

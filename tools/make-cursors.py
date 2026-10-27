@@ -66,14 +66,14 @@ def arrow(n, offset=(0, 0)):
     return glow(img, 2.2 * s, 0.45)
 
 
-def dot(n, r=3.3, ring=False):
+def dot(n, r=4.4, ring=False):
     """Point blanc néon : cœur blanc, liseré sombre fin, double halo lumineux."""
     s = n * SS / 32
     c = 16 * s
     core = canvas(n)
     d = ImageDraw.Draw(core)
     if ring:   # survol d'un lien : anneau lumineux autour du point
-        rr = (r + 4.2) * s
+        rr = (r + 4.6) * s
         d.ellipse([c - rr, c - rr, c + rr, c + rr], outline=(245, 245, 250, 230), width=max(2, round(1.3 * s)))
     edge = (r + 0.7) * s
     d.ellipse([c - edge, c - edge, c + edge, c + edge], fill=(10, 10, 12, 150))
@@ -82,7 +82,7 @@ def dot(n, r=3.3, ring=False):
     # néon : halo serré très lumineux + halo large plus doux
     a = core.split()[3]
     out = Image.new("RGBA", core.size, (255, 255, 255, 0))
-    for radius, alpha in ((4.2 * s, 0.5), (2.0 * s, 0.9)):
+    for radius, alpha in ((4.6 * s, 0.55), (2.2 * s, 0.95)):
         h = Image.new("RGBA", core.size, (255, 255, 255, 0))
         h.putalpha(a.filter(ImageFilter.GaussianBlur(radius)).point(lambda v, al=alpha: int(min(255, v * al * 1.6))))
         out.alpha_composite(h)
@@ -145,7 +145,7 @@ write("left_ptr", frames, ["default", "arrow", "top_left_arrow", "left-arrow"])
 frames = []
 for n in SIZES:
     xh, yh = hot(n, 16, 16)
-    frames.append((n, down(dot(n, r=3.0, ring=True), n), xh, yh, 0))
+    frames.append((n, down(dot(n, r=3.8, ring=True), n), xh, yh, 0))
 write("hand2", frames, ["pointer", "hand1", "hand", "pointing_hand",
                         "9d800788f1b08800ae810202380a0822", "e29285e634086352946a0e7090d73106"])
 
@@ -164,7 +164,7 @@ for n in SIZES:
     xh, yh = hot(n, 16, 16)
     for k in range(NF):
         img = dot(n)
-        img.alpha_composite(swirl(n, k * 360 / NF, r=9.5, width=2.2, small=True))
+        img.alpha_composite(swirl(n, k * 360 / NF, r=10.5, width=2.4, small=True))
         frames.append((n, down(img, n), xh, yh, 40))
 write("left_ptr_watch", frames, ["progress", "half-busy",
                                  "00000000000000020006000e7e9ffc3f", "08e8e1c95fe2fc01f976f1e063a24ccd",
@@ -193,10 +193,10 @@ with open(os.path.join(OUT, "index.theme"), "w") as f:
 if len(sys.argv) < 3:
     sys.exit(0)
 sheet = Image.new("RGBA", (64 * 5 + 60, 84), (17, 17, 17, 255))
-for i, img in enumerate([dot(64), dot(64, r=3.0, ring=True), swirl(64, 0)]):
+for i, img in enumerate([dot(64), dot(64, r=3.8, ring=True), swirl(64, 0)]):
     sheet.alpha_composite(down(img, 64), (10 + 74 * i, 10))
 pw = dot(64)
-pw.alpha_composite(swirl(64, 60, r=9.5, width=2.2, small=True))
+pw.alpha_composite(swirl(64, 60, r=10.5, width=2.4, small=True))
 sheet.alpha_composite(down(pw, 64), (232, 10))
 white = Image.new("RGBA", (64, 64), (250, 250, 250, 255))   # sur une page blanche
 white.alpha_composite(down(dot(64), 64))

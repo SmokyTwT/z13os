@@ -1,0 +1,32 @@
+# Logo Smoky → noms d'icônes remplacés dans le thème WhiteSur (lu par build_files/build.sh)
+chrome google-chrome
+spotify com.spotify.Client spotify-client spotify
+files org.gnome.Nautilus system-file-manager
+settings org.gnome.Settings preferences-system gnome-control-center
+terminal org.gnome.Ptyxis org.gnome.Terminal utilities-terminal
+steam com.valvesoftware.Steam steam
+software org.gnome.Software gnome-software system-software-install
+texteditor org.gnome.TextEditor gedit accessories-text-editor
+calculator org.gnome.Calculator accessories-calculator
+calendar org.gnome.Calendar
+clocks org.gnome.clocks
+weather org.gnome.Weather
+maps org.gnome.Maps
+contacts org.gnome.Contacts
+characters org.gnome.Characters
+images org.gnome.Loupe org.gnome.eog eog
+documents org.gnome.Papers org.gnome.Evince evince
+camera org.gnome.Snapshot
+disk-usage org.gnome.baobab baobab
+logs org.gnome.Logs
+monitor org.gnome.SystemMonitor gnome-system-monitor utilities-system-monitor
+disks org.gnome.DiskUtility gnome-disks
+extensions org.gnome.Extensions
+firefox org.mozilla.firefox firefox
+tour org.gnome.Tour
+help org.gnome.Yelp yelp help-browser
+rog rog-control-center
+player io.mpv.Mpv mpv
+fonts org.gnome.font-viewer
+connections org.gnome.Connections
+scanner org.gnome.SimpleScan simple-scan
