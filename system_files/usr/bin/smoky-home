@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Smoky Home : démarre Home Assistant (conteneur) si besoin, puis ouvre l'appli.
+set -u
+DATA="$HOME/.local/share/smoky-home"
+SEED=/usr/share/smoky-home/seed
+URL="http://127.0.0.1:8123/"
+
+# Premier lancement : configuration de base, thème Smoky, intégration du robot Xiaomi/Dreame
+if [ ! -f "$DATA/configuration.yaml" ]; then
+  mkdir -p "$DATA"
+  cp -rn "$SEED/." "$DATA/"
+fi
+mkdir -p "$DATA/custom_components"
+[ -d "$DATA/custom_components/dreame_vacuum" ] || cp -r /usr/share/smoky-home/custom_components/dreame_vacuum "$DATA/custom_components/"
+
+up() { curl -fs -o /dev/null --max-time 2 "$URL"; }
+if ! up; then
+  systemctl --user daemon-reload
+  if ! podman image exists ghcr.io/home-assistant/home-assistant:2026.10.1; then
+    notify-send -i smoky-home "Smoky Home" "Premier lancement : téléchargement du moteur (~1,5 Go), quelques minutes…" || true
+  else
+    notify-send -i smoky-home "Smoky Home" "Démarrage…" || true
+  fi
+  systemctl --user start smoky-home.service
+  for _ in $(seq 900); do up && break; sleep 2; done
+  if ! up; then
+    notify-send -i dialog-error "Smoky Home" "Le démarrage a échoué. Détails : journalctl --user -u smoky-home" || true
+    exit 1
+  fi
+fi
+exec /usr/bin/google-chrome-stable --ozone-platform-hint=auto --force-dark-mode --start-maximized \
+  --app="$URL" --class=smoky-home --no-first-run --no-default-browser-check \
+  --user-data-dir="$HOME/.config/smoky-home-chrome" "$@"

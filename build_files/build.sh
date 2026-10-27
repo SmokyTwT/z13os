@@ -70,7 +70,7 @@ if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
+FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
 # --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
 # gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)
@@ -190,8 +190,24 @@ name='Smoky'
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
+# --- Smoky Home : robot Xiaomi/Dreame (avec carte), lumières Tapo, Google Home ---
+# Moteur : Home Assistant en conteneur (etc/containers/systemd/users/smoky-home.container).
+# Intégration du robot : dreame-vacuum (licence MIT), version figée.
+DREAME_REV=f5b8472b8e2e4bb3dff7bc2a81a5fd594eca9585   # v2.0.2
+mkdir -p /usr/share/smoky-home/custom_components
+DV=$(mktemp -d)
+curl -fsSL "https://github.com/Tasshack/dreame-vacuum/archive/${DREAME_REV}.tar.gz" | tar -xz -C "$DV"
+cp -r "$DV/dreame-vacuum-${DREAME_REV}/custom_components/dreame_vacuum" /usr/share/smoky-home/custom_components/
+cp "$DV/dreame-vacuum-${DREAME_REV}/LICENSE" /usr/share/smoky-home/custom_components/dreame_vacuum/LICENSE
+rm -rf "$DV"
+# Home Assistant n'est joignable que depuis ce PC, pas depuis le réseau Wi-Fi
+for fam in ipv4 ipv6; do
+  firewall-offline-cmd --zone=FedoraWorkstation \
+    --add-rich-rule="rule family=\"$fam\" port port=\"8123\" protocol=\"tcp\" reject" || true
+done
+
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
 systemctl --global enable smoky-autoicons.path smoky-autoicons.service
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-battery-limit.service z13-firstboot.service \

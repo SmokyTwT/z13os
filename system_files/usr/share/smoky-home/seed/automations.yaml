@@ -1,0 +1,10 @@
+- id: smoky_theme
+  alias: Thème Smoky au démarrage
+  triggers:
+    - trigger: homeassistant
+      event: start
+  actions:
+    - action: frontend.set_theme
+      data:
+        name: Smoky
+        mode: dark

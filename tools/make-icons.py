@@ -165,7 +165,12 @@ FILES = {"notes": "smoky-notes.svg"}
 
 # Les autres applis reçoivent la version Smoky de leur vrai logo (smoky-autoicons) ;
 # on ne dessine à la main que celles qui n'ont pas de logo d'origine exploitable.
-KEEP = {"tf1", "m6", "moodle", "notes"}
+icons["home"] = ('<path d="M15 31 L32 16 L49 31" ' + S + ' stroke-width="3"/>'
+                 '<path d="M20 28 v15 a2 2 0 0 0 2 2 h20 a2 2 0 0 0 2 -2 v-15" ' + S + ' stroke-width="3"/>'
+                 '<path d="M29 45 v-8 h6 v8" ' + S + ' stroke-width="2.4"/>'
+                 '<path d="M42 22 v-6 M42 13 c2 -2 -1 -4 1 -6" ' + S + ' stroke-width="1.8" opacity=".6"/>', "#ffffff")
+FILES["home"] = "smoky-home.svg"
+KEEP = {"tf1", "m6", "moodle", "notes", "home"}
 icons = {k: v for k, v in icons.items() if k in KEEP}
 
 os.makedirs(OUT, exist_ok=True)

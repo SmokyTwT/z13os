@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Smoky Home
+Comment=Robot aspirateur Xiaomi (avec la carte), lumières Tapo, Google Home et Nest Hub
+Exec=/usr/bin/smoky-home
+Icon=smoky-home
+StartupWMClass=smoky-home
+Categories=Utility;HomeAutomation;
+Keywords=maison;robot;aspirateur;lumière;tapo;xiaomi;google;nest;domotique;
+Terminal=false

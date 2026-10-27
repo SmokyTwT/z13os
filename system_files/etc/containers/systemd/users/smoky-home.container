@@ -1,0 +1,17 @@
+# Smoky Home : Home Assistant dans un conteneur (Podman, sans droits root).
+# Ne démarre pas tout seul : l'appli Smoky Home le lance quand tu l'ouvres.
+[Unit]
+Description=Smoky Home (Home Assistant : robot Xiaomi, lumières Tapo, Google Home)
+
+[Container]
+Image=ghcr.io/home-assistant/home-assistant:2026.10.1
+ContainerName=smoky-home
+# réseau de l'hôte : nécessaire pour découvrir les Google Home / Nest Hub (mDNS)
+Network=host
+Volume=%h/.local/share/smoky-home:/config:Z
+Environment=TZ=Europe/Paris
+
+[Service]
+Restart=on-failure
+# premier lancement : téléchargement de l'image (~1,5 Go)
+TimeoutStartSec=1800

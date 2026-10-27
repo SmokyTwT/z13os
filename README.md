@@ -10,6 +10,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Tactile, stylet, mode tablette | GNOME Wayland : gestes, clavier virtuel, rotation auto |
 | Chrome | Google Chrome, réglé pour Wayland et le décodage vidéo par la puce Intel |
 | Netflix, Disney+, Prime Video, TF1+, M6+ | Applis dans le dock |
+| Maison | **Smoky Home** : robot Xiaomi X20 Max avec la carte, lumières Tapo, Google Home Mini et Nest Hub (Home Assistant + dreame-vacuum, versions figées) |
 | Spotify, Steam | Applis officielles (Flatpak), installées au 1er démarrage |
 | Moodle, Google Drive | Applis dans le dock + Drive dans Fichiers (Paramètres > Comptes en ligne) |
 | Claude | Appli Claude dans le dock ; Claude Code reste disponible en tapant `claude` dans un terminal (il connaît Smoky OS via ~/.claude/CLAUDE.md) |
@@ -33,6 +34,15 @@ revenir à la version précédente depuis le menu de démarrage.
 
 Chaque lundi, GitHub reconstruit l'image avec les derniers correctifs. Ton Z13 les
 télécharge seul et les applique au redémarrage suivant.
+
+## Smoky Home : robot, lumières, Google Home
+Appli **Smoky Home** (dans le dock). Elle repose sur Home Assistant, qui tourne en conteneur seulement quand l'appli est ouverte, et n'est joignable que depuis ce PC.
+1. **Premier lancement** : environ 1,5 Go à télécharger, quelques minutes. Crée ensuite ton compte Smoky Home (local, pas en ligne).
+2. **Paramètres → Appareils et services → Ajouter une intégration** :
+   - **TP-Link Smart Home** : identifiants de l'appli Tapo, puis les ampoules apparaissent.
+   - **Dreame Vacuum** : choisis « Xiaomi Home », connecte ton compte Xiaomi et sélectionne le **X20 Max**. La carte en direct, les pièces et les zones apparaissent.
+   - **Google Cast** : le Google Home Mini et le Nest Hub sont détectés tout seuls (volume, musique, annonces, affichage sur le Hub).
+3. Le tableau de bord montre tout automatiquement, dans le thème Smoky.
 
 ## Installer sur le Z13
 1. **Sous Windows d'abord** : mets à jour le BIOS avec MyASUS et **sauvegarde tes fichiers**.
