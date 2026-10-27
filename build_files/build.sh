@@ -223,13 +223,19 @@ dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/u
 # --- Pilote NVIDIA (variante z13os-nvidia uniquement) ---------------------------------
 # Le pilote libre (nouveau) suffit au streaming ; le propriétaire sert aux jeux (Steam).
 if [[ "${NVIDIA:-0}" == 1 ]]; then
-  dnf -y install "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia-cuda
-  akmods --force --kernels "$KVER"
+  # Dans un conteneur, le script d'installation d'akmod-nvidia tente de compiler en root
+  # avant que l'utilisateur « akmods » existe : dnf signale un échec alors que les paquets
+  # sont bien installés. On vérifie les paquets, puis on compile nous-mêmes.
+  dnf -y install "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia-cuda || \
+    rpm -q "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia xorg-x11-drv-nvidia-cuda
+  systemd-sysusers
+  akmods --force --kernels "$KVER" --kmod nvidia || { cat /var/cache/akmods/nvidia/*.log 2>/dev/null | tail -60; exit 1; }
   ls /usr/lib/modules/"$KVER"/extra/nvidia/nvidia*.ko* >/dev/null   # le module doit exister
   mkdir -p /usr/lib/bootc/kargs.d
   printf 'kargs = ["rd.driver.blacklist=nouveau", "modprobe.blacklist=nouveau", "nvidia-drm.modeset=1"]\n' \
     > /usr/lib/bootc/kargs.d/00-nvidia.toml
-  dnf -y remove "kernel-devel-$KVER" || true
+  # /usr est en lecture seule une fois installé : pas de recompilation au démarrage
+  systemctl disable akmods.service || true
   dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
 fi
 
