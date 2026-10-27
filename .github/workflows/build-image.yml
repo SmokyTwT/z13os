@@ -37,7 +37,7 @@ jobs:
           [[ -n "$MOODLE_URL" ]] && ARGS+=(--build-arg "MOODLE_URL=$MOODLE_URL")
           # jusqu'à 3 essais : un téléchargement raté (miroir, registre) ne doit pas tout faire échouer
           for essai in 1 2 3; do
-            if sudo podman build --pull=newer --retry 3 "${ARGS[@]}" \
+            if sudo podman build --pull=newer "${ARGS[@]}" \
                  --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
                  -t "$IMAGE:latest" -t "$IMAGE:$(date +%Y%m%d)" .; then
               exit 0
