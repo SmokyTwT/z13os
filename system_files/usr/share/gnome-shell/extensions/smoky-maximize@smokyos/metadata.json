@@ -1,0 +1,7 @@
+{
+  "uuid": "smoky-maximize@smokyos",
+  "name": "Smoky : applis en grand",
+  "description": "Ouvre chaque nouvelle fenêtre d'application en grand (plein écran avec la barre du haut), pratique sur l'écran tactile du Z13. Les boîtes de dialogue gardent leur taille.",
+  "shell-version": ["47", "48", "49", "50", "51", "52"],
+  "version": 1
+}

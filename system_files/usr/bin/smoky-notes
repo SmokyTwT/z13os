@@ -5,5 +5,5 @@ if ! (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
   nohup /usr/bin/python3 /usr/libexec/smokynotes/server.py >/dev/null 2>&1 &
   for _ in $(seq 50); do (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null && break; sleep 0.1; done
 fi
-exec /usr/bin/google-chrome-stable --ozone-platform-hint=auto --force-dark-mode --enable-wayland-ime \
+exec /usr/bin/google-chrome-stable --ozone-platform-hint=auto --force-dark-mode --start-maximized --enable-wayland-ime \
   --app="http://127.0.0.1:$PORT/" --class=smoky-notes --no-first-run --no-default-browser-check --user-data-dir="$HOME/.config/smoky-notes-chrome" "$@"

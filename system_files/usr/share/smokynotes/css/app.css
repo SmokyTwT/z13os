@@ -40,12 +40,15 @@ input, select { font: inherit; color: inherit; }
 .icon-btn:disabled { opacity: .3; pointer-events: none; }
 
 /* ---------- Bibliothèque ---------- */
-#library { background: #111111; }
-.lib-hero { position: absolute; left: 0; right: 0; top: 0; height: 420px; overflow: hidden; pointer-events: none; }
+#library { background:
+  linear-gradient(180deg, rgba(8,8,9,.15) 0%, rgba(8,8,9,.55) 42%, rgba(8,8,9,.9) 70%),
+  url(../img/smoky.jpg) center top / 100% auto no-repeat fixed,
+  #0d0d0e; }
+.lib-hero { display: none; position: absolute; left: 0; right: 0; top: 0; height: 420px; overflow: hidden; pointer-events: none; }
 .lib-hero img { width: 100%; height: 100%; object-fit: cover; object-position: center 52%; opacity: .55;
   -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent 100%); mask-image: linear-gradient(180deg, #000 30%, transparent 100%); }
 .lib-header, .lib-tabs, .lib-grid, .lib-empty { position: relative; z-index: 1; }
-.lib-tabs { margin-top: 200px; }
+.lib-tabs { margin-top: clamp(160px, 31vw, 470px); }
 .lib-header { display: flex; align-items: center; gap: 16px; padding: 22px 28px 10px; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -.3px; position: relative; z-index: 1; }
 .brand span { background: linear-gradient(180deg, #ffffff, #a9a9b2); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 18px rgba(255,255,255,.12); }
@@ -78,7 +81,13 @@ input, select { font: inherit; color: inherit; }
 .empty-art { width: 120px; height: 150px; margin: auto; border-radius: 6px 18px 18px 6px; background: linear-gradient(160deg, #3a3a40, #16161a); box-shadow: var(--shadow); }
 
 /* ---------- Éditeur ---------- */
-#editor { background: #2a2a2f; }
+#editor { background: #0b0b0c; }
+/* fond de l'éditeur : la fumée du fond d'écran, très floutée derrière les pages */
+.ed-body { overflow: hidden; }
+.ed-body::before { content: ""; position: absolute; inset: -60px; z-index: 0; pointer-events: none;
+  background: url(../img/smoky.jpg) center / cover no-repeat; filter: blur(34px) brightness(.5); opacity: .7; }
+.ed-body > * { position: relative; z-index: 1; }
+.ed-body > .zoom-pill, .ed-body > .page-pill { position: absolute; z-index: 2; }
 .ed-top { display: flex; align-items: center; gap: 8px; height: 58px; padding: 0 10px; background: var(--panel-solid); border-bottom: 1px solid var(--line); z-index: 5; }
 .ed-left, .ed-right { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
 .ed-right { justify-content: flex-end; }

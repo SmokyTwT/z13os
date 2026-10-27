@@ -5,7 +5,7 @@ set -euxo pipefail
 FEDORA_VER="$(rpm -E %fedora)"
 DISTRO_NAME="${DISTRO_NAME:-Smoky OS}"
 MOODLE_URL="${MOODLE_URL:-}"
-CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder --enable-wayland-ime"
+CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --start-maximized --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder --enable-wayland-ime"
 
 # --- Dépôts ------------------------------------------------------------------
 dnf -y install \
@@ -172,7 +172,7 @@ idle-delay=uint32 300
 
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info']
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'smoky-maximize@smokyos']
 
 [org.gnome.shell.extensions.user-theme]
 name='Smoky'
