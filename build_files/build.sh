@@ -95,18 +95,21 @@ for t in WhiteSur WhiteSur-dark WhiteSur-light; do
     ln -sf spotify-client.svg /usr/share/icons/$t/apps/scalable/com.spotify.Client.svg
   gtk-update-icon-cache -f /usr/share/icons/$t || true
 done
-# Logos Smoky pour toutes les applis du système (correspondances dans smokyos-icon-map.txt)
-for t in WhiteSur WhiteSur-dark WhiteSur-light; do
-  d=/usr/share/icons/$t/apps/scalable
-  [[ -d $d ]] || continue
-  while read -r logo targets; do
-    [[ -z $logo || $logo == \#* ]] && continue
-    for target in $targets; do
-      cp --remove-destination "/usr/share/icons/hicolor/scalable/apps/smokyos-$logo.svg" "$d/$target.svg"
-    done
-  done < /usr/share/icons/hicolor/smokyos-icon-map.txt
-  gtk-update-icon-cache -f /usr/share/icons/$t || true
-done
+for t in WhiteSur WhiteSur-dark WhiteSur-light; do gtk-update-icon-cache -f /usr/share/icons/$t || true; done
+
+# Thème d'icônes « Smoky-icons » : nos logos faits main (correspondances dans
+# smokyos-icon-map.txt), le reste hérite de WhiteSur. Les applis installées plus
+# tard reçoivent un logo Smoky généré automatiquement (smoky-autoicons, ~/.local/share/icons).
+d=/usr/share/icons/Smoky-icons/apps/scalable
+while read -r logo targets; do
+  [[ -z $logo || $logo == \#* ]] && continue
+  for target in $targets; do
+    cp "/usr/share/icons/hicolor/scalable/apps/smokyos-$logo.svg" "$d/$target.svg"
+  done
+done < /usr/share/icons/hicolor/smokyos-icon-map.txt
+rm -f /usr/share/icons/Smoky-icons/apps/256/.keep
+gtk-update-icon-cache -f /usr/share/icons/Smoky-icons || true
+dnf -y install python3-pillow librsvg2-tools   # pour smoky-autoicons
 gtk-update-icon-cache -f /usr/share/icons/hicolor || true
 
 # Thème « Smoky » du centre de contrôle (fichier CSS dans system_files)
@@ -125,7 +128,7 @@ disable-while-typing=true
 [org.gnome.desktop.interface]
 show-battery-percentage=true
 cursor-size=32
-icon-theme='WhiteSur'
+icon-theme='Smoky-icons'
 cursor-theme='Smoky-cursors'
 accent-color='slate'
 color-scheme='prefer-dark'
@@ -192,7 +195,8 @@ EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/libexec/smokynotes/server.py
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
+systemctl --global enable smoky-autoicons.path smoky-autoicons.service
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-battery-limit.service z13-firstboot.service \
   rpm-ostreed-automatic.timer

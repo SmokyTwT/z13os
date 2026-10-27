@@ -1,0 +1,11 @@
+[Unit]
+Description=Smoky OS : logos au style Smoky pour les nouvelles applis
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/libexec/smokyos/smoky-autoicons.py
+Nice=10
+
+[Install]
+WantedBy=default.target

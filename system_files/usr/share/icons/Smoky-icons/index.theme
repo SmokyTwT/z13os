@@ -1,0 +1,19 @@
+[Icon Theme]
+Name=Smoky-icons
+Comment=Logos de Smoky OS (faits main + générés automatiquement pour les nouvelles applis)
+Inherits=WhiteSur,hicolor
+Directories=apps/scalable,apps/256
+
+[apps/scalable]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Applications
+
+[apps/256]
+Size=256
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Applications

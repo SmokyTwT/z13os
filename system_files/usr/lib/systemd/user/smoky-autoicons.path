@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS : surveille l'installation de nouvelles applis
+
+[Path]
+PathChanged=/var/lib/flatpak/exports/share/applications
+PathChanged=%h/.local/share/flatpak/exports/share/applications
+PathChanged=%h/.local/share/applications
+PathChanged=/usr/share/applications
+Unit=smoky-autoicons.service
+
+[Install]
+WantedBy=default.target
