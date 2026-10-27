@@ -132,9 +132,11 @@ class Handler(BaseHTTPRequestHandler):
             data = data.replace(b"__SMOKY_TOKEN__", TOKEN.encode())
         csp = ("default-src 'self'; img-src 'self' blob: data:; "
                "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
-               "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:")
+               "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:; "
+               "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
-                  {"Content-Security-Policy": csp})
+                  {"Content-Security-Policy": csp, "X-Frame-Options": "DENY",
+                   "Referrer-Policy": "no-referrer"})
 
     # --- API ---------------------------------------------------------------
     def nb_dir(self, nid):

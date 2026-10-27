@@ -1,10 +1,12 @@
 [Unit]
-Description=Smoky OS - économies d'énergie (audio, PCIe)
+Description=Smoky OS - économie d'énergie de la carte son en veille
 After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/sh -c 'echo 1 > /sys/module/snd_hda_intel/parameters/power_save 2>/dev/null; for f in /sys/bus/pci/devices/*/power/control; do echo auto > "$f"; done; true'
+# La gestion fine du PCIe est laissée au profil d'énergie du système (tuned) : la forcer
+# sur tous les périphériques peut faire décrocher le clavier détachable du Z13.
+ExecStart=/usr/bin/sh -c 'echo 1 > /sys/module/snd_hda_intel/parameters/power_save 2>/dev/null; true'
 
 [Install]
 WantedBy=multi-user.target

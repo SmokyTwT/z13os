@@ -2,7 +2,7 @@ name: build-image
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'alternative/**']
+    paths-ignore: ['**.md']
   schedule:
     - cron: '20 4 * * 1'   # chaque lundi : mises à jour de sécurité
   workflow_dispatch:

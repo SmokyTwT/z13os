@@ -4,7 +4,8 @@
 Description=Smoky Home (Home Assistant : robot Xiaomi, lumières Tapo, Google Home)
 
 [Container]
-Image=ghcr.io/home-assistant/home-assistant:2026.10.1
+# version figée par son empreinte : l'image ne peut pas être remplacée en douce
+Image=ghcr.io/home-assistant/home-assistant:2026.10.1@sha256:130241f28d01fa80dfa3b44f7d89781c188d8642ecab9024f079f19f9f82baa0
 ContainerName=smoky-home
 # réseau de l'hôte : nécessaire pour découvrir les Google Home / Nest Hub (mDNS)
 Network=host

@@ -3,6 +3,9 @@ Description=Smoky OS - configuration au premier démarrage (Spotify, Steam, mode
 Wants=network-online.target
 After=network-online.target supergfxd.service
 ConditionPathExists=!/var/lib/z13os/firstboot.done
+# au plus 12 essais par démarrage (toutes les 2 min), puis on réessaie au prochain
+StartLimitIntervalSec=1h
+StartLimitBurst=12
 
 [Service]
 Type=oneshot

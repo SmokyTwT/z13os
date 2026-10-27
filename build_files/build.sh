@@ -5,7 +5,7 @@ set -euxo pipefail
 FEDORA_VER="$(rpm -E %fedora)"
 DISTRO_NAME="${DISTRO_NAME:-Smoky OS}"
 MOODLE_URL="${MOODLE_URL:-}"
-CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --start-maximized --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,VaapiVideoDecoder --enable-wayland-ime"
+CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --start-maximized --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL --enable-wayland-ime"
 
 # --- Dépôts ------------------------------------------------------------------
 dnf -y install \
@@ -29,8 +29,11 @@ dnf -y install --allowerasing ffmpeg
 dnf -y install intel-media-driver libva-utils
 
 # --- Support ASUS ROG + énergie ----------------------------------------------
-dnf -y install asusctl supergfxctl thermald powertop
+dnf -y install asusctl supergfxctl thermald
 dnf -y install asusctl-rog-gui || dnf -y install rog-control-center || echo "AVERTISSEMENT : pas d'interface ROG"
+
+# --- Allègement : Firefox fait doublon avec Chrome, la visite guidée ne sert qu'une fois
+dnf -y remove firefox firefox-langpacks gnome-tour || true
 
 # --- Synchro des notes avec Google Drive -------------------------------------
 dnf -y install rclone zenity
@@ -89,13 +92,9 @@ bash "$WS/WhiteSur-icon-theme-${WHITESUR_ICONS_REV}/install.sh" -d /usr/share/ic
 curl -fsSL "https://github.com/vinceliuice/WhiteSur-cursors/archive/${WHITESUR_CURSORS_REV}.tar.gz" | tar -xz -C "$WS"
 cp -r "$WS/WhiteSur-cursors-${WHITESUR_CURSORS_REV}/dist" /usr/share/icons/WhiteSur-cursors
 rm -rf "$WS"
-# Icône WhiteSur pour Spotify (Flatpak) + caches d'icônes à jour
-for t in WhiteSur WhiteSur-dark WhiteSur-light; do
-  [[ -f /usr/share/icons/$t/apps/scalable/spotify-client.svg ]] &&
-    ln -sf spotify-client.svg /usr/share/icons/$t/apps/scalable/com.spotify.Client.svg
-  gtk-update-icon-cache -f /usr/share/icons/$t || true
-done
-for t in WhiteSur WhiteSur-dark WhiteSur-light; do gtk-update-icon-cache -f /usr/share/icons/$t || true; done
+# Seule la variante principale sert (Smoky-icons en hérite) ; les autres ne sont que des liens
+rm -rf /usr/share/icons/WhiteSur-dark /usr/share/icons/WhiteSur-light
+gtk-update-icon-cache -f /usr/share/icons/WhiteSur || true
 
 # Thème d'icônes « Smoky-icons » : chaque appli livrée avec le système reçoit la
 # version Smoky de son vrai logo (argent, carré noir, trait néon à sa couleur),
@@ -200,11 +199,15 @@ curl -fsSL "https://github.com/Tasshack/dreame-vacuum/archive/${DREAME_REV}.tar.
 cp -r "$DV/dreame-vacuum-${DREAME_REV}/custom_components/dreame_vacuum" /usr/share/smoky-home/custom_components/
 cp "$DV/dreame-vacuum-${DREAME_REV}/LICENSE" /usr/share/smoky-home/custom_components/dreame_vacuum/LICENSE
 rm -rf "$DV"
-# Home Assistant n'est joignable que depuis ce PC, pas depuis le réseau Wi-Fi
-for fam in ipv4 ipv6; do
-  firewall-offline-cmd --zone=FedoraWorkstation \
-    --add-rich-rule="rule family=\"$fam\" port port=\"8123\" protocol=\"tcp\" reject" || true
-done
+
+# --- Pare-feu ------------------------------------------------------------------
+# Fedora ouvre par défaut les ports 1025-65535 (zone FedoraWorkstation). Sur des Wi-Fi
+# publics, on passe en zone « public » : rien n'est joignable depuis le réseau, sauf la
+# découverte locale (mDNS : Google Home, Chromecast) et GSConnect (téléphone).
+# Smoky Notes et Smoky Home (port 8123) ne sont donc accessibles que depuis ce PC.
+firewall-offline-cmd --set-default-zone=public
+firewall-offline-cmd --zone=public --add-service=kdeconnect || true
+firewall-offline-cmd --zone=public --remove-service=ssh || true
 
 # --- Services ----------------------------------------------------------------
 chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
