@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import subprocess
+import threading
 import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -26,6 +27,7 @@ LIBEXEC = "/usr/libexec/smokyos"
 IMAGE = "ghcr.io/smokytwt/z13os"
 VPN = "Smoky VPN"
 TOKEN = secrets.token_urlsafe(24)
+UPDATE = {"running": False, "result": ""}
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".png": "image/png"}
@@ -67,6 +69,30 @@ def jsave(path, data):
     path.write_text(json.dumps(data, indent=1))
 
 
+def staged_update():
+    _, ost = run("rpm-ostree", "status", "--json", timeout=10)
+    try:
+        return any(d.get("staged") for d in json.loads(ost).get("deployments", []))
+    except ValueError:
+        return False
+
+
+def do_update():
+    """Télécharge la nouvelle image Smoky OS ; elle s'applique au prochain redémarrage."""
+    code, out = run("rpm-ostree", "upgrade", timeout=3600)
+    if code != 0:
+        UPDATE["result"] = "error"
+        spawn("notify-send", "-a", "Smoky OS", "-i", "dialog-error", "Mise à jour impossible",
+              "Vérifie la connexion internet et réessaie.")
+    elif staged_update():
+        UPDATE["result"] = "staged"
+        spawn("notify-send", "-a", "Smoky OS", "-i", "system-reboot", "Mise à jour prête",
+              "Redémarre quand tu veux pour l'appliquer (Smoky Center > Mises à jour).")
+    else:
+        UPDATE["result"] = "uptodate"
+    UPDATE["running"] = False
+
+
 # --- État de la machine -------------------------------------------------------------------
 def state():
     bat = "/sys/class/power_supply/BAT0"
@@ -95,6 +121,7 @@ def state():
     pretty = re.search(r'^PRETTY_NAME="?([^"\n]*)', read("/etc/os-release"), re.M)
     return {
         "system": pretty.group(1) if pretty else "Smoky OS", "image": image, "update_staged": staged,
+        "update": dict(UPDATE),
         "nvidia": "z13os-nvidia" in image,
         "gpu": gpu or "?", "profile": profile or "?",
         "battery": {"capacity": read(f"{bat}/capacity", "?"), "status": read(f"{bat}/status", "?"),
@@ -198,6 +225,13 @@ def act(a):
               '&& notify-send -a "Smoky OS" -i system-reboot "Pilote graphique prêt" "Redémarre le PC pour terminer." '
               '|| notify-send -a "Smoky OS" -i dialog-error "Changement de pilote échoué" "Rien n\'a été modifié."')
         return {"ok": True, "message": "Téléchargement en cours (plusieurs minutes) : une notification te préviendra."}
+    if kind == "update":
+        if not UPDATE["running"]:
+            UPDATE.update(running=True, result="")
+            threading.Thread(target=do_update, daemon=True).start()
+        return {"ok": True}
+    if kind == "reboot":
+        return {"ok": run("systemctl", "reboot")[0] == 0}
     return {"ok": False, "message": "Action inconnue."}
 
 

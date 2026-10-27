@@ -83,6 +83,17 @@ function render() {
     <p class="hint">Proton VPN (gratuit) : account.protonvpn.com → Téléchargements → WireGuard → télécharge un fichier .conf, puis importe-le ici. Le VPN apparaît aussi dans le centre de contrôle.</p>
     <div class="btns"><button class="btn ${s.vpn.configured ? '' : 'primary'}" data-a="vpn_import">${s.vpn.configured ? 'Remplacer la configuration' : 'Importer un fichier .conf'}</button></div>
   </section>
+  <section class="card"><h2>🔄 Mises à jour</h2>
+    <p class="hint">${s.update.running ? 'Téléchargement de la nouvelle version de Smoky OS… (quelques minutes, tu peux continuer à utiliser le PC)'
+      : s.update_staged ? 'Nouvelle version téléchargée : elle s’applique au redémarrage.'
+      : s.update.result === 'uptodate' ? 'Smoky OS est à jour.'
+      : s.update.result === 'error' ? 'La recherche a échoué : vérifie la connexion internet.'
+      : 'Smoky OS se met aussi à jour tout seul chaque semaine, appliqué au redémarrage. En cas de souci, la version précédente reste disponible au démarrage.'}</p>
+    <div class="btns">
+      ${s.update_staged ? '<button class="btn primary" data-a="reboot">Redémarrer maintenant</button>'
+        : `<button class="btn primary" data-a="update" ${s.update.running ? 'disabled' : ''}>${s.update.running ? 'Mise à jour en cours…' : 'Rechercher une mise à jour'}</button>`}
+    </div>
+  </section>
   <section class="card"><h2>💾 Sauvegardes</h2>
     <p class="hint">Sauvegarde automatique de ton dossier personnel sur Google Drive (ou un disque, un NAS), avec restauration en quelques clics.</p>
     <div class="btns"><button class="btn primary" data-a="backup_open">Ouvrir les sauvegardes</button></div>
@@ -124,7 +135,8 @@ function bind() {
         if (on && !confirm('Installer le pilote NVIDIA ?\n\nLe système va être remplacé par la variante NVIDIA (plusieurs minutes de téléchargement), puis il faudra redémarrer.\n\nDésactive d\'abord le Secure Boot dans le BIOS (touche F2 au démarrage).')) return;
         return act({ action: 'nvidia', on });
       }
-      const msgs = { moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
+      if (a === 'reboot' && !confirm('Redémarrer maintenant pour appliquer la mise à jour ?\n\nEnregistre ton travail avant.')) return;
+      const msgs = { update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
       return act({ action: a }, msgs[a]);
     };
   });
@@ -146,4 +158,6 @@ async function refresh() {
 }
 
 refresh();
+// rafraîchissement plus rapide pendant une mise à jour
+setInterval(() => { if (S && S.update && S.update.running) refresh(); }, 4000);
 setInterval(refresh, 15000);

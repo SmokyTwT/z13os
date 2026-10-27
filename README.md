@@ -96,7 +96,7 @@ Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home
 - **Versions figées** : thèmes WhiteSur, intégration du robot et moteur de Smoky Home
   (empreinte sha256) ; bibliothèques PDF de Smoky Notes copiées dans le dépôt.
 - **Mises à jour** : image reconstruite chaque lundi, téléchargée en arrière-plan, appliquée au
-  redémarrage ; en cas de souci, revenir à la version précédente depuis le menu de démarrage.
+  redémarrage ; bouton « Rechercher une mise à jour » dans Smoky Center pour le faire tout de suite ; en cas de souci, revenir à la version précédente depuis le menu de démarrage.
 - **Allégé** : pas de Firefox (Chrome suffit), pas de visite guidée, pas de variantes d'icônes
   inutiles ; Smoky Home ne tourne que quand l'appli est ouverte.
 
