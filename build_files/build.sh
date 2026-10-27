@@ -33,7 +33,7 @@ dnf -y install asusctl supergfxctl thermald powertop
 dnf -y install asusctl-rog-gui || dnf -y install rog-control-center || echo "AVERTISSEMENT : pas d'interface ROG"
 
 # --- Synchro des notes avec Google Drive -------------------------------------
-dnf -y install rclone
+dnf -y install rclone zenity
 
 # --- Google Chrome (s'installe dans /opt : on le déplace dans /usr pour l'image atomique)
 mkdir -p /var/opt
@@ -207,7 +207,7 @@ for fam in ipv4 ipv6; do
 done
 
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
 systemctl --global enable smoky-autoicons.path smoky-autoicons.service
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-battery-limit.service z13-firstboot.service \

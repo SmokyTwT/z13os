@@ -44,6 +44,14 @@ Appli **Smoky Home** (dans le dock). Elle repose sur Home Assistant, qui tourne 
    - **Google Cast** : le Google Home Mini et le Nest Hub sont détectés tout seuls (volume, musique, annonces, affichage sur le Hub).
 3. Le tableau de bord montre tout automatiquement, dans le thème Smoky.
 
+### Robot sur un Wi-Fi public (page « accepter »)
+Le robot n'a pas de navigateur pour accepter la page du Wi-Fi public. Ouvre l'appli **Portail Wi-Fi pour un appareil** :
+1. Donne l'adresse MAC du robot (Xiaomi Home → robot → Paramètres → Infos réseau). Éteins le robot s'il était déjà sur ce Wi-Fi.
+2. Choisis le Wi-Fi public : le PC s'y connecte avec l'adresse du robot, et tu acceptes la page.
+3. Le PC reprend sa propre adresse. Tu connectes le robot à ce Wi-Fi depuis Xiaomi Home : il a Internet.
+
+Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home ou Smoky Home. Si le portail expire, relance l'outil.
+
 ## Installer sur le Z13
 1. **Sous Windows d'abord** : mets à jour le BIOS avec MyASUS et **sauvegarde tes fichiers**.
 2. Copie `smokyos.iso` sur une clé USB (8 Go ou plus) avec **Fedora Media Writer** ou

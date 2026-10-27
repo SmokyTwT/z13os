@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Smoky OS — valider un portail Wi-Fi (« accepter les conditions ») au nom d'un
+# appareil qui n'a pas de navigateur (robot aspirateur, console, enceinte…).
+# Le PC se connecte temporairement avec l'adresse MAC de l'appareil, tu acceptes
+# la page, puis le PC reprend sa propre adresse : l'appareil peut se connecter.
+set -u
+export LC_ALL=C.UTF-8
+T="Portail Wi-Fi pour un appareil"
+TMP_CON="smoky-portail"
+
+die() { zenity --error --title="$T" --width=420 --text="$1" 2>/dev/null; nmcli connection delete "$TMP_CON" >/dev/null 2>&1; exit 1; }
+
+zenity --info --title="$T" --width=460 --ok-label="Commencer" --text="Cet outil valide la page « accepter » d'un Wi-Fi public <b>au nom d'un appareil</b> (ton robot X20 Max par exemple).
+
+Avant de commencer :
+• note l'<b>adresse MAC</b> de l'appareil (appli Xiaomi Home → robot → Paramètres → Infos réseau) ;
+• si l'appareil est déjà sur ce Wi-Fi, <b>éteins-le</b> le temps de l'opération (1 minute)." 2>/dev/null || exit 0
+
+MAC=$(zenity --entry --title="$T" --width=420 --text="Adresse MAC de l'appareil (ex. : 5C:E5:0C:12:34:56) :" 2>/dev/null) || exit 0
+MAC=$(echo "$MAC" | tr 'a-f-' 'A-F:' | tr -d ' ')
+[[ $MAC =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || die "Adresse MAC invalide : « $MAC ».\nElle doit ressembler à 5C:E5:0C:12:34:56."
+
+IFACE=$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')
+[ -n "$IFACE" ] || die "Aucune carte Wi-Fi trouvée."
+
+nmcli device wifi rescan ifname "$IFACE" >/dev/null 2>&1; sleep 2
+CURRENT=$(nmcli -t -f ACTIVE,SSID device wifi list ifname "$IFACE" | awk -F: '$1=="yes"{print $2; exit}')
+mapfile -t NETS < <(nmcli -t -f SSID,SECURITY device wifi list ifname "$IFACE" | awk -F: 'length($1)>0 && !seen[$1]++ {print $1 "\n" ($2==""||$2=="--" ? "ouvert" : $2)}')
+[ ${#NETS[@]} -gt 0 ] || die "Aucun réseau Wi-Fi détecté."
+SSID=$(zenity --list --title="$T" --width=460 --height=420 --text="Sur quel Wi-Fi public l'appareil doit-il se connecter ?" \
+  --column="Réseau" --column="Sécurité" "${NETS[@]}" 2>/dev/null) || exit 0
+[ -n "$SSID" ] || exit 0
+
+SEC=$(nmcli -t -f SSID,SECURITY device wifi list ifname "$IFACE" | awk -F: -v s="$SSID" '$1==s{print $2; exit}')
+nmcli connection delete "$TMP_CON" >/dev/null 2>&1
+nmcli connection add type wifi ifname "$IFACE" con-name "$TMP_CON" ssid "$SSID" \
+  802-11-wireless.cloned-mac-address "$MAC" connection.autoconnect no >/dev/null || die "Impossible de préparer la connexion."
+if [ -n "$SEC" ] && [ "$SEC" != "--" ]; then
+  PASS=$(zenity --password --title="$T — mot de passe du Wi-Fi « $SSID »" 2>/dev/null) || { nmcli connection delete "$TMP_CON" >/dev/null; exit 0; }
+  nmcli connection modify "$TMP_CON" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASS" >/dev/null
+fi
+
+( nmcli connection up "$TMP_CON" >/dev/null 2>&1 ) | zenity --progress --pulsate --auto-close --no-cancel \
+  --title="$T" --text="Connexion à « $SSID » avec l'adresse de l'appareil…" 2>/dev/null
+nmcli -t -f GENERAL.STATE connection show "$TMP_CON" 2>/dev/null | grep -q activated || die "La connexion à « $SSID » a échoué."
+
+xdg-open "http://neverssl.com" >/dev/null 2>&1 &
+zenity --info --title="$T" --width=460 --ok-label="J'ai accepté" --text="Une page s'ouvre dans le navigateur : <b>accepte les conditions</b> du Wi-Fi public.
+
+(Si la page n'apparaît pas, ouvre n'importe quel site non sécurisé, par exemple neverssl.com.)
+
+Clique ensuite sur « J'ai accepté »." 2>/dev/null
+
+STATE=$(nmcli networking connectivity check 2>/dev/null)
+nmcli connection down "$TMP_CON" >/dev/null 2>&1
+nmcli connection delete "$TMP_CON" >/dev/null 2>&1
+[ -n "$CURRENT" ] && nmcli connection up id "$CURRENT" >/dev/null 2>&1 &
+
+if [ "$STATE" = "full" ]; then
+  zenity --info --title="$T" --width=460 --text="✅ C'est validé pour l'appareil <b>$MAC</b>.
+
+Le PC a repris sa propre adresse. Maintenant :
+1. rallume l'appareil s'il était éteint ;
+2. connecte-le au Wi-Fi <b>« $SSID »</b> (appli Xiaomi Home pour le robot).
+
+Il aura Internet sans page à accepter. Si le portail expire un jour, relance cet outil." 2>/dev/null
+else
+  zenity --warning --title="$T" --width=460 --text="Je n'ai pas pu confirmer l'accès à Internet (état : ${STATE:-inconnu}).
+
+Si tu as bien accepté la page, connecte quand même l'appareil au Wi-Fi « $SSID » : il est peut-être déjà autorisé. Sinon, relance l'outil." 2>/dev/null
+fi

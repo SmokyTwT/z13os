@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Portail Wi-Fi pour un appareil
+Comment=Accepter la page d'un Wi-Fi public au nom du robot aspirateur ou d'un autre appareil sans navigateur
+Exec=/usr/bin/smoky-portail
+Icon=network-wireless
+Categories=Network;Settings;
+Keywords=wifi;portail;robot;mac;captive;réseau;
+Terminal=false
