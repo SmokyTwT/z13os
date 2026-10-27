@@ -38,6 +38,11 @@ dnf -y remove firefox firefox-langpacks gnome-tour || true
 # --- Synchro des notes avec Google Drive -------------------------------------
 dnf -y install rclone zenity
 
+# --- Smoky Moodle (import des PDF de cours, échéances) : pdfinfo + trousseau GNOME
+dnf -y install poppler-utils libsecret
+mkdir -p /etc/smokyos
+echo "${MOODLE_URL:-https://moodle.uphf.fr/}" > /etc/smokyos/moodle-url
+
 # --- Google Chrome (s'installe dans /opt : on le déplace dans /usr pour l'image atomique)
 mkdir -p /var/opt
 dnf -y install google-chrome-stable
@@ -73,7 +78,7 @@ if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
+FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'smoky-center.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
 # --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
 # gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)
@@ -182,7 +187,7 @@ idle-delay=uint32 300
 
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'smoky-maximize@smokyos']
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'smoky-maximize@smokyos', 'smoky-home@smokyos']
 
 [org.gnome.shell.extensions.user-theme]
 name='Smoky'
@@ -209,11 +214,31 @@ firewall-offline-cmd --set-default-zone=public
 firewall-offline-cmd --zone=public --add-service=kdeconnect || true
 firewall-offline-cmd --zone=public --remove-service=ssh || true
 
+# --- Écran de démarrage Smoky (Plymouth) ------------------------------------------
+dnf -y install plymouth-plugin-script
+plymouth-set-default-theme smoky
+KVER=$(ls /usr/lib/modules | head -1)
+dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
+
+# --- Pilote NVIDIA (variante z13os-nvidia uniquement) ---------------------------------
+# Le pilote libre (nouveau) suffit au streaming ; le propriétaire sert aux jeux (Steam).
+if [[ "${NVIDIA:-0}" == 1 ]]; then
+  dnf -y install "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia-cuda
+  akmods --force --kernels "$KVER"
+  ls /usr/lib/modules/"$KVER"/extra/nvidia/nvidia*.ko* >/dev/null   # le module doit exister
+  mkdir -p /usr/lib/bootc/kargs.d
+  printf 'kargs = ["rd.driver.blacklist=nouveau", "modprobe.blacklist=nouveau", "nvidia-drm.modeset=1"]\n' \
+    > /usr/lib/bootc/kargs.d/00-nvidia.toml
+  dnf -y remove "kernel-devel-$KVER" || true
+  dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
+fi
+
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/smoky-autoicons.py
-systemctl --global enable smoky-autoicons.path smoky-autoicons.service
+chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/bin/smoky-center \
+  /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/*.py /usr/libexec/smokyos/smoky-focus.sh
+systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service
 systemctl enable supergfxd.service thermald.service fstrim.timer \
-  z13-powertune.service z13-battery-limit.service z13-firstboot.service \
+  z13-powertune.service z13-firstboot.service smoky-focus-cleanup.service \
   rpm-ostreed-automatic.timer
 
 # Mises à jour système téléchargées en arrière-plan, appliquées au prochain redémarrage

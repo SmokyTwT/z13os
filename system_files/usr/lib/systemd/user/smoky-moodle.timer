@@ -1,0 +1,10 @@
+[Unit]
+Description=Smoky OS : vérifie Moodle toutes les 2 heures
+
+[Timer]
+OnStartupSec=3min
+OnUnitActiveSec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

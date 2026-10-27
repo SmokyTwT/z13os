@@ -1,0 +1,7 @@
+[Unit]
+Description=Smoky OS : mode concentration (%i minutes)
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/smokyos/smoky-focus.sh start %i
+ExecStopPost=/usr/libexec/smokyos/smoky-focus.sh stop

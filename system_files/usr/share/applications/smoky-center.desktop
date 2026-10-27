@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Smoky Center
+Comment=Réglages Smoky OS : énergie, carte graphique, tablette, Moodle, concentration, maison, VPN
+Exec=/usr/bin/smoky-center
+Icon=smoky-center
+StartupWMClass=smoky-center
+Categories=Settings;System;
+Keywords=réglages;batterie;gpu;moodle;vpn;pomodoro;concentration;
+Terminal=false

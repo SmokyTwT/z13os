@@ -1,3 +1,4 @@
 {
-  "BrowserThemeColor": "#111113"
+  "BrowserThemeColor": "#111113",
+  "AudioCaptureAllowedUrls": ["http://127.0.0.1:47813"]
 }

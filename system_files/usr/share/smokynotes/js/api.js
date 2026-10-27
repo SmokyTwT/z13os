@@ -17,6 +17,7 @@ async function call(method, path, body, type = 'application/json') {
 
 export const api = {
   async list() { return (await call('GET', 'notebooks')).json(); },
+  async deadlines() { return (await call('GET', 'deadlines')).json(); },
   async load(id) { return (await call('GET', 'notebooks/' + id)).json(); },
   async save(nb) { return (await call('PUT', 'notebooks/' + nb.id, JSON.stringify(nb))).json(); },
   async remove(id) { return call('DELETE', 'notebooks/' + id); },

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Smoky
+Description=Smoky OS : le mot smoky dans la fumée et une volute argentée qui tourne
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/smoky
+ScriptFile=/usr/share/plymouth/themes/smoky/smoky.script

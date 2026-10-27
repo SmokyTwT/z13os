@@ -1,0 +1,10 @@
+// Smoky OS : l'utilisateur de la session active peut démarrer/arrêter le mode
+// concentration (smoky-focus@N.service) sans mot de passe. Rien d'autre.
+polkit.addRule(function (action, subject) {
+    if (action.id === "org.freedesktop.systemd1.manage-units" &&
+        subject.local && subject.active &&
+        /^smoky-focus@[0-9]{1,3}\.service$/.test(action.lookup("unit") || "") &&
+        ["start", "stop"].indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

@@ -7,6 +7,7 @@ import { renderPdfPage, importPdf } from './pdfdoc.js';
 import { exportById } from './library.js';
 import { icon, hydrateIcons } from './icons.js';
 import { $, esc, toast, openMenu, openModal, confirmBox } from './ui.js';
+import { initAudio, audioOnOpen, audioOnClose, listenAt, fadeFn } from './audio.js';
 
 const DPR = () => Math.min(window.devicePixelRatio || 1, 3);
 const MIN_ZOOM = 0.3, MAX_ZOOM = 4;
@@ -18,6 +19,7 @@ const TOOL_DEFAULTS = {
   shape: { color: '#111113', width: 1.8, kind: 'rect' },
   text: { color: '#111113', size: 16, bold: false },
   lasso: {},
+  listen: {},
   laser: { color: '#ff3b30' },
 };
 const SIZES = {
@@ -88,6 +90,7 @@ export function initEditor(onBack) {
   });
   document.querySelectorAll('#sel-bar [data-sel]').forEach((b) => { b.onclick = (e) => selAction(b.dataset.sel, e.currentTarget); });
   bindInput();
+  initAudio({ nb: () => S.nb, markDirty, rerender: () => { for (const v of S.views.values()) if (v.visible && !v.stale) renderInk(v); } });
   addEventListener('keydown', onKey);
   addEventListener('resize', () => { if (S.nb) layout(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
@@ -116,9 +119,11 @@ export async function openEditor(id) {
   setTool(S.tool);
   syncChrome();
   loadImages();
+  audioOnOpen();
 }
 
 async function closeEditor() {
+  await audioOnClose();
   commitText();
   clearSelection();
   await flushSave();
@@ -254,7 +259,7 @@ async function renderBg(v) {
 function renderInk(v, skip) {
   const ctx = v.ink.getContext('2d');
   ctx.clearRect(0, 0, v.ink.width, v.ink.height);
-  drawItems(ctx, v.page, v.scale, S.images, skip);
+  drawItems(ctx, v.page, v.scale, S.images, skip, fadeFn());
 }
 
 function viewAt(index) { return S.views.get(S.nb.pages[index]?.id); }
@@ -423,6 +428,8 @@ function buildSubBar() {
     extra.insertAdjacentHTML('beforeend', '<span style="color:var(--fg-3);font-size:12px">Touche la page pour écrire</span>');
   } else if (t === 'lasso') {
     extra.insertAdjacentHTML('beforeend', '<span style="color:var(--fg-3);font-size:13px">Entoure des éléments pour les déplacer, redimensionner, recolorer ou copier</span>');
+  } else if (t === 'listen') {
+    extra.insertAdjacentHTML('beforeend', '<span style="color:var(--fg-3);font-size:13px">Touche un mot ou un dessin : l’enregistrement repart au moment où tu l’as écrit</span>');
   } else if (t === 'laser') {
     for (const [c, l] of [['#ff3b30', 'Rouge'], ['#ffffff', 'Blanc'], ['#34c759', 'Vert']]) chip(l, cfg.color === c, () => { cfg.color = c; setTool(t); });
   } else if (t === 'pen') {
@@ -605,7 +612,7 @@ function startAction(v, e) {
   const [x, y] = pagePoint(v, e);
   // bout « gomme » du stylet (bouton 5) : gomme sans changer d'outil
   const t = e.pointerType === 'pen' && (e.button === 5 || (e.buttons & 32)) ? 'eraser' : S.tool;
-  action = { id: e.pointerId, pointerType: e.pointerType, v, tool: t, x0: x, y0: y, before: v.page.items.slice() };
+  action = { id: e.pointerId, pointerType: e.pointerType, v, tool: t, x0: x, y0: y, t0: Date.now(), before: v.page.items.slice() };
 
   if (t === 'pen' || t === 'highlighter') {
     const cfg = S.cfg[t];
@@ -634,6 +641,14 @@ function startAction(v, e) {
     commitText();
   } else if (t === 'laser') {
     laserAdd(v, x, y);
+  } else if (t === 'listen') {
+    // élément le plus récent sous le doigt / le stylet
+    const hit = [...v.page.items].reverse().find((it) => {
+      if (it.type === 'stroke') return strokeHit(it, x, y, 8);
+      const b = itemBounds(it);
+      return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + (b.h || 20);
+    });
+    listenAt(hit);
   }
 }
 
@@ -687,6 +702,7 @@ function endAction(e) {
     }
   }
   if ((a.tool === 'pen' || a.tool === 'highlighter' || a.tool === 'shape') && a.item) {
+    a.item.t = a.t0;                         // heure d'écriture : synchro avec l'audio
     v.page.items.push(a.item);
     drawStroke(v.ink.getContext('2d'), a.item, v.scale);
     if (a.tool === 'highlighter') renderInk(v);
@@ -1020,7 +1036,7 @@ function commitText() {
   const text = ta.value.replace(/\s+$/, '');
   ta.remove();
   if (isNew) {
-    if (text) { v.page.items.push({ ...item, text }); recordItems(v, before); }
+    if (text) { v.page.items.push({ ...item, text, t: Date.now() }); recordItems(v, before); }
   } else if (!text) {
     v.page.items = v.page.items.filter((it) => it !== item);
     recordItems(v, before);
@@ -1297,7 +1313,7 @@ function pickImage() {
       const sc = $('#ed-scroll');
       const r = v.el.getBoundingClientRect();
       const midY = Math.min(v.page.h - h - 20, Math.max(20, (sc.getBoundingClientRect().top + sc.clientHeight / 2 - r.top) / S.zoom - h / 2));
-      const item = { type: 'image', asset: name, x: (v.page.w - w) / 2, y: midY, w, h };
+      const item = { type: 'image', asset: name, x: (v.page.w - w) / 2, y: midY, w, h, t: Date.now() };
       const before = v.page.items.slice();
       v.page.items.push(item);
       renderInk(v);

@@ -1,0 +1,7 @@
+{
+  "uuid": "smoky-home@smokyos",
+  "name": "Smoky : maison",
+  "description": "Lumières et robot aspirateur dans le centre de contrôle (via Smoky Home / Home Assistant).",
+  "shell-version": ["47", "48", "49", "50", "51", "52"],
+  "version": 1
+}

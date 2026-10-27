@@ -31,6 +31,7 @@
         <option value="created">Date de création</option>
       </select>
     </nav>
+    <div id="lib-due" class="lib-due hidden"></div>
     <div id="lib-grid" class="lib-grid"></div>
     <div id="lib-empty" class="lib-empty hidden">
       <div class="empty-art"></div>
@@ -56,10 +57,12 @@
         <button class="tool" data-tool="shape" title="Formes (S)"><span data-icon="shape"></span></button>
         <button class="tool" data-tool="text" title="Texte (T)"><span data-icon="text"></span></button>
         <button class="tool" data-tool="laser" title="Pointeur laser"><span data-icon="laser"></span></button>
+        <button class="tool" data-tool="listen" title="Réécouter : touche un mot"><span data-icon="listen"></span></button>
         <button class="tool-sep"></button>
         <button id="ed-image" class="icon-btn" title="Insérer une image"><span data-icon="image"></span></button>
       </div>
       <div class="ed-right">
+        <button id="ed-rec" class="icon-btn rec-btn" title="Enregistrer le cours (audio synchronisé)"><span data-icon="mic"></span><span id="ed-rec-time" class="rec-time"></span></button>
         <button id="ed-undo" class="icon-btn" title="Annuler (Ctrl+Z)"><span data-icon="undo"></span></button>
         <button id="ed-redo" class="icon-btn" title="Rétablir (Ctrl+Maj+Z)"><span data-icon="redo"></span></button>
         <button id="ed-finger" class="icon-btn" title="Dessiner au doigt"><span data-icon="finger"></span></button>
@@ -89,6 +92,13 @@
       </main>
       <div id="ed-zoom" class="zoom-pill">100 %</div>
       <div id="ed-pageno" class="page-pill">1 / 1</div>
+    </div>
+
+    <div id="au-bar" class="au-bar hidden">
+      <button id="au-play" class="icon-btn" title="Lecture / pause"></button>
+      <select id="au-list" title="Enregistrements"></select>
+      <input id="au-seek" type="range" min="0" max="1000" value="0">
+      <span id="au-time"></span>
     </div>
 
     <div id="sel-bar" class="sel-bar hidden">

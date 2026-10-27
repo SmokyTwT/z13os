@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Smoky OS – connexion Moodle
+Exec=/usr/bin/python3 /usr/libexec/smokyos/smoky-moodle.py receive %u
+MimeType=x-scheme-handler/moodlemobile;
+NoDisplay=true
+Terminal=false

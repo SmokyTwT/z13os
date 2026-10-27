@@ -39,7 +39,7 @@ export function drawStroke(ctx, it, s, from = 0) {
   ctx.strokeStyle = it.color;
   ctx.fillStyle = it.color;
   if (it.tool === 'highlighter') {
-    ctx.globalAlpha = 0.38;
+    ctx.globalAlpha *= 0.38;
     ctx.globalCompositeOperation = 'multiply';
   }
   if (n === 1) {
@@ -120,9 +120,11 @@ export function drawText(ctx, it, s) {
   return (lines.length * it.size * 1.3);
 }
 
-export function drawItems(ctx, page, s, images, skip) {
+export function drawItems(ctx, page, s, images, skip, fade) {
   for (const it of page.items) {
     if (skip && skip.has(it)) continue;
+    const faded = fade && fade(it);          // lecture audio : écrit « plus tard » → estompé
+    if (faded) { ctx.save(); ctx.globalAlpha = 0.2; }
     if (it.type === 'stroke') drawStroke(ctx, it, s);
     else if (it.type === 'text') it.h = Math.max(it.size * 1.3, drawText(ctx, it, s));
     else if (it.type === 'image') {
@@ -133,5 +135,6 @@ export function drawItems(ctx, page, s, images, skip) {
         ctx.fillRect(it.x * s, it.y * s, it.w * s, it.h * s);
       }
     }
+    if (faded) ctx.restore();
   }
 }

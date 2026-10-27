@@ -27,7 +27,7 @@ TOKEN = secrets.token_urlsafe(24)
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-ASSET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}\.(pdf|png|jpg|jpeg|webp)$")
+ASSET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}\.(pdf|png|jpg|jpeg|webp|webm)$")
 PDF_NAME_RE = re.compile(r"^[^/\\\x00]{1,120}\.pdf$")
 MAX_BODY = 300 * 1024 * 1024  # 300 Mo (gros PDF de cours)
 MIME = {
@@ -35,7 +35,7 @@ MIME = {
     ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
     ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg", ".webp": "image/webp", ".pdf": "application/pdf",
-    ".json": "application/json", ".woff2": "font/woff2",
+    ".json": "application/json", ".woff2": "font/woff2", ".webm": "audio/webm",
 }
 
 
@@ -131,7 +131,7 @@ class Handler(BaseHTTPRequestHandler):
         if target.name == "index.html":
             data = data.replace(b"__SMOKY_TOKEN__", TOKEN.encode())
         csp = ("default-src 'self'; img-src 'self' blob: data:; "
-               "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
+               "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; media-src 'self' blob:; "
                "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:; "
                "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
@@ -147,6 +147,9 @@ class Handler(BaseHTTPRequestHandler):
     def api_get(self, route):
         parts = route.split("/")
         try:
+            if route == "deadlines":           # échéances Moodle (smoky-moodle)
+                f = Path.home() / ".local/share/smoky-moodle/echeances.json"
+                return self.send(200, f.read_bytes() if f.is_file() else b"[]")
             if route == "notebooks":
                 out = []
                 if DATA_DIR.is_dir():

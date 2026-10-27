@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS - adaptation automatique (120/60 Hz, mode tablette, VPN)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/libexec/smokyos/smoky-adaptive.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

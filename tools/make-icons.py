@@ -170,7 +170,12 @@ icons["home"] = ('<path d="M15 31 L32 16 L49 31" ' + S + ' stroke-width="3"/>'
                  '<path d="M29 45 v-8 h6 v8" ' + S + ' stroke-width="2.4"/>'
                  '<path d="M42 22 v-6 M42 13 c2 -2 -1 -4 1 -6" ' + S + ' stroke-width="1.8" opacity=".6"/>', "#ffffff")
 FILES["home"] = "smoky-home.svg"
-KEEP = {"tf1", "m6", "moodle", "notes", "home"}
+# Smoky Center : trois curseurs de réglage
+icons["center"] = ('<path d="M18 20 h28 M18 30 h28 M18 40 h28" ' + S + ' stroke-width="2.4" opacity=".55"/>'
+                   '<circle cx="26" cy="20" r="3.6" ' + F + '/><circle cx="39" cy="30" r="3.6" ' + F + '/>'
+                   '<circle cx="23" cy="40" r="3.6" ' + F + '/>', "#ffffff")
+FILES["center"] = "smoky-center.svg"
+KEEP = {"tf1", "m6", "moodle", "notes", "home", "center"}
 icons = {k: v for k, v in icons.items() if k in KEEP}
 
 os.makedirs(OUT, exist_ok=True)

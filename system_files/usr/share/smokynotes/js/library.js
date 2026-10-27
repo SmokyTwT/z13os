@@ -37,6 +37,22 @@ export async function showLibrary() {
     notebooks = [];
   }
   render();
+  renderDeadlines();
+}
+
+// Échéances Moodle à venir (importées par smoky-moodle)
+async function renderDeadlines() {
+  const box = $('#lib-due');
+  let list = [];
+  try { list = await api.deadlines(); } catch { /* Moodle pas connecté */ }
+  const now = Date.now() / 1000;
+  list = list.filter((e) => e.time > now - 3600).sort((a, b) => a.time - b.time).slice(0, 8);
+  box.classList.toggle('hidden', !list.length);
+  if (!list.length) return;
+  const df = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  box.innerHTML = '<span class="due-title">À rendre</span>' + list.map((e) =>
+    `<div class="due${e.time - now < 36 * 3600 ? ' soon' : ''}" data-url="${esc(e.url || '')}"><b>${esc(e.name)}</b><span>${esc(e.course)}</span><span>${esc(df.format(new Date(e.time * 1000)))}</span></div>`).join('');
+  box.querySelectorAll('.due').forEach((d) => { d.onclick = () => { if (/^https?:\/\//.test(d.dataset.url)) window.open(d.dataset.url, '_blank', 'noopener'); }; });
 }
 
 function renderFolders() {

@@ -1,0 +1,68 @@
+# Smoky OS — écran de démarrage : fond « smoky » + volute argentée qui tourne.
+Window.SetBackgroundTopColor(0.043, 0.043, 0.047);
+Window.SetBackgroundBottomColor(0.043, 0.043, 0.047);
+
+sw = Window.GetWidth();
+sh = Window.GetHeight();
+
+bg = Image("background.png");
+ratio = Math.Min(sw / bg.GetWidth(), sh / bg.GetHeight());
+bgs = bg.Scale(bg.GetWidth() * ratio, bg.GetHeight() * ratio);
+background = Sprite(bgs);
+background.SetX(Window.GetX() + (sw - bgs.GetWidth()) / 2);
+background.SetY(Window.GetY() + (sh - bgs.GetHeight()) / 2);
+background.SetZ(-10);
+
+swirl = Image("swirl.png");
+spinner = Sprite();
+spinner.SetX(Window.GetX() + sw / 2 - swirl.GetWidth() / 2);
+spinner.SetY(Window.GetY() + sh * 0.8 - swirl.GetHeight() / 2);
+spinner.SetZ(10);
+angle = 0;
+
+fun refresh_callback () {
+    angle = angle + 0.09;
+    spinner.SetImage(swirl.Rotate(angle));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# --- Mot de passe (disque chiffré) et messages ------------------------------------
+prompt_sprite = Sprite();
+bullets_sprite = Sprite();
+message_sprite = Sprite();
+
+fun display_password_callback (prompt, bullets) {
+    p = Image.Text(prompt, 0.93, 0.93, 0.95);
+    prompt_sprite.SetImage(p);
+    prompt_sprite.SetX(Window.GetX() + sw / 2 - p.GetWidth() / 2);
+    prompt_sprite.SetY(Window.GetY() + sh * 0.88);
+    prompt_sprite.SetZ(20);
+    prompt_sprite.SetOpacity(1);
+    stars = "";
+    for (i = 0; i < bullets; i++)
+        stars = stars + "*";
+    b = Image.Text(stars + " ", 1, 1, 1);
+    bullets_sprite.SetImage(b);
+    bullets_sprite.SetX(Window.GetX() + sw / 2 - b.GetWidth() / 2);
+    bullets_sprite.SetY(Window.GetY() + sh * 0.88 + 28);
+    bullets_sprite.SetZ(20);
+    bullets_sprite.SetOpacity(1);
+    spinner.SetOpacity(0);
+}
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+fun display_normal_callback () {
+    prompt_sprite.SetOpacity(0);
+    bullets_sprite.SetOpacity(0);
+    spinner.SetOpacity(1);
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+fun message_callback (text) {
+    m = Image.Text(text, 0.8, 0.8, 0.84);
+    message_sprite.SetImage(m);
+    message_sprite.SetX(Window.GetX() + sw / 2 - m.GetWidth() / 2);
+    message_sprite.SetY(Window.GetY() + sh * 0.94);
+    message_sprite.SetZ(20);
+}
+Plymouth.SetMessageFunction(message_callback);

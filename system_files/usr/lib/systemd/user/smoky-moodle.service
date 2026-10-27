@@ -1,0 +1,8 @@
+[Unit]
+Description=Smoky OS : nouveaux cours Moodle dans Smoky Notes + échéances
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/libexec/smokyos/smoky-moodle.py sync
+Nice=10

@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS : retire un éventuel blocage du mode concentration au démarrage
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/smokyos/smoky-focus.sh stop
+
+[Install]
+WantedBy=multi-user.target
