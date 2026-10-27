@@ -1,0 +1,7 @@
+{
+  "uuid": "smoky-tablet@smokyos",
+  "name": "Smoky : mode tablette",
+  "description": "Bouton « Tablette » dans le centre de contrôle : grandes icônes et clavier à l'écran (appliqué par smoky-adaptive).",
+  "shell-version": ["47", "48", "49", "50", "51", "52"],
+  "version": 1
+}

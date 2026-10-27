@@ -2,8 +2,8 @@
 """Smoky OS — adaptation automatique (service de session).
 
 * Écran : fréquence maximale (120 Hz) sur secteur, 60 Hz sur batterie.
-* Tablette : clavier détaché → grandes icônes dans le dock et clavier virtuel ;
-  clavier rattaché → retour à la normale.
+* Mode tablette (bouton dans le menu en haut à droite ou Smoky Center) : grandes icônes
+  dans le dock et clavier à l'écran ; désactivé → retour à la normale.
 * VPN : sur un Wi-Fi ouvert (sans mot de passe), active la connexion « Smoky VPN ».
 
 Réglages : ~/.config/smoky/adaptive.json (modifiés par Smoky Center), relus à chaud.
@@ -17,7 +17,7 @@ from gi.repository import Gio, GLib
 
 CONF = Path.home() / ".config/smoky/adaptive.json"
 STATE = Path.home() / ".config/smoky/adaptive-state.json"
-DEFAULTS = {"refresh": True, "tablet": True, "vpn_auto": False, "tablet_open_notes": True}
+DEFAULTS = {"refresh": True, "tablet_mode": False, "vpn_auto": False, "tablet_open_notes": True}
 VPN_NAME = "Smoky VPN"
 
 
@@ -48,7 +48,7 @@ def settings(schema):
 class Adaptive:
     def __init__(self):
         self.conf = load(CONF, DEFAULTS)
-        self.state = load(STATE, {"kbd_seen": False, "dock_size": None})
+        self.state = load(STATE, {"dock_size": None})
         self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM)
         self.session = Gio.bus_get_sync(Gio.BusType.SESSION)
         self.on_battery = None
@@ -73,15 +73,13 @@ class Adaptive:
                                      Gio.DBusSignalFlags.NONE, self.on_nm_state)
 
         self.check_power()
-        self.check_keyboard()
-        GLib.timeout_add_seconds(3, self.check_keyboard)
+        self.apply_tablet(notify=False)
 
     def reload(self):
         self.conf = load(CONF, DEFAULTS)
         self.on_battery = None
         self.check_power()
-        if not self.conf["tablet"] and self.tablet:
-            self.set_tablet(False)
+        self.apply_tablet()
         return False
 
     # --- Écran 120 / 60 Hz ------------------------------------------------------------
@@ -137,29 +135,12 @@ class Adaptive:
         return False
 
     # --- Mode tablette ---------------------------------------------------------------------
-    @staticmethod
-    def keyboard_attached():
-        """Clavier détachable du Z13 : périphérique USB ASUS (vendeur 0b05) qui gère des touches."""
-        try:
-            blocks = Path("/proc/bus/input/devices").read_text().split("\n\n")
-        except OSError:
-            return None
-        return any("Bus=0003 Vendor=0b05" in b and "kbd" in b for b in blocks)
+    def apply_tablet(self, notify=True):
+        want = bool(self.conf["tablet_mode"])
+        if want != bool(self.tablet):
+            self.set_tablet(want, notify)
 
-    def check_keyboard(self):
-        attached = self.keyboard_attached()
-        if attached and not self.state["kbd_seen"]:
-            self.state["kbd_seen"] = True
-            save(STATE, self.state)
-        # Sans clavier ASUS jamais vu (autre PC, machine virtuelle) : on ne touche à rien
-        if self.conf["tablet"] and self.state["kbd_seen"] and attached is not None:
-            want = not attached
-            if want != self.tablet:
-                self.set_tablet(want)
-        return True
-
-    def set_tablet(self, on):
-        first = self.tablet is None
+    def set_tablet(self, on, notify=True):
         self.tablet = on
         dock = settings("org.gnome.shell.extensions.dash-to-dock")
         a11y = settings("org.gnome.desktop.a11y.applications")
@@ -171,7 +152,7 @@ class Adaptive:
                 dock.set_int("dash-max-icon-size", 68)
             if a11y:
                 a11y.set_boolean("screen-keyboard-enabled", True)
-            if not first:
+            if notify:
                 threading.Thread(target=self.tablet_notice, daemon=True).start()
         else:
             if dock and self.state.get("dock_size"):
@@ -186,7 +167,7 @@ class Adaptive:
             return
         out = run("notify-send", "-a", "Smoky OS", "-i", "smoky-notes", "-t", "8000",
                   "-A", "notes=Ouvrir Smoky Notes", "Mode tablette",
-                  "Clavier détaché : grandes icônes et clavier à l'écran activés.")
+                  "Grandes icônes et clavier à l'écran activés.")
         if out.strip() == "notes":
             subprocess.Popen(["/usr/bin/smoky-notes"])
 

@@ -29,7 +29,7 @@ TOKEN = secrets.token_urlsafe(24)
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".png": "image/png"}
-ADAPTIVE_DEFAULTS = {"refresh": True, "tablet": True, "vpn_auto": False, "tablet_open_notes": True}
+ADAPTIVE_DEFAULTS = {"refresh": True, "tablet_mode": False, "vpn_auto": False, "tablet_open_notes": True}
 
 
 def run(*args, timeout=8):

@@ -57,8 +57,9 @@ function render() {
     <p class="hint">⚠️ Le pilote NVIDIA n'est pas signé : désactive le Secure Boot dans le BIOS (F2) avant de redémarrer.</p>
   </section>
   <section class="card"><h2>📱 Tablette</h2>
-    <div class="row"><span>Grandes icônes et clavier à l'écran quand le clavier est détaché</span>${sw('tablet', ad.tablet)}</div>
-    <div class="row"><span>Proposer d'ouvrir Smoky Notes</span>${sw('tablet_open_notes', ad.tablet_open_notes)}</div>
+    <p class="hint">Aussi dans le menu en haut à droite (bouton « Tablette »).</p>
+    <div class="row"><span>Mode tablette : grandes icônes et clavier à l'écran</span>${sw('tablet_mode', ad.tablet_mode)}</div>
+    <div class="row"><span>Proposer d'ouvrir Smoky Notes en passant en tablette</span>${sw('tablet_open_notes', ad.tablet_open_notes)}</div>
   </section>
   <section class="card"><h2>🎓 Cours (Moodle) <small><span class="pill ${m.connected ? 'on' : ''}">${m.connected ? 'connecté' : 'non connecté'}</span></small></h2>
     ${m.connected ? `<p class="hint">${m.documents || 0} document(s) importé(s) dans Smoky Notes · vérification toutes les 2 h</p>` : '<p class="hint">Tes PDF de cours arrivent automatiquement dans Smoky Notes (un classeur par cours), et tes échéances te sont rappelées la veille.</p>'}
@@ -105,7 +106,7 @@ function bind() {
   document.querySelectorAll('[data-sw]').forEach((inp) => {
     inp.onchange = () => {
       const k = inp.dataset.sw, on = inp.checked;
-      if (['refresh', 'tablet', 'tablet_open_notes', 'vpn_auto'].includes(k)) act({ action: 'adaptive', [k]: on });
+      if (['refresh', 'tablet_mode', 'tablet_open_notes', 'vpn_auto'].includes(k)) act({ action: 'adaptive', [k]: on });
       if (k === 'home_background') act({ action: 'home_background', on });
       if (k === 'vpn') act({ action: 'vpn', on });
     };

@@ -22,7 +22,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Échéances | Devoirs et tests Moodle en pastilles « À rendre » dans Smoky Notes, notification 36 h avant, et fichier Notes/« Moodle - échéances.ics » importable dans Google Agenda |
 | Enregistrement audio | Bouton micro dans Smoky Notes : l'audio est lié à l'écriture ; outil « écouter » : touche un mot, la lecture repart au moment où tu l'as écrit |
 | Concentration | Pomodoro (25 min par défaut) qui bloque YouTube, TikTok, Instagram, réseaux et streaming le temps de la session (liste : /etc/smokyos/focus-sites.conf) |
-| Adaptation automatique | 120 Hz sur secteur, 60 Hz sur batterie ; clavier détaché → mode tablette (grandes icônes, clavier à l'écran, proposition d'ouvrir Smoky Notes) |
+| Adaptation automatique | 120 Hz sur secteur, 60 Hz sur batterie ; bouton « Tablette » dans le menu en haut à droite (et dans Smoky Center) : grandes icônes, clavier à l'écran, proposition d'ouvrir Smoky Notes |
 | Maison dans les réglages rapides | Bouton « Maison » dans le menu en haut à droite : lumières et robot (démarrer, pause, base) |
 | VPN Wi-Fi public | Importe ton fichier WireGuard (Proton VPN gratuit, Mullvad…) dans Smoky Center ; option pour l'activer tout seul sur les Wi-Fi sans mot de passe |
 | Sauvegardes | Déjà Dup (sauvegardes automatiques chiffrées de ton dossier personnel, vers Google Drive ou un disque) |
@@ -86,7 +86,6 @@ Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home
   public le paquet `z13os-nvidia` sur GitHub, comme pour `z13os`.
 - **Moodle** : si la connexion par identifiant est refusée (connexion UPHF via CAS), Smoky Center
   ouvre automatiquement la page de connexion de l'université, et le jeton revient tout seul.
-- **Mode tablette** : il ne s'active qu'après avoir vu une fois le clavier ASUS branché.
 - **Ajouter un logiciel** : passe par l'app *Logiciels* (Flatpak) ou ajoute un paquet dans
   `build_files/build.sh`, et GitHub reconstruit l'image.
 
