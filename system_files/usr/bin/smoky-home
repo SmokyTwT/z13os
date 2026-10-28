@@ -4,6 +4,9 @@ set -u
 DATA="$HOME/.local/share/smoky-home"
 SEED=/usr/share/smoky-home/seed
 URL="http://127.0.0.1:8123/"
+# Chemin distinct : Chrome nomme la fenêtre « chrome-127.0.0.1__lovelace_0-Default »
+# (voir StartupWMClass dans smoky-home.desktop), différente de celle de Smoky Notes.
+APP_URL="http://127.0.0.1:8123/lovelace/0"
 
 # Premier lancement : configuration de base, thème Smoky, intégration du robot Xiaomi/Dreame
 if [ ! -f "$DATA/configuration.yaml" ]; then
@@ -29,5 +32,5 @@ if ! up; then
   fi
 fi
 exec /usr/bin/google-chrome-stable --ozone-platform-hint=auto --force-dark-mode --start-maximized \
-  --app="$URL" --class=smoky-home --no-first-run --no-default-browser-check \
+  --app="$APP_URL" --class=smoky-home --no-first-run --no-default-browser-check \
   --user-data-dir="$HOME/.config/smoky-home-chrome" "$@"

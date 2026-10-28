@@ -24,7 +24,6 @@ FOCUS = CFG / "focus.json"
 HOME_TOKEN = HOME / ".config/smoky-home/token"
 HOME_BG = HOME / ".config/autostart/smoky-home-bg.desktop"
 LIBEXEC = "/usr/libexec/smokyos"
-IMAGE = "ghcr.io/smokytwt/z13os"
 VPN = "Smoky VPN"
 TOKEN = secrets.token_urlsafe(24)
 UPDATE = {"running": False, "result": ""}
@@ -128,7 +127,6 @@ def state():
     return {
         "system": pretty.group(1) if pretty else "Smoky OS", "image": image, "update_staged": staged,
         "update": dict(UPDATE),
-        "nvidia": "z13os-nvidia" in image,
         "gpu": gpu or "?", "profile": profile or "?",
         "battery": {"capacity": read(f"{bat}/capacity", "?"), "status": read(f"{bat}/status", "?"),
                     "limit": read(f"{bat}/charge_control_end_threshold", "?")},
@@ -224,13 +222,6 @@ def act(a):
     if kind == "icons_regen":
         spawn("python3", f"{LIBEXEC}/smoky-autoicons.py")
         return {"ok": True}
-    if kind == "nvidia" and isinstance(a.get("on"), bool):
-        target = f"{IMAGE}-nvidia:latest" if a["on"] else f"{IMAGE}:latest"
-        spawn("sh", "-c",
-              f'rpm-ostree rebase "ostree-unverified-registry:{target}" '
-              '&& notify-send -a "Smoky OS" -i system-reboot "Pilote graphique prêt" "Redémarre le PC pour terminer." '
-              '|| notify-send -a "Smoky OS" -i dialog-error "Changement de pilote échoué" "Rien n\'a été modifié."')
-        return {"ok": True, "message": "Téléchargement en cours (plusieurs minutes) : une notification te préviendra."}
     if kind == "update":
         if not UPDATE["running"]:
             UPDATE.update(running=True, result="")

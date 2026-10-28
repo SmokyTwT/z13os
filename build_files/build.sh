@@ -51,8 +51,18 @@ printf 'd /var/opt 0755 root root -\nL /var/opt/google - - - - /usr/lib/google\n
 sed -i "s|^Exec=/usr/bin/google-chrome-stable|Exec=/usr/bin/google-chrome-stable ${CHROME_FLAGS}|" \
   /usr/share/applications/google-chrome.desktop
 
-# --- Applis web (streaming, cours, Claude) ------------------------------------
+# --- Applis web (streaming, cours, messagerie, Claude) -------------------------
 # Icônes : celles du thème WhiteSur quand il en a une, sinon les nôtres (hicolor)
+# Sous Wayland, Chrome ignore --class pour une fenêtre --app : il la nomme
+# « chrome-<hôte>_<chemin>-Default ». StartupWMClass doit porter ce nom exact, sinon
+# GNOME ne relie pas la fenêtre à son icône et en ajoute une seconde dans le dock.
+chrome_app_id() { # url → identifiant de fenêtre Wayland de Chrome
+  local rest="${1#*://}" host path
+  host="${rest%%/*}"; host="${host%%:*}"
+  [[ "$rest" == */* ]] && path="/${rest#*/}" || path="/"
+  path="${path%%\?*}"; path="${path%%#*}"
+  echo "chrome-${host}_${path//\//_}-Default"
+}
 make_webapp() { # id  nom  url  icône  catégories
   local id="$1" name="$2" url="$3" icon="$4" cats="$5"
   cat > "/usr/share/applications/z13-$id.desktop" <<EOF
@@ -61,7 +71,7 @@ Type=Application
 Name=$name
 Exec=/usr/bin/google-chrome-stable ${CHROME_FLAGS} --app=$url --class=z13-$id
 Icon=$icon
-StartupWMClass=z13-$id
+StartupWMClass=$(chrome_app_id "$url")
 Categories=$cats
 Terminal=false
 EOF
@@ -72,8 +82,9 @@ make_webapp prime   "Prime Video"  "https://www.primevideo.com"       primevideo
 make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf1    "AudioVideo;Video;"
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
 make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
+make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
-FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'com.valvesoftware.Steam.desktop'"
+FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'z13-whatsapp.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
@@ -104,8 +115,8 @@ gtk-update-icon-cache -f /usr/share/icons/WhiteSur || true
 # Thème d'icônes « Smoky-icons » : chaque appli livrée avec le système reçoit la
 # version Smoky de son vrai logo (argent, carré noir, trait néon à sa couleur),
 # générée par smoky-autoicons. Les applis installées plus tard (Flatpak : Spotify,
-# Steam…) sont traitées sur la machine, à la connexion et à chaque installation.
-# Seuls TF1+, M6+, Moodle et Smoky Notes sont dessinés à la main (pas de logo d'origine).
+# Proton VPN…) sont traitées sur la machine, à la connexion et à chaque installation.
+# Dessinés à la main : TF1+, M6+, Moodle, WhatsApp et les applis Smoky (pas de logo d'origine installé).
 dnf -y install python3-pillow librsvg2-tools
 rm -f /usr/share/icons/Smoky-icons/apps/256/.keep
 python3 /usr/libexec/smokyos/smoky-autoicons.py --system /usr/share/icons/Smoky-icons/apps/256
@@ -214,30 +225,40 @@ firewall-offline-cmd --set-default-zone=public
 firewall-offline-cmd --zone=public --add-service=kdeconnect || true
 firewall-offline-cmd --zone=public --remove-service=ssh || true
 
+# --- Écran de connexion Smoky (GDM) ----------------------------------------------
+# L'écran de connexion n'utilise pas les thèmes utilisateur : on ajoute le fond « smoky »
+# et le style néon (usr/share/smokyos/login-smoky.css) dans le thème intégré de GNOME Shell.
+GR=/usr/share/gnome-shell/gnome-shell-theme.gresource
+if [[ -f "$GR" ]]; then
+  dnf -y install glib2-devel          # glib-compile-resources, retiré juste après
+  GW=$(mktemp -d)
+  PREFIX=/org/gnome/shell/theme
+  for r in $(gresource list "$GR"); do
+    [[ "$r" == "$PREFIX"/* ]] || { echo "ressource inattendue : $r"; exit 1; }
+    mkdir -p "$GW$(dirname "$r")"
+    gresource extract "$GR" "$r" > "$GW$r"
+  done
+  cp /usr/share/backgrounds/z13os/smokyos.jpg "$GW$PREFIX/smoky-login.jpg"
+  for css in "$GW$PREFIX"/*.css; do cat /usr/share/smokyos/login-smoky.css >> "$css"; done
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo "<gresources><gresource prefix=\"$PREFIX\">"
+    (cd "$GW$PREFIX" && find . -type f | sed 's|^\./||' | sort | sed 's|.*|<file>&</file>|')
+    echo '</gresource></gresources>'
+  } > "$GW/theme.xml"
+  glib-compile-resources --sourcedir="$GW$PREFIX" --target="$GR" "$GW/theme.xml"
+  gresource list "$GR" | grep -q smoky-login.jpg
+  rm -rf "$GW"
+  dnf -y remove glib2-devel || true
+else
+  echo "AVERTISSEMENT : thème GNOME Shell introuvable, écran de connexion non personnalisé"
+fi
+
 # --- Écran de démarrage Smoky (Plymouth) ------------------------------------------
 dnf -y install plymouth-plugin-script
 plymouth-set-default-theme smoky
 KVER=$(ls /usr/lib/modules | head -1)
 dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
-
-# --- Pilote NVIDIA (variante z13os-nvidia uniquement) ---------------------------------
-# Le pilote libre (nouveau) suffit au streaming ; le propriétaire sert aux jeux (Steam).
-if [[ "${NVIDIA:-0}" == 1 ]]; then
-  # Dans un conteneur, le script d'installation d'akmod-nvidia tente de compiler en root
-  # avant que l'utilisateur « akmods » existe : dnf signale un échec alors que les paquets
-  # sont bien installés. On vérifie les paquets, puis on compile nous-mêmes.
-  dnf -y install "kernel-devel-$KVER" akmod-nvidia || \
-    rpm -q "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia
-  systemd-sysusers
-  akmods --force --kernels "$KVER" --kmod nvidia || { cat /var/cache/akmods/nvidia/*.log 2>/dev/null | tail -60; exit 1; }
-  ls /usr/lib/modules/"$KVER"/extra/nvidia/nvidia*.ko* >/dev/null   # le module doit exister
-  mkdir -p /usr/lib/bootc/kargs.d
-  printf 'kargs = ["rd.driver.blacklist=nouveau", "modprobe.blacklist=nouveau", "nvidia-drm.modeset=1"]\n' \
-    > /usr/lib/bootc/kargs.d/00-nvidia.toml
-  # /usr est en lecture seule une fois installé : pas de recompilation au démarrage
-  systemctl disable akmods.service || true
-  dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
-fi
 
 # --- Services ----------------------------------------------------------------
 chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/bin/smoky-center \

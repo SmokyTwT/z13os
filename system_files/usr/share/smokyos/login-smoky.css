@@ -1,0 +1,50 @@
+
+/* ===== Smoky OS : écran de connexion (ajouté par build.sh dans le thème de GNOME Shell) ===== */
+#lockDialogGroup {
+  background: #0b0b0c url("resource:///org/gnome/shell/theme/smoky-login.jpg");
+  background-size: cover;
+  background-position: center;
+}
+.login-dialog { background-color: transparent; }
+.login-dialog StEntry,
+.login-dialog-prompt-entry {
+  background-color: rgba(10, 10, 12, 0.62);
+  color: #f2f2f4;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.06);
+}
+.login-dialog StEntry:focus,
+.login-dialog-prompt-entry:focus {
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.45);
+}
+.login-dialog .button,
+.login-dialog-button {
+  background-color: rgba(18, 18, 21, 0.7);
+  color: #f2f2f4;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+}
+.login-dialog .button:hover, .login-dialog .button:focus,
+.login-dialog-button:hover, .login-dialog-button:focus {
+  background-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+}
+.login-dialog-user-list-view .login-dialog-user-list-item {
+  border-radius: 18px;
+  background-color: rgba(10, 10, 12, 0.45);
+}
+.login-dialog-user-list-view .login-dialog-user-list-item:hover,
+.login-dialog-user-list-view .login-dialog-user-list-item:focus {
+  background-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+}
+.login-dialog-user-list-view .login-dialog-user-list-item .user-icon {
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.45);
+}
+.login-dialog .user-widget-label,
+.login-dialog-prompt-label { color: #f2f2f4; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); }
+.login-dialog-message { color: #c9c9d2; }

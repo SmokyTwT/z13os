@@ -39,7 +39,7 @@ const fmtDate = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numer
 
 function render() {
   const s = S;
-  $('#sys').textContent = `${s.system}${s.nvidia ? ' · pilote NVIDIA' : ''}${s.update_staged ? ' · mise à jour prête : redémarre pour l’appliquer' : ''}`;
+  $('#sys').textContent = `${s.system}${s.update_staged ? ' · mise à jour prête : redémarre pour l’appliquer' : ''}`;
   const b = s.battery, f = s.focus, m = s.moodle, ad = s.adaptive;
   const left = Math.max(0, Math.round((f.end * 1000 - Date.now()) / 60000));
   const deadlines = (m.deadlines || []).filter((e) => e.time * 1000 > Date.now()).slice(0, 4);
@@ -52,9 +52,7 @@ function render() {
   </section>
   <section class="card"><h2>🎮 Carte graphique <small>${esc(s.gpu)}</small></h2>
     <div class="row"><span>Mode</span>${seg('gpu', [['Integrated', 'Intel (autonomie)'], ['Hybrid', 'RTX activée']], s.gpu)}</div>
-    <p class="hint">Changement appliqué après déconnexion. La RTX ne sert qu'aux jeux exigeants.</p>
-    <div class="row"><span>Pilote NVIDIA (jeux)</span><button class="btn" data-a="nvidia">${s.nvidia ? 'Revenir au système standard' : 'Installer'}</button></div>
-    <p class="hint">⚠️ Le pilote NVIDIA n'est pas signé : désactive le Secure Boot dans le BIOS (F2) avant de redémarrer.</p>
+    <p class="hint">Changement appliqué après déconnexion. Intel suffit pour les cours et le streaming, et tient bien plus longtemps sur batterie.</p>
   </section>
   <section class="card"><h2>📱 Tablette</h2>
     <p class="hint">Aussi dans le menu en haut à droite (bouton « Tablette »).</p>
@@ -80,7 +78,7 @@ function render() {
   <section class="card"><h2>🛡️ VPN <small><span class="pill ${s.vpn.active ? 'on' : ''}">${s.vpn.active ? 'actif' : s.vpn.configured ? 'prêt' : 'non configuré'}</span></small></h2>
     ${s.vpn.configured ? `<div class="row"><span>VPN</span>${sw('vpn', s.vpn.active)}</div>
     <div class="row"><span>Activer tout seul sur les Wi-Fi ouverts (publics)</span>${sw('vpn_auto', ad.vpn_auto)}</div>` : ''}
-    <p class="hint">Proton VPN (gratuit) : account.protonvpn.com → Téléchargements → WireGuard → télécharge un fichier .conf, puis importe-le ici. Le VPN apparaît aussi dans le centre de contrôle.</p>
+    <p class="hint">L'appli Proton VPN est installée (dans les applis). Pour l'activation automatique sur les Wi-Fi publics : account.protonvpn.com → Téléchargements → WireGuard → télécharge un fichier .conf, puis importe-le ici.</p>
     <div class="btns"><button class="btn ${s.vpn.configured ? '' : 'primary'}" data-a="vpn_import">${s.vpn.configured ? 'Remplacer la configuration' : 'Importer un fichier .conf'}</button></div>
   </section>
   <section class="card"><h2>🔄 Mises à jour</h2>
@@ -130,11 +128,6 @@ function bind() {
       const a = btn.dataset.a;
       if (a === 'home_token') return act({ action: 'home_token', token: $('#home-token').value }, 'Boutons maison reliés');
       if (a === 'vpn_import') return $('#vpn-file').click();
-      if (a === 'nvidia') {
-        const on = !S.nvidia;
-        if (on && !confirm('Installer le pilote NVIDIA ?\n\nLe système va être remplacé par la variante NVIDIA (plusieurs minutes de téléchargement), puis il faudra redémarrer.\n\nDésactive d\'abord le Secure Boot dans le BIOS (touche F2 au démarrage).')) return;
-        return act({ action: 'nvidia', on });
-      }
       if (a === 'reboot' && !confirm('Redémarrer maintenant pour appliquer la mise à jour ?\n\nEnregistre ton travail avant.')) return;
       const msgs = { update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
       return act({ action: a }, msgs[a]);

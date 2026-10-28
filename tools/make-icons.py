@@ -175,7 +175,16 @@ icons["center"] = ('<path d="M18 20 h28 M18 30 h28 M18 40 h28" ' + S + ' stroke-
                    '<circle cx="26" cy="20" r="3.6" ' + F + '/><circle cx="39" cy="30" r="3.6" ' + F + '/>'
                    '<circle cx="23" cy="40" r="3.6" ' + F + '/>', "#ffffff")
 FILES["center"] = "smoky-center.svg"
-KEEP = {"tf1", "m6", "moodle", "notes", "home", "center"}
+# WhatsApp (appli web : aucun logo installé) : bulle ronde et combiné
+icons["whatsapp"] = ('<path d="M32 15 a14 14 0 1 1 -7.2 26 L17 43.5 l2.6 -7.4 A14 14 0 0 1 32 15 z" ' + S + ' stroke-width="2.6"/>'
+                     '<path d="M26.5 23.5 c-1.4 1.1 -1.6 3.2 -0.2 5.6 c1.6 2.8 4.2 5.2 7 6.4 c2.2 0.9 4 0.5 5 -0.9 '
+                     'l-0.6 -2.1 l-3 -1.3 l-1.5 1.5 c-1.7 -0.7 -3.4 -2.3 -4.3 -4 l1.4 -1.6 l-1.3 -3 z" ' + F + '/>', "#25d366")
+# Portail Wi-Fi : ondes et coche « accepté »
+icons["portail"] = ('<path d="M17 25 a21 21 0 0 1 30 0 M21.5 30 a14.5 14.5 0 0 1 21 0 M26 35 a8 8 0 0 1 12 0" ' + S + ' stroke-width="2.8"/>'
+                    '<circle cx="32" cy="40" r="2.6" ' + F + '/>'
+                    '<path d="M39 41 l3.2 3.2 l6 -6.4" ' + S + ' stroke-width="2.6"/>', "#3b82ff")
+FILES["portail"] = "smoky-portail.svg"
+KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail"}
 icons = {k: v for k, v in icons.items() if k in KEEP}
 
 os.makedirs(OUT, exist_ok=True)
