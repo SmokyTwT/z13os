@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Lance Smoky Agenda : démarre le serveur local si besoin, puis ouvre l'appli.
+# Chemin « /agenda » : Chrome nomme la fenêtre « chrome-127.0.0.1__agenda-Default » (voir le .desktop),
+# distincte de Smoky Notes et Smoky Mail.
+PORT=47816
+SRV=
+if ! (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
+  nohup /usr/bin/python3 /usr/libexec/smokyagenda/server.py >/dev/null 2>&1 &
+  SRV=$!
+  for _ in $(seq 50); do (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null && break; sleep 0.1; done
+fi
+PROFILE="$HOME/.config/smoky-agenda-chrome"
+/usr/bin/google-chrome-stable --ozone-platform-hint=auto --force-dark-mode --start-maximized --enable-wayland-ime \
+  --app="http://127.0.0.1:$PORT/agenda" --class=smoky-agenda --no-first-run --no-default-browser-check --user-data-dir="$PROFILE" "$@"
+# Batterie : le serveur lancé ici s'arrête quand la dernière fenêtre de l'appli se ferme
+# (Chrome reste dans cette commande tant que l'appli est ouverte).
+if [ -n "$SRV" ] && ! pgrep -f -- "--user-data-dir=$PROFILE" >/dev/null; then
+  kill "$SRV" 2>/dev/null
+fi

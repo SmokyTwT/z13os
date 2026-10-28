@@ -86,7 +86,7 @@ make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6
 make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
 make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
-FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop'"
+FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'smoky-agenda.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
@@ -267,8 +267,9 @@ dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/u
 
 # --- Services ----------------------------------------------------------------
 chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/bin/smoky-center /usr/bin/smoky-mail /usr/libexec/smokymail/*.py /usr/libexec/smokymail/*.sh \
+  /usr/bin/smoky-agenda /usr/libexec/smokyagenda/server.py \
   /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/*.py /usr/libexec/smokyos/*.sh
-systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer
+systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-firstboot.service smoky-focus-cleanup.service \
   rpm-ostreed-automatic.timer smoky-flatpak-update.timer

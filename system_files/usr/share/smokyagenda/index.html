@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="smoky-token" content="__SMOKY_TOKEN__">
+  <title>Smoky Agenda</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="bar">
+    <div class="brand"><span class="logo"></span>Smoky Agenda</div>
+    <div class="nav">
+      <button class="icon-btn" id="prev" title="Semaine précédente">‹</button>
+      <button class="btn" id="today">Aujourd'hui</button>
+      <button class="icon-btn" id="next" title="Semaine suivante">›</button>
+      <span id="range" class="range"></span>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="plan">Planifier ma semaine</button>
+      <button class="btn" id="plan-claude">✨ Avec Claude</button>
+      <button class="btn" id="add">+ Ajouter</button>
+      <button class="btn" id="prefs-btn">Réglages</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="side">
+      <section class="panel">
+        <h2>Aujourd'hui</h2>
+        <div id="agenda-today" class="mini"></div>
+      </section>
+      <section class="panel">
+        <h2>Tâches à caser</h2>
+        <div id="tasks" class="mini"></div>
+        <button class="btn wide" id="add-task">+ Tâche</button>
+      </section>
+      <section class="panel legend" id="legend"></section>
+      <p id="info" class="hint"></p>
+    </aside>
+    <main class="week-wrap"><div id="week" class="week"></div></main>
+  </div>
+
+  <!-- Détail d'un bloc -->
+  <div id="pop" class="pop hidden"></div>
+
+  <!-- Ajouter -->
+  <div id="adder" class="modal hidden">
+    <div class="modal-card">
+      <h2>Ajouter</h2>
+      <div class="seg" id="add-kind"><button data-k="block" class="on">Dans mon planning</button><button data-k="event">Événement fixe</button><button data-k="task">Tâche à caser</button></div>
+      <label>Titre<input id="a-title" type="text" autocomplete="off" placeholder="Ex. : Révision analyse, Dentiste, Linge…"></label>
+      <div id="a-when" class="grid2">
+        <label>Type<select id="a-type"></select></label>
+        <label>Jour<input id="a-day" type="date"></label>
+        <label>Début<input id="a-start" type="time" value="18:00"></label>
+        <label>Fin<input id="a-end" type="time" value="19:00"></label>
+        <label class="span2">Lieu (facultatif)<input id="a-where" type="text" autocomplete="off"></label>
+      </div>
+      <div id="a-task" class="grid2 hidden">
+        <label>Durée (minutes)<input id="a-min" type="number" min="10" max="480" value="30"></label>
+        <label>À faire avant le (facultatif)<input id="a-due" type="date"></label>
+        <p class="hint span2">Smoky Agenda la place dans un créneau libre avant la date limite au prochain « Planifier ».</p>
+      </div>
+      <div class="btns end"><button class="btn" id="a-cancel">Annuler</button><button class="btn primary" id="a-save">Ajouter</button></div>
+    </div>
+  </div>
+
+  <!-- Réglages -->
+  <div id="prefs" class="modal hidden">
+    <div class="modal-card wide">
+      <h2>Réglages</h2>
+      <h3>Emploi du temps</h3>
+      <label>Lien iCal de ton emploi du temps<input id="p-ics" type="text" autocomplete="off" placeholder="https://…"></label>
+      <p class="hint">UPHF : ENT → Emploi du temps (ADE) → bouton d'export / « Exporter l'agenda » → copie le lien iCal (.ics). Tes cours s'affichent alors tout seuls, mis à jour toutes les 6 h.</p>
+      <h3>Ta journée</h3>
+      <div class="grid4">
+        <label>Réveil<input id="p-wake" type="time"></label><label>Coucher<input id="p-sleep" type="time"></label>
+        <label>Déjeuner<input id="p-lunch" type="time"></label><label>Dîner<input id="p-dinner" type="time"></label>
+        <label>Durée d'un repas (min)<input id="p-meal_min" type="number" min="15" max="120"></label>
+        <label>Trajet avant/après les cours (min)<input id="p-commute_min" type="number" min="0" max="120"></label>
+      </div>
+      <h3>Salle de sport</h3>
+      <div class="grid4">
+        <label>Séances par semaine<input id="p-gym_per_week" type="number" min="0" max="7"></label>
+        <label>Durée (min)<input id="p-gym_min" type="number" min="30" max="240"></label>
+        <label>Pas avant<input id="p-gym_from" type="time"></label><label>Fini avant<input id="p-gym_to" type="time"></label>
+      </div>
+      <h3>Courses</h3>
+      <div class="grid4">
+        <label>Jour<select id="p-groceries_day"></select></label>
+        <label>Heure idéale<input id="p-groceries_time" type="time"></label>
+        <label>Durée (min)<input id="p-groceries_min" type="number" min="15" max="240"></label>
+      </div>
+      <h3>Révisions</h3>
+      <div class="grid4">
+        <label>En semaine (min / jour)<input id="p-revision_weekday_min" type="number" min="0" max="600"></label>
+        <label>Le week-end (min / jour)<input id="p-revision_weekend_min" type="number" min="0" max="600"></label>
+        <label>Durée d'un bloc (min)<input id="p-block_min" type="number" min="20" max="120"></label>
+      </div>
+      <label>Matières (séparées par des virgules)<input id="p-subjects" type="text" autocomplete="off" placeholder="Analyse, Algèbre, Physique, Anglais…"></label>
+      <h3>Rappels et Claude</h3>
+      <div class="grid4">
+        <label class="rowlab">Rappels<label class="switch"><input id="p-reminders" type="checkbox"><i></i></label></label>
+        <label>Minutes avant<input id="p-remind_before" type="number" min="0" max="120"></label>
+        <label>Modèle Claude<select id="p-model"></select></label>
+      </div>
+      <p class="hint" id="p-claude"></p>
+      <div class="btns end"><button class="btn" id="p-cancel">Annuler</button><button class="btn primary" id="p-save">Enregistrer</button></div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+</body>
+</html>

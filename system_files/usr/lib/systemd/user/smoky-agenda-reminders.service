@@ -1,0 +1,7 @@
+[Unit]
+Description=Smoky Agenda : prépare les rappels de la journée
+ConditionPathExists=%h/.local/share/smoky-agenda/agenda.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/libexec/smokyagenda/server.py --reminders

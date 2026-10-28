@@ -1,0 +1,10 @@
+[Unit]
+Description=Smoky Agenda : rappels du jour (chaque matin et à la connexion)
+
+[Timer]
+OnStartupSec=1min
+OnCalendar=*-*-* 05:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

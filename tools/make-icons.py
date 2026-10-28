@@ -189,7 +189,12 @@ icons["mail"] = ('<rect x="13" y="19" width="34" height="24" rx="4" ' + S + ' st
                  '<path d="M14.5 21.5 L30 33 L45.5 21.5" ' + S + ' stroke-width="2.4"/>'
                  '<path d="M47 11 l1.4 3.4 l3.4 1.4 l-3.4 1.4 l-1.4 3.4 l-1.4 -3.4 l-3.4 -1.4 l3.4 -1.4 z" ' + F + '/>', "#ffffff")
 FILES["mail"] = "smoky-mail.svg"
-KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail", "mail"}
+# Smoky Agenda : calendrier et coche
+icons["agenda"] = ('<rect x="14" y="17" width="36" height="30" rx="5" ' + S + ' stroke-width="2.6"/>'
+                   '<path d="M14 25 H50 M23 13 v8 M41 13 v8" ' + S + ' stroke-width="2.6"/>'
+                   '<path d="M24 36 l5 5 l11 -11" ' + S + ' stroke-width="3"/>', "#c7a3e8")
+FILES["agenda"] = "smoky-agenda.svg"
+KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail", "mail", "agenda"}
 icons = {k: v for k, v in icons.items() if k in KEEP}
 
 os.makedirs(OUT, exist_ok=True)
