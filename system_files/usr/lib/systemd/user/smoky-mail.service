@@ -1,6 +1,7 @@
 [Unit]
 Description=Smoky Mail : relève et tri des mails
-ConditionPathExists=%h/.local/share/smoky-mail/account.json
+ConditionPathExists=|%h/.local/share/smoky-mail/accounts.json
+ConditionPathExists=|%h/.local/share/smoky-mail/account.json
 
 [Service]
 Type=oneshot

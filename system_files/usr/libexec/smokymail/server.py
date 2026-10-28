@@ -4,8 +4,9 @@
 Serveur local (127.0.0.1 uniquement), même protection que Smoky Notes : jeton secret
 dans la page, en-tête Host vérifié, aucune commande libre.
 
-* Mot de passe de la boîte : trousseau GNOME (secret-tool), sinon fichier lisible par
-  toi seul. Jamais renvoyé à la page.
+* Plusieurs boîtes (Gmail, Outlook…) dans une seule liste. Mots de passe (Gmail…) et jetons
+  de connexion Microsoft (Outlook) : trousseau GNOME (secret-tool), sinon fichier lisible
+  par toi seul. Jamais renvoyés à la page.
 * Tri : Claude Code (l'outil officiel d'Anthropic), connecté à ton compte Claude — pas de
   clé d'API, le tri compte dans ton abonnement. Il reçoit l'expéditeur, l'objet et le début
   du texte de chaque nouveau mail, sans aucun outil, et renvoie une catégorie, une priorité
@@ -13,6 +14,7 @@ dans la page, en-tête Host vérifié, aucune commande libre.
   « no-reply », Moodle, commandes…) prend le relais.
 * « server.py --sync » : relève et tri en arrière-plan (minuteur toutes les 15 min).
 """
+import base64
 import email
 import email.header
 import email.policy
@@ -34,25 +36,29 @@ import time
 from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import urllib.error
+import urllib.parse
+import urllib.request
 from urllib.parse import unquote
 
 
 PORT = int(os.environ.get("SMOKYMAIL_PORT", "47815"))
 APP_DIR = Path(os.environ.get("SMOKYMAIL_APP", "/usr/share/smokymail")).resolve()
 DATA = Path(os.environ.get("SMOKYMAIL_DATA", Path.home() / ".local/share/smoky-mail"))
-ACCOUNT = DATA / "account.json"
-CACHE = DATA / "cache.json"
+ACCOUNTS = DATA / "accounts.json"
+SETTINGS = DATA / "settings.json"
 LOCK = DATA / "sync.lock"
 TOKEN = secrets.token_urlsafe(24)
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg"}
 
-KEEP = 400                 # mails gardés en mémoire locale (les plus récents)
-FETCH_NEW = 60             # nouveaux mails relevés au plus par passage
+KEEP = 400                 # mails gardés en mémoire locale par boîte (les plus récents)
+FETCH_NEW = 60             # nouveaux mails relevés au plus par passage et par boîte
 SNIPPET = 1500             # début du texte envoyé au tri
 MAX_BODY = 3 * 1024 * 1024
-BATCH = 15                 # mails triés par requête à Claude
+BATCH = 15                 # mails triés par appel à Claude
+SORT_PER_PASS = 45         # mails triés par Claude au plus par passage (ménage le forfait)
 
 CATEGORIES = {
     "important": "Important",
@@ -66,13 +72,18 @@ CATEGORIES = {
 MODELS = {"opus": "Opus (le tri le plus fin)", "sonnet": "Sonnet", "haiku": "Haiku (consomme le moins ton forfait)"}
 PRESETS = {
     "gmail": {"imap": "imap.gmail.com", "imap_port": 993, "smtp": "smtp.gmail.com", "smtp_port": 465},
-    "outlook": {"imap": "outlook.office365.com", "imap_port": 993, "smtp": "smtp.office365.com", "smtp_port": 587},
     "orange": {"imap": "imap.orange.fr", "imap_port": 993, "smtp": "smtp.orange.fr", "smtp_port": 465},
     "free": {"imap": "imap.free.fr", "imap_port": 993, "smtp": "smtp.free.fr", "smtp_port": 465},
 }
-DEFAULT_ACCOUNT = {"email": "", "name": "", "imap": "", "imap_port": 993, "smtp": "", "smtp_port": 465,
-                   "claude": False, "model": "opus"}
+DEFAULT_SETTINGS = {"claude": False, "model": "opus", "ms_client_id": ""}
 
+# Outlook / Hotmail / Microsoft 365 : connexion Microsoft (OAuth 2, « code d'appareil »),
+# obligatoire depuis 2024 pour les applis de messagerie externes. Le mot de passe Microsoft
+# n'est jamais vu par Smoky Mail ; seul un jeton de renouvellement est gardé dans le trousseau.
+MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0"
+MS_SCOPES = ("openid email offline_access https://outlook.office.com/IMAP.AccessAsUser.All "
+             "https://outlook.office.com/SMTP.Send")
+MS_CONSUMER = re.compile(r"@(outlook|hotmail|live|msn)\.[a-z.]+$", re.I)
 
 # --- Petits outils -----------------------------------------------------------------------------
 def jload(path, default):
@@ -135,6 +146,163 @@ def secret_clear(kind):
     (DATA / f".{kind}").unlink(missing_ok=True)
 
 
+# --- Comptes et réglages -------------------------------------------------------------------------
+def accounts():
+    return jload(ACCOUNTS, {"accounts": []})["accounts"]
+
+
+def save_accounts(lst):
+    jsave(ACCOUNTS, {"accounts": lst})
+
+
+def account(acc_id):
+    acc = next((a for a in accounts() if a["id"] == acc_id), None)
+    if not acc:
+        raise RuntimeError("boîte inconnue")
+    return acc
+
+
+def cache_path(acc_id):
+    return DATA / f"cache-{acc_id}.json"
+
+
+def load_cache(acc_id):
+    return jload(cache_path(acc_id), {"validity": "", "mails": [], "last_sync": 0, "status": "", "notified": []})
+
+
+def settings():
+    return jload(SETTINGS, DEFAULT_SETTINGS)
+
+
+def split_key(k):
+    """Identifiant d'un mail dans la page : « <boîte>:<uid> »."""
+    m = re.fullmatch(r"(a[0-9a-f]{6,12}):(\d{1,10})", str(k or ""))
+    if not m:
+        raise RuntimeError("mail inconnu")
+    return m.group(1), int(m.group(2))
+
+
+def migrate():
+    """Ancienne version (une seule boîte) : account.json + cache.json → première boîte de la liste."""
+    old = DATA / "account.json"
+    if not old.exists() or ACCOUNTS.exists():
+        return
+    o = jload(old, {})
+    if o.get("email"):
+        acc_id = "a" + secrets.token_hex(4)
+        save_accounts([{"id": acc_id, "email": o["email"], "name": o.get("name", ""), "auth": "password",
+                        "imap": o["imap"], "imap_port": o.get("imap_port", 993), "smtp": o["smtp"],
+                        "smtp_port": o.get("smtp_port", 465)}])
+        pwd = secret_get("password")
+        if pwd:
+            secret_set(f"password:{acc_id}", pwd)
+            secret_clear("password")
+        if (DATA / "cache.json").exists():
+            os.replace(DATA / "cache.json", cache_path(acc_id))
+        jsave(SETTINGS, {**DEFAULT_SETTINGS, "claude": bool(o.get("claude")), "model": o.get("model") or "opus"})
+    old.unlink(missing_ok=True)
+
+
+# --- Connexion Microsoft (Outlook) -------------------------------------------------------------------
+def http_post(url, fields):
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(), method="POST",
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:      # les erreurs OAuth arrivent en JSON avec un code 400
+        try:
+            return json.loads(e.read())
+        except ValueError:
+            return {"error": f"http_{e.code}"}
+
+
+MS_TOKENS = {}                 # jetons d'accès en mémoire : {boîte: (jeton, expiration)}
+MS_FLOW = {"state": "idle"}    # connexion Microsoft en cours (une à la fois)
+
+
+def ms_access_token(acc):
+    tok, exp = MS_TOKENS.get(acc["id"], ("", 0))
+    if tok and exp - 120 > time.time():
+        return tok
+    refresh = secret_get(f"oauth:{acc['id']}").strip()
+    if not refresh:
+        raise RuntimeError("reconnecte cette boîte Outlook (Réglages)")
+    r = http_post(MS_AUTH + "/token", {"client_id": settings()["ms_client_id"], "grant_type": "refresh_token",
+                                        "refresh_token": refresh, "scope": MS_SCOPES})
+    if "access_token" not in r:
+        raise RuntimeError(f"connexion Microsoft expirée : reconnecte la boîte ({r.get('error', '?')})")
+    if r.get("refresh_token") and r["refresh_token"] != refresh:
+        secret_set(f"oauth:{acc['id']}", r["refresh_token"])
+    MS_TOKENS[acc["id"]] = (r["access_token"], time.time() + int(r.get("expires_in", 3600)))
+    return r["access_token"]
+
+
+def xoauth2(user, token):
+    return f"user={user}\x01auth=Bearer {token}\x01\x01"
+
+
+def jwt_claims(token):
+    try:
+        part = token.split(".")[1]
+        return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+    except (IndexError, ValueError):
+        return {}
+
+
+def ms_start():
+    cid = settings()["ms_client_id"]
+    if not cid:
+        raise RuntimeError("renseigne d'abord l'identifiant d'application Microsoft")
+    r = http_post(MS_AUTH + "/devicecode", {"client_id": cid, "scope": MS_SCOPES})
+    if "device_code" not in r:
+        raise RuntimeError(f"Microsoft a refusé la demande : {r.get('error_description') or r.get('error', '?')}"[:200])
+    MS_FLOW.clear()
+    MS_FLOW.update(state="waiting", user_code=r["user_code"], uri=r.get("verification_uri", "https://microsoft.com/devicelogin"),
+                   expires=time.time() + int(r.get("expires_in", 900)), error="")
+    threading.Thread(target=ms_poll, args=(cid, r["device_code"], int(r.get("interval", 5))), daemon=True).start()
+
+
+def ms_poll(cid, device_code, interval):
+    while time.time() < MS_FLOW.get("expires", 0) and MS_FLOW.get("state") == "waiting":
+        time.sleep(interval)
+        r = http_post(MS_AUTH + "/token", {"client_id": cid, "device_code": device_code,
+                                            "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
+        err = r.get("error")
+        if err == "authorization_pending":
+            continue
+        if err == "slow_down":
+            interval += 5
+            continue
+        if err or "refresh_token" not in r:
+            MS_FLOW.update(state="error", error={"expired_token": "code expiré, recommence",
+                                                 "authorization_declined": "connexion refusée"}.get(err, err or "réponse incomplète"))
+            return
+        claims = jwt_claims(r.get("id_token", ""))
+        addr = (claims.get("email") or claims.get("preferred_username") or "").strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", addr):
+            MS_FLOW.update(state="error", error="adresse du compte introuvable")
+            return
+        acc = {"id": "a" + secrets.token_hex(4), "email": addr, "name": claims.get("name", "")[:100], "auth": "microsoft",
+               "imap": "outlook.office365.com", "imap_port": 993,
+               "smtp": "smtp-mail.outlook.com" if MS_CONSUMER.search(addr) else "smtp.office365.com", "smtp_port": 587}
+        secret_set(f"oauth:{acc['id']}", r["refresh_token"])
+        MS_TOKENS[acc["id"]] = (r["access_token"], time.time() + int(r.get("expires_in", 3600)))
+        try:
+            with Mailbox(acc) as box:
+                box.select("INBOX")
+        except (imaplib.IMAP4.error, OSError, ssl.SSLError, RuntimeError) as e:
+            secret_clear(f"oauth:{acc['id']}")
+            MS_FLOW.update(state="error", error=f"boîte inaccessible : {e}"[:200])
+            return
+        save_accounts([a for a in accounts() if a["email"] != addr] + [acc])
+        MS_FLOW.update(state="done", email=addr)
+        threading.Thread(target=sync, kwargs={"notify_new": False}, daemon=True).start()
+        return
+    if MS_FLOW.get("state") == "waiting":
+        MS_FLOW.update(state="error", error="code expiré, recommence")
+
+
 # --- Lecture des mails -------------------------------------------------------------------------
 def decode(value):
     try:
@@ -186,7 +354,11 @@ class Mailbox:
     def __enter__(self):
         ctx = ssl.create_default_context()
         self.imap = imaplib.IMAP4_SSL(self.acc["imap"], int(self.acc["imap_port"]), ssl_context=ctx, timeout=40)
-        self.imap.login(self.acc["email"], secret_get("password"))
+        if self.acc.get("auth") == "microsoft":
+            auth = xoauth2(self.acc["email"], ms_access_token(self.acc)).encode()
+            self.imap.authenticate("XOAUTH2", lambda _challenge: auth)
+        else:
+            self.imap.login(self.acc["email"], secret_get(f"password:{self.acc['id']}"))
         return self
 
     def __exit__(self, *exc):
@@ -317,7 +489,7 @@ def claude_state():
     return state
 
 
-def claude_sort(batch, acc):
+def claude_sort(batch, conf):
     """Trie un lot de mails avec Claude Code, en mode non interactif et sans aucun outil :
     Claude ne peut que lire les extraits fournis et répondre par un classement."""
     exe = claude_bin()
@@ -329,7 +501,7 @@ def claude_sort(batch, acc):
                       f'Liste de diffusion : {"oui" if m["list"] else "non"}\n'
                       f'Pièces jointes : {", ".join(m["attachments"]) or "aucune"}\n\n{m["snippet"]}\n</mail>')
     prompt = SYSTEM + "\n\n" + OUTPUT_FORMAT + "\n\nMails à trier :\n\n" + "\n\n".join(blocks)
-    model = acc.get("model") if acc.get("model") in MODELS else "opus"
+    model = conf.get("model") if conf.get("model") in MODELS else "opus"
     work = DATA / "claude"            # dossier vide : aucun fichier de projet n'est lu
     work.mkdir(parents=True, exist_ok=True)
     cmd = [exe, "-p", "Trie les mails décrits sur l'entrée standard, en suivant exactement les consignes qui s'y trouvent.",
@@ -360,83 +532,95 @@ def claude_sort(batch, acc):
     return res
 
 
-def sort_pending(cache, acc):
-    pending = [m for m in cache["mails"] if not m.get("category") or (acc.get("claude") and m.get("sorted_by") not in ("claude", "toi"))]
-    # les plus récents d'abord, 45 au plus par passage : le reste suit aux relèves suivantes
-    # (ménage ton forfait Claude au premier lancement)
-    pending = pending[:45]
+def sort_pending(caches, conf):
+    """Trie les mails pas encore triés de toutes les boîtes (les plus récents d'abord)."""
+    allm = sorted(((acc_id, m) for acc_id, c in caches.items() for m in c["mails"]), key=lambda x: x[1]["date"], reverse=True)
     status = ""
-    if acc.get("claude") and pending:
-        for i in range(0, len(pending), BATCH):
-            batch = pending[i:i + BATCH]
+    if conf.get("claude"):
+        # deux essais au plus par mail : un mail que Claude ne classe pas ne repasse pas indéfiniment
+        pending = [(i, m) for i, m in allm
+                   if m.get("sorted_by") not in ("claude", "toi") and m.get("tries", 0) < 2][:SORT_PER_PASS]
+        for n in range(0, len(pending), BATCH):
+            batch = pending[n:n + BATCH]
             try:
-                res = claude_sort(batch, acc)
+                res = claude_sort([{**m, "uid": f"{i}:{m['uid']}"} for i, m in batch], conf)
             except Exception as e:  # le tri ne doit jamais bloquer la relève
                 status = str(e)[:200]
                 break
-            for m in batch:
-                r = res.get(str(m["uid"]))
+            for i, m in batch:
+                r = res.get(f"{i}:{m['uid']}")
                 if r:
                     m.update(r, sorted_by="claude")
-    for m in cache["mails"]:
+                else:
+                    m["tries"] = m.get("tries", 0) + 1
+    for _i, m in allm:
         if not m.get("category"):
             m.update(heuristic(m), sorted_by="local")
     return status
 
 
 # --- Relève ------------------------------------------------------------------------------------
-def load_cache():
-    return jload(CACHE, {"validity": "", "mails": [], "last_sync": 0, "status": "", "sort_status": "", "notified": []})
+def fetch_account(acc, cache):
+    with Mailbox(acc) as box:
+        validity = box.select("INBOX")
+        if validity != cache["validity"]:
+            cache.update(validity=validity, mails=[])
+        uids = box.uids()
+        known = {m["uid"]: m for m in cache["mails"]}
+        for uid in [u for u in uids if u not in known][-FETCH_NEW:]:
+            got = box.fetch(uid)
+            if got:
+                known[uid] = summarize(uid, *got)
+        alive = set(uids)          # mails supprimés ou archivés ailleurs : retirés de la liste
+        cache["mails"] = sorted((m for u, m in known.items() if u in alive), key=lambda m: m["date"], reverse=True)[:KEEP]
 
 
 def sync(notify_new=True):
-    """Relève les nouveaux mails de la boîte de réception, puis les trie. Un seul passage à la fois."""
-    acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
-    if not acc["email"] or not secret_get("password"):
-        return {"ok": False, "message": "Aucun compte configuré."}
+    """Relève toutes les boîtes, puis trie. Un seul passage à la fois."""
+    migrate()
+    accs = accounts()
+    if not accs:
+        return {"ok": False, "message": "Aucune boîte configurée."}
     DATA.mkdir(parents=True, exist_ok=True)
     with open(LOCK, "w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             return {"ok": True, "message": "Relève déjà en cours."}
-        cache = load_cache()
-        try:
-            with Mailbox(acc) as box:
-                validity = box.select("INBOX")
-                if validity != cache["validity"]:
-                    cache.update(validity=validity, mails=[])
-                uids = box.uids()
-                known = {m["uid"]: m for m in cache["mails"]}
-                new = [u for u in uids if u not in known][-FETCH_NEW:]
-                for uid in new:
-                    got = box.fetch(uid)
-                    if got:
-                        known[uid] = summarize(uid, *got)
-                # mails supprimés ou archivés ailleurs : retirés de la liste
-                alive = set(uids)
-                cache["mails"] = sorted((m for u, m in known.items() if u in alive),
-                                        key=lambda m: m["date"], reverse=True)[:KEEP]
-            cache["status"] = ""
-        except (imaplib.IMAP4.error, OSError, RuntimeError, ssl.SSLError) as e:
-            cache["status"] = f"Relève impossible : {e}"[:200]
-            jsave(CACHE, cache)
-            return {"ok": False, "message": cache["status"]}
-        cache["sort_status"] = sort_pending(cache, acc)
-        cache["last_sync"] = int(time.time())
-        if notify_new:
-            fresh = [m for m in cache["mails"] if not m["seen"] and m["category"] == "important"
-                     and m["uid"] not in cache["notified"]]
-            for m in fresh[:3]:
-                notify(f"Important : {m['subject']}"[:120], m.get("summary") or m["from_name"])
-            cache["notified"] = (cache["notified"] + [m["uid"] for m in fresh])[-500:]
-        jsave(CACHE, cache)
-        return {"ok": True}
+        caches, errors = {}, []
+        for acc in accs:
+            cache = load_cache(acc["id"])
+            try:
+                fetch_account(acc, cache)
+                cache["status"] = ""
+            except (imaplib.IMAP4.error, OSError, RuntimeError, ssl.SSLError) as e:
+                cache["status"] = f"{acc['email']} : relève impossible ({e})"[:220]
+                errors.append(cache["status"])
+            caches[acc["id"]] = cache
+        conf = settings()
+        conf["sort_status"] = sort_pending(caches, conf)
+        conf["last_sync"] = int(time.time())
+        jsave(SETTINGS, conf)
+        for acc_id, cache in caches.items():
+            if notify_new:
+                fresh = [m for m in cache["mails"] if not m["seen"] and m["category"] == "important"
+                         and m["uid"] not in cache["notified"]]
+                for m in fresh[:3]:
+                    notify(f"Important : {m['subject']}"[:120], m.get("summary") or m["from_name"])
+                cache["notified"] = (cache["notified"] + [m["uid"] for m in fresh])[-500:]
+            jsave(cache_path(acc_id), cache)
+        return {"ok": not errors, "message": " · ".join(errors)} if errors else {"ok": True}
 
 
-def open_mail(uid):
-    acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
-    with Mailbox(acc) as box:
+def update_cache(acc_id, fn):
+    cache = load_cache(acc_id)
+    fn(cache)
+    jsave(cache_path(acc_id), cache)
+
+
+def open_mail(k):
+    acc_id, uid = split_key(k)
+    with Mailbox(account(acc_id)) as box:
         box.select("INBOX", readonly=False)
         got = box.fetch(uid)
         if not got:
@@ -444,11 +628,7 @@ def open_mail(uid):
         msg, _ = got
         box.imap.uid("STORE", str(uid), "+FLAGS", "(\\Seen)")
     text, htm = body_parts(msg)
-    cache = load_cache()
-    for m in cache["mails"]:
-        if m["uid"] == uid:
-            m["seen"] = True
-    jsave(CACHE, cache)
+    update_cache(acc_id, lambda c: [m.update(seen=True) for m in c["mails"] if m["uid"] == uid])
     # HTML affiché dans un cadre isolé : scripts retirés ici, et bloqués par le cadre ;
     # images distantes bloquées par la politique de la page (pas de pisteurs).
     htm = re.sub(r"(?is)<script.*?</script>", "", htm or "")
@@ -456,10 +636,10 @@ def open_mail(uid):
             "references": (msg.get("References") or "").strip()}
 
 
-def move_to(uid, flags, fallback):
+def move_to(k, flags, fallback):
     """Déplace un mail vers la corbeille ou les archives (dossiers « spéciaux » annoncés par le serveur)."""
-    acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
-    with Mailbox(acc) as box:
+    acc_id, uid = split_key(k)
+    with Mailbox(account(acc_id)) as box:
         target = next((f for f in map(box.special, flags) if f), fallback)
         box.select("INBOX", readonly=False)
         typ, _ = box.imap.uid("MOVE", str(uid), f'"{target}"')
@@ -469,13 +649,11 @@ def move_to(uid, flags, fallback):
                 raise RuntimeError(f"dossier « {target} » introuvable")
             box.imap.uid("STORE", str(uid), "+FLAGS", "(\\Deleted)")
             box.imap.expunge()
-    cache = load_cache()
-    cache["mails"] = [m for m in cache["mails"] if m["uid"] != uid]
-    jsave(CACHE, cache)
+    update_cache(acc_id, lambda c: c.update(mails=[m for m in c["mails"] if m["uid"] != uid]))
 
 
 def send_mail(a):
-    acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
+    acc = account(str(a.get("account", "")))
     to = [x.strip() for x in str(a.get("to", "")).split(",") if x.strip()]
     if not to or not all(re.fullmatch(r"[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+", x) for x in to):
         raise RuntimeError("adresse du destinataire invalide")
@@ -498,7 +676,12 @@ def send_mail(a):
         server = smtplib.SMTP(acc["smtp"], port, timeout=40)
         server.starttls(context=ctx)
     with server:
-        server.login(acc["email"], secret_get("password"))
+        if acc.get("auth") == "microsoft":
+            auth = xoauth2(acc["email"], ms_access_token(acc))
+            server.ehlo()
+            server.auth("XOAUTH2", lambda challenge=None: auth)
+        else:
+            server.login(acc["email"], secret_get(f"password:{acc['id']}"))
         server.send_message(msg)
 
 
@@ -506,8 +689,7 @@ def send_mail(a):
 HOST_RE = re.compile(r"[A-Za-z0-9.-]{3,253}")
 
 
-def save_account(a):
-    acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
+def add_password_account(a):
     addr = str(a.get("email", "")).strip()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", addr):
         raise RuntimeError("adresse mail invalide")
@@ -518,30 +700,52 @@ def save_account(a):
         raise RuntimeError("serveurs IMAP / SMTP invalides")
     if hosts["imap_port"] not in (993,) or hosts["smtp_port"] not in (465, 587):
         raise RuntimeError("ports acceptés : IMAP 993, SMTP 465 ou 587 (connexions chiffrées uniquement)")
-    acc.update(email=addr, name=str(a.get("name", "")).strip()[:100], **hosts)
+    old = next((x for x in accounts() if x["email"].lower() == addr.lower()), None)
+    acc = {"id": old["id"] if old else "a" + secrets.token_hex(4), "email": addr, "auth": "password",
+           "name": str(a.get("name", "")).strip()[:100], **hosts}
     pwd = str(a.get("password", ""))
+    if not pwd and not old:
+        raise RuntimeError("mot de passe manquant")
     if pwd:
-        secret_set("password", pwd)
-    # test de connexion avant d'enregistrer
-    try:
+        secret_set(f"password:{acc['id']}", pwd)
+    try:                                   # test de connexion avant d'enregistrer
         with Mailbox(acc) as box:
             box.select("INBOX")
     except (imaplib.IMAP4.error, OSError, ssl.SSLError, RuntimeError) as e:
+        if not old:
+            secret_clear(f"password:{acc['id']}")
         raise RuntimeError(f"connexion refusée : {e}") from None
-    if acc["email"] != jload(ACCOUNT, DEFAULT_ACCOUNT)["email"]:
-        CACHE.unlink(missing_ok=True)
-    jsave(ACCOUNT, acc)
+    save_accounts([x for x in accounts() if x["id"] != acc["id"]] + [acc])
+
+
+def remove_account(acc_id):
+    acc = account(acc_id)
+    secret_clear(f"password:{acc_id}")
+    secret_clear(f"oauth:{acc_id}")
+    MS_TOKENS.pop(acc_id, None)
+    cache_path(acc_id).unlink(missing_ok=True)
+    save_accounts([x for x in accounts() if x["id"] != acc["id"]])
 
 
 def state():
-    acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
-    cache = load_cache()
-    mails = [{k: v for k, v in m.items() if k != "snippet"} | {"preview": m.get("snippet", "")[:180]}
-             for m in cache["mails"]]
-    return {"account": {k: acc[k] for k in ("email", "name", "imap", "smtp", "claude", "model")},
-            "configured": bool(acc["email"]), "claude_state": claude_state(),
+    migrate()
+    conf = settings()
+    accs = accounts()
+    mails, status = [], []
+    for acc in accs:
+        cache = load_cache(acc["id"])
+        if cache["status"]:
+            status.append(cache["status"])
+        for m in cache["mails"]:
+            mails.append({k: v for k, v in m.items() if k != "snippet"}
+                         | {"k": f"{acc['id']}:{m['uid']}", "account": acc["id"], "preview": m.get("snippet", "")[:180]})
+    mails.sort(key=lambda m: m["date"], reverse=True)
+    flow = {k: MS_FLOW.get(k) for k in ("state", "user_code", "uri", "error", "email")}
+    return {"accounts": [{k: a[k] for k in ("id", "email", "name", "auth")} for a in accs],
+            "settings": {k: conf.get(k) for k in ("claude", "model", "ms_client_id")},
+            "claude_state": claude_state(), "ms_flow": flow,
             "categories": CATEGORIES, "models": MODELS, "mails": mails,
-            "last_sync": cache["last_sync"], "status": cache["status"], "sort_status": cache["sort_status"]}
+            "last_sync": conf.get("last_sync", 0), "status": " · ".join(status), "sort_status": conf.get("sort_status", "")}
 
 
 def act(a):
@@ -549,20 +753,36 @@ def act(a):
     try:
         if kind == "sync":
             return sync(notify_new=False)
-        if kind == "open" and isinstance(a.get("uid"), int):
-            return {"ok": True, "mail": open_mail(a["uid"])}
-        if kind in ("trash", "archive") and isinstance(a.get("uid"), int):
-            if kind == "trash":
-                move_to(a["uid"], ("\\Trash",), "Trash")
-            else:  # Gmail : « Tous les messages » ; ailleurs : dossier Archives
-                move_to(a["uid"], ("\\Archive", "\\All"), "Archive")
+        if kind == "open":
+            return {"ok": True, "mail": open_mail(a.get("k"))}
+        if kind == "trash":
+            move_to(a.get("k"), ("\\Trash",), "Trash")
+            return {"ok": True}
+        if kind == "archive":          # Gmail : « Tous les messages » ; ailleurs : dossier Archives
+            move_to(a.get("k"), ("\\Archive", "\\All"), "Archive")
             return {"ok": True}
         if kind == "send":
             send_mail(a)
             return {"ok": True}
         if kind == "account":
-            save_account(a)
+            add_password_account(a)
             threading.Thread(target=sync, kwargs={"notify_new": False}, daemon=True).start()
+            return {"ok": True}
+        if kind == "ms_client_id":
+            cid = str(a.get("client_id", "")).strip().lower()
+            if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", cid):
+                return {"ok": False, "message": "Identifiant invalide : c'est l'« ID d'application (client) », de la forme 1234abcd-…"}
+            jsave(SETTINGS, {**settings(), "ms_client_id": cid})
+            return {"ok": True}
+        if kind == "ms_start":
+            ms_start()
+            return {"ok": True}
+        if kind == "ms_cancel":
+            MS_FLOW.clear()
+            MS_FLOW["state"] = "idle"
+            return {"ok": True}
+        if kind == "remove_account":
+            remove_account(str(a.get("id", "")))
             return {"ok": True}
         if kind == "claude_connect":
             # fenêtre de terminal visible : installation officielle de Claude Code si besoin, puis connexion
@@ -571,31 +791,24 @@ def act(a):
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             return {"ok": True}
         if kind == "claude":
-            acc = jload(ACCOUNT, DEFAULT_ACCOUNT)
+            conf = settings()
             if isinstance(a.get("enabled"), bool):
                 _CLAUDE["at"] = 0
                 if a["enabled"] and claude_state() != "ready":
                     return {"ok": False, "message": "Connecte d'abord ton compte Claude."}
-                acc["claude"] = a["enabled"]
+                conf["claude"] = a["enabled"]
             if a.get("model") in MODELS:
-                acc["model"] = a["model"]
-            jsave(ACCOUNT, acc)
-            if acc["claude"]:
+                conf["model"] = a["model"]
+            jsave(SETTINGS, conf)
+            if conf["claude"]:
                 threading.Thread(target=sync, kwargs={"notify_new": False}, daemon=True).start()
             return {"ok": True}
-        if kind == "recategorize" and isinstance(a.get("uid"), int) and a.get("category") in CATEGORIES:
-            cache = load_cache()
-            for m in cache["mails"]:
-                if m["uid"] == a["uid"]:
-                    m.update(category=a["category"], sorted_by="toi")
-            jsave(CACHE, cache)
+        if kind == "recategorize" and a.get("category") in CATEGORIES:
+            acc_id, uid = split_key(a.get("k"))
+            update_cache(acc_id, lambda c: [m.update(category=a["category"], sorted_by="toi")
+                                            for m in c["mails"] if m["uid"] == uid])
             return {"ok": True}
-        if kind == "logout":
-            secret_clear("password")
-            ACCOUNT.unlink(missing_ok=True)
-            CACHE.unlink(missing_ok=True)
-            return {"ok": True}
-    except (RuntimeError, imaplib.IMAP4.error, smtplib.SMTPException, OSError, ssl.SSLError) as e:
+    except (RuntimeError, imaplib.IMAP4.error, smtplib.SMTPException, OSError, ssl.SSLError, ValueError) as e:
         return {"ok": False, "message": str(e)[:200]}
     return {"ok": False, "message": "Action inconnue."}
 
@@ -654,7 +867,11 @@ class Handler(BaseHTTPRequestHandler):
             a = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 400000)))
         except ValueError:
             return self.send(400, {"error": "requête illisible"})
-        self.send(200, act(a) if isinstance(a, dict) else {"ok": False})
+        try:
+            res = act(a) if isinstance(a, dict) else {"ok": False}
+        except Exception as e:  # une erreur imprévue s'affiche dans l'appli au lieu de couper la connexion
+            res = {"ok": False, "message": f"erreur : {e}"[:200]}
+        self.send(200, res)
 
 
 def background_sync():

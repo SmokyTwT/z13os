@@ -9,24 +9,49 @@
   <script src="/app.js" defer></script>
 </head>
 <body>
-  <!-- Premier lancement : connexion de la boîte -->
+  <!-- Ajout d'une boîte (aussi au premier lancement) -->
   <section id="setup" class="setup hidden">
     <div class="setup-card">
       <h1>Smoky Mail</h1>
-      <p class="hint">Connecte ta boîte mail. Ton mot de passe reste dans le trousseau de ce PC.</p>
+      <p class="hint">Ajoute une boîte mail. Tu pourras en ajouter d'autres ensuite : tout arrive dans une seule liste, triée par Claude.</p>
       <div class="presets" id="presets">
-        <button data-p="gmail" class="on">Gmail</button><button data-p="outlook">Outlook</button>
+        <button data-p="gmail" class="on">Gmail</button><button data-p="outlook">Outlook / Hotmail</button>
         <button data-p="orange">Orange</button><button data-p="free">Free</button><button data-p="other">Autre (UPHF…)</button>
       </div>
-      <label>Adresse<input id="s-email" type="text" autocomplete="off" placeholder="prenom.nom@gmail.com"></label>
-      <label>Ton nom (affiché aux destinataires)<input id="s-name" type="text" autocomplete="off"></label>
-      <label>Mot de passe <span id="s-pwhint" class="hint"></span><input id="s-pass" type="password" autocomplete="off"></label>
-      <div id="s-hosts" class="hosts hidden">
-        <label>Serveur IMAP<input id="s-imap" type="text" placeholder="imap.exemple.fr"></label>
-        <label>Serveur SMTP<input id="s-smtp" type="text" placeholder="smtp.exemple.fr"></label>
-        <label>Port SMTP<select id="s-smtpport"><option>465</option><option>587</option></select></label>
+      <div id="pw-form" class="form">
+        <label>Adresse<input id="s-email" type="text" autocomplete="off" placeholder="prenom.nom@gmail.com"></label>
+        <label>Ton nom (affiché aux destinataires)<input id="s-name" type="text" autocomplete="off"></label>
+        <label>Mot de passe <span id="s-pwhint" class="hint"></span><input id="s-pass" type="password" autocomplete="off"></label>
+        <div id="s-hosts" class="hosts hidden">
+          <label>Serveur IMAP<input id="s-imap" type="text" placeholder="imap.exemple.fr"></label>
+          <label>Serveur SMTP<input id="s-smtp" type="text" placeholder="smtp.exemple.fr"></label>
+          <label>Port SMTP<select id="s-smtpport"><option>465</option><option>587</option></select></label>
+        </div>
+        <div class="btns"><button id="s-save" class="btn primary">Se connecter</button><button class="btn s-cancel hidden">Annuler</button></div>
       </div>
-      <div class="btns"><button id="s-save" class="btn primary">Se connecter</button><button id="s-cancel" class="btn hidden">Annuler</button></div>
+      <div id="ms-form" class="form hidden">
+        <p class="hint">Microsoft n'accepte plus les mots de passe dans les applis de messagerie : Outlook se connecte avec la page de connexion officielle de Microsoft. Smoky Mail ne voit jamais ton mot de passe.</p>
+        <div id="ms-noid">
+          <p class="hint"><b>Une seule fois</b> : crée l'identifiant d'application (gratuit, 5 minutes) sur <b>portal.azure.com</b> avec ton compte Microsoft :</p>
+          <ol class="hint steps">
+            <li>Recherche « Inscriptions d'applications » → <b>Nouvelle inscription</b>.</li>
+            <li>Nom : <b>Smoky Mail</b> ; types de comptes : <b>comptes dans un annuaire organisationnel et comptes Microsoft personnels</b> ; laisse l'URI de redirection vide → <b>S'inscrire</b>.</li>
+            <li>Menu <b>Authentification</b> → « Autoriser les flux de clients publics » : <b>Oui</b> → Enregistrer.</li>
+            <li>Copie l'<b>ID d'application (client)</b> et colle-le ici.</li>
+          </ol>
+          <label>ID d'application (client)<input id="ms-cid" type="text" autocomplete="off" placeholder="1234abcd-12ab-34cd-56ef-1234567890ab"></label>
+          <div class="btns"><button id="ms-savecid" class="btn primary">Continuer</button><button class="btn s-cancel hidden">Annuler</button></div>
+        </div>
+        <div id="ms-go" class="hidden">
+          <div class="btns"><button id="ms-start" class="btn primary">Se connecter avec Microsoft</button><button id="ms-editcid" class="btn">Changer l'identifiant</button><button class="btn s-cancel hidden">Annuler</button></div>
+        </div>
+        <div id="ms-wait" class="ms-wait hidden">
+          <p class="hint">Ouvre <b id="ms-uri"></b> et saisis ce code :</p>
+          <div id="ms-code" class="code"></div>
+          <div class="btns"><button id="ms-open" class="btn primary">Ouvrir la page Microsoft</button><button id="ms-copy" class="btn">Copier le code</button><button id="ms-cancel" class="btn">Annuler</button></div>
+          <p class="hint">Smoky Mail attend ta connexion…</p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -34,6 +59,7 @@
   <section id="app" class="app hidden">
     <aside class="side">
       <div class="brand"><span class="logo"></span>Smoky Mail</div>
+      <div id="accts" class="accts"></div>
       <button id="compose" class="btn primary wide">Écrire</button>
       <nav id="cats" class="cats"></nav>
       <div class="side-foot">
@@ -58,6 +84,7 @@
   <div id="composer" class="modal hidden">
     <div class="modal-card">
       <h2 id="c-title">Nouveau message</h2>
+      <label>De<select id="c-from"></select></label>
       <label>À<input id="c-to" type="text" placeholder="adresse@exemple.fr, autre@exemple.fr" autocomplete="off"></label>
       <label>Objet<input id="c-subject" type="text" autocomplete="off"></label>
       <textarea id="c-body" rows="12"></textarea>
@@ -77,9 +104,9 @@
       <div class="row"><span>Modèle</span><select id="p-model"></select></div>
       <p class="hint">Sans Claude, un tri simple se fait directement sur ce PC.</p>
       <div class="btns"><button id="p-save" class="btn primary">Enregistrer</button></div>
-      <h3>Compte</h3>
-      <p class="hint" id="p-account"></p>
-      <div class="btns"><button id="p-change" class="btn">Changer de compte</button><button id="p-logout" class="btn danger">Se déconnecter</button><button id="p-close" class="btn">Fermer</button></div>
+      <h3>Boîtes mail</h3>
+      <div id="p-accounts" class="acc-list"></div>
+      <div class="btns"><button id="p-add" class="btn">Ajouter une boîte</button><button id="p-close" class="btn">Fermer</button></div>
     </div>
   </div>
   <div id="toast" class="toast hidden"></div>
