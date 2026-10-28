@@ -27,6 +27,8 @@ HOME_BG = HOME / ".config/autostart/smoky-home-bg.desktop"
 LIBEXEC = "/usr/libexec/smokyos"
 VPN = "Smoky VPN"
 TOKEN = secrets.token_urlsafe(24)
+# le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
+TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-center.token"
 UPDATE = {"running": False, "result": ""}
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
@@ -460,7 +462,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "introuvable"})
         data = target.read_bytes()
         if target.name == "index.html":
-            data = data.replace(b"__SMOKY_TOKEN__", TOKEN.encode())
+            data = data.replace(b"__SMOKY_TOKEN__", b"")
         csp = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
@@ -477,4 +479,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.write(fd, TOKEN.encode())
+    os.close(fd)
+    srv.serve_forever()

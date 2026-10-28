@@ -78,7 +78,7 @@ Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home
    s'installent tout seuls dans les minutes qui suivent.
 6. Ouvre l'appli **Synchroniser mes notes avec Google Drive** et autorise l'accès (une seule fois).
    Les carnets Smoky Notes et leurs exports PDF sont dans le dossier **Notes**, donc synchronisés.
-7. `z13-status` dans un terminal affiche l'état de la machine.
+7. Smoky Center (carte « Système ») affiche l'état de la machine.
 
 ## À savoir (honnêtement)
 - **Streaming** : Netflix, Disney+ et Prime Video limitent Chrome sous Linux à environ **720p**.

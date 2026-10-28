@@ -24,6 +24,8 @@ NOTES_ROOT = Path(os.environ.get("SMOKYNOTES_NOTES", Path.home() / "Notes")).res
 DATA_DIR = NOTES_ROOT / "Smoky Notes"
 TRASH_DIR = DATA_DIR / ".corbeille"
 TOKEN = secrets.token_urlsafe(24)
+# le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
+TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-notes.token"
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -129,7 +131,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(404, "introuvable")
         data = target.read_bytes()
         if target.name == "index.html":
-            data = data.replace(b"__SMOKY_TOKEN__", TOKEN.encode())
+            data = data.replace(b"__SMOKY_TOKEN__", b"")
         csp = ("default-src 'self'; img-src 'self' blob: data:; "
                "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; media-src 'self' blob:; "
                "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:; "
@@ -228,6 +230,11 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.write(fd, TOKEN.encode())
+    os.close(fd)
     print(f"Smoky Notes : http://127.0.0.1:{PORT}/ — carnets dans {DATA_DIR}", file=sys.stderr)
     srv.serve_forever()
 

@@ -38,6 +38,8 @@ ICS_CACHE = DATA / "edt-cache.ics"
 DEADLINES = Path.home() / ".local/share/smoky-moodle/echeances.json"
 EXPORT = Path.home() / "Notes" / "Planning Smoky.ics"
 TOKEN = secrets.token_urlsafe(24)
+# le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
+TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-agenda.token"
 HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg"}
@@ -661,7 +663,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "introuvable"})
         data = target.read_bytes()
         if target.name == "index.html":
-            data = data.replace(b"__SMOKY_TOKEN__", TOKEN.encode())
+            data = data.replace(b"__SMOKY_TOKEN__", b"")
         csp = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
@@ -687,4 +689,10 @@ if __name__ == "__main__":
         sys.exit(0)
     DATA.mkdir(parents=True, exist_ok=True)
     os.chmod(DATA, 0o700)
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.write(fd, TOKEN.encode())
+    os.close(fd)
+    srv.serve_forever()

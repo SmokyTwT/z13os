@@ -1,5 +1,15 @@
 // Accès au serveur local (enregistrement dans ~/Notes/Smoky Notes).
-const TOKEN = document.querySelector('meta[name="smoky-token"]').content;
+// Code d'accès au serveur local : transmis par le lanceur dans l'adresse (#k=…), jamais écrit dans
+// la page (un autre programme du PC qui lirait la page ne l'obtient pas). Gardé pour les rechargements.
+const TOKEN = (() => {
+  const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+  if (m) {
+    try { sessionStorage.setItem('smoky-k', m[1]); } catch { /* stockage indisponible */ }
+    history.replaceState(null, '', location.pathname);
+    return m[1];
+  }
+  try { return sessionStorage.getItem('smoky-k') || ''; } catch { return ''; }
+})();
 
 async function call(method, path, body, type = 'application/json') {
   const res = await fetch('/api/' + path, {

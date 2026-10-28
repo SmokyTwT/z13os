@@ -1,6 +1,16 @@
 // Smoky Mail : plusieurs boîtes dans une seule liste triée par catégorie, lecture, écriture et réglages.
 'use strict';
-const TOKEN = document.querySelector('meta[name="smoky-token"]').content;
+// Code d'accès au serveur local : transmis par le lanceur dans l'adresse (#k=…), jamais écrit dans
+// la page (un autre programme du PC qui lirait la page ne l'obtient pas). Gardé pour les rechargements.
+const TOKEN = (() => {
+  const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+  if (m) {
+    try { sessionStorage.setItem('smoky-k', m[1]); } catch { /* stockage indisponible */ }
+    history.replaceState(null, '', location.pathname);
+    return m[1];
+  }
+  try { return sessionStorage.getItem('smoky-k') || ''; } catch { return ''; }
+})();
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const CAT_ICONS = { all: '📥', important: '⭐', cours: '🎓', perso: '💬', achats: '🧾', newsletters: '📰', notifications: '🔔', indesirable: '🚫' };

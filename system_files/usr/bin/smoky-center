@@ -4,14 +4,17 @@
 # chemin, ce qui la distingue de Smoky Notes (chrome-localhost__-Default, voir le .desktop).
 PORT=47814
 SRV=
+TOKEN_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/smoky-center.token"
 if ! (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
+  rm -f "$TOKEN_FILE"     # le serveur lancé ici écrit un nouveau code d'accès
   nohup /usr/bin/python3 /usr/libexec/smokyos/smoky-center.py >/dev/null 2>&1 &
   SRV=$!
   for _ in $(seq 50); do (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null && break; sleep 0.1; done
+  for _ in $(seq 30); do [ -s "$TOKEN_FILE" ] && break; sleep 0.1; done
 fi
 PROFILE="$HOME/.config/smoky-center-chrome"
 /usr/bin/google-chrome-stable --ozone-platform-hint=auto --force-dark-mode --enable-wayland-ime \
-  --app="http://localhost:$PORT/" --class=smoky-center --window-size=1100,820 --no-first-run --no-default-browser-check --user-data-dir="$PROFILE" "$@"
+  --app="http://localhost:$PORT/#k=$(cat "$TOKEN_FILE" 2>/dev/null)" --class=smoky-center --window-size=1100,820 --no-first-run --no-default-browser-check --user-data-dir="$PROFILE" "$@"
 # Batterie : le serveur lancé ici s'arrête quand la dernière fenêtre de l'appli se ferme
 # (Chrome reste dans cette commande tant que l'appli est ouverte).
 if [ -n "$SRV" ] && ! pgrep -f -- "--user-data-dir=$PROFILE" >/dev/null; then
