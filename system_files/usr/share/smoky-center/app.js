@@ -35,6 +35,11 @@ async function act(body, okMsg) {
 const seg = (key, options, current) =>
   `<div class="seg" data-seg="${key}">${options.map(([v, l]) => `<button data-v="${esc(v)}" class="${String(v) === String(current) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
 const sw = (key, on) => `<label class="switch"><input type="checkbox" data-sw="${key}" ${on ? 'checked' : ''}><i></i></label>`;
+// Réglages GNOME (liste fermée côté serveur) : la ligne n'apparaît que si le réglage existe
+const gsw = (name, label, invert = false) => (S.g[name] === undefined ? ''
+  : `<div class="row"><span>${label}</span><label class="switch"><input type="checkbox" data-g="${name}" data-inv="${invert ? 1 : ''}" ${(invert ? !S.g[name] : S.g[name]) ? 'checked' : ''}><i></i></label></div>`);
+const gseg = (name, label, options) => (S.g[name] === undefined ? ''
+  : `<div class="row"><span>${label}</span>${seg('g:' + name, options, S.g[name])}</div>`);
 const fmtDate = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 function render() {
@@ -92,6 +97,57 @@ function render() {
         : `<button class="btn primary" data-a="update" ${s.update.running ? 'disabled' : ''}>${s.update.running ? 'Mise à jour en cours…' : 'Rechercher une mise à jour'}</button>`}
     </div>
   </section>
+  <section class="card"><h2>🖥️ Écran</h2>
+    ${gsw('night_light', 'Veilleuse (lumière chaude le soir)')}
+    ${gseg('night_light_temp', 'Ton', [[4500, 'Léger'], [3500, 'Moyen'], [2700, 'Chaud']])}
+    ${gsw('night_light_auto', 'Du coucher au lever du soleil')}
+    ${gsw('ambient', 'Luminosité automatique')}
+    ${gsw('rotation_lock', 'Bloquer la rotation de l’écran')}
+    ${gseg('text_scale', 'Taille du texte', [[1, 'Normale'], [1.1, 'Grande'], [1.25, 'Très grande']])}
+  </section>
+  <section class="card"><h2>🌙 Veille et verrouillage</h2>
+    ${gseg('idle_delay', 'Écran éteint après', [[120, '2 min'], [300, '5 min'], [600, '10 min'], [0, 'Jamais']])}
+    ${gseg('sleep_battery', 'Veille sur batterie', [[600, '10 min'], [900, '15 min'], [1800, '30 min'], [3600, '1 h']])}
+    ${gseg('sleep_ac', 'Veille sur secteur', [['suspend', 'Oui'], ['nothing', 'Jamais']])}
+    ${gseg('lock_delay', 'Verrouiller', [[0, 'Aussitôt'], [60, '1 min'], [300, '5 min']])}
+  </section>
+  <section class="card"><h2>🔔 Notifications et son</h2>
+    ${gsw('show_banners', 'Ne pas déranger', true)}
+    ${gsw('lock_notifs', 'Notifications sur l’écran verrouillé')}
+    ${gsw('event_sounds', 'Sons du système')}
+    ${gsw('volume_boost', 'Volume au-delà de 100 % (haut-parleurs faibles)')}
+  </section>
+  <section class="card"><h2>🔒 Confidentialité</h2>
+    ${gsw('recent_files', 'Garder l’historique des fichiers récents')}
+    ${gsw('old_trash', 'Vider la corbeille après 30 jours')}
+    ${gsw('old_temp', 'Supprimer les fichiers temporaires anciens')}
+    ${gsw('camera_off', 'Caméra désactivée pour toutes les applis')}
+    ${gsw('location', 'Localisation (météo, fuseau horaire)')}
+  </section>
+  <section class="card"><h2>🧭 Interface</h2>
+    ${gseg('dock_size', 'Taille du dock', [[44, 'Petit'], [52, 'Moyen'], [60, 'Grand']])}
+    ${gsw('dock_fixed', 'Dock toujours visible')}
+    ${gsw('battery_pct', 'Pourcentage de batterie en haut')}
+    ${gsw('hot_corner', 'Coin actif (en haut à gauche)')}
+    ${gsw('animations', 'Animations (désactiver économise la batterie)')}
+    ${gsw('tap_click', 'Toucher le pavé pour cliquer')}
+    ${gsw('natural_scroll', 'Défilement naturel')}
+  </section>
+  <section class="card"><h2>💽 Stockage <small>${esc(s.storage.free)} libres sur ${esc(s.storage.total)}</small></h2>
+    <div class="bar"><i style="width:${Number(s.storage.used_pct) || 0}%"></i></div>
+    <p class="hint">Corbeille : ${esc(s.storage.trash)} · caches : ${esc(s.storage.cache)}. Le nettoyage vide la corbeille et les caches (Chrome, miniatures) et retire les composants d’applis inutilisés. Tes fichiers ne sont jamais touchés.</p>
+    <div class="btns"><button class="btn primary" data-a="clean" ${s.jobs.clean.running ? 'disabled' : ''}>${s.jobs.clean.running ? 'Nettoyage…' : 'Nettoyer'}</button></div>
+    ${s.jobs.clean.result ? `<p class="hint">Dernier nettoyage : ${esc(s.jobs.clean.result)} libérés.</p>` : ''}
+  </section>
+  <section class="card"><h2>📦 Applis</h2>
+    <p class="hint">Les applis (Spotify, Proton VPN, Déjà Dup…) se mettent à jour avec le système ; ce bouton le fait tout de suite.</p>
+    <div class="btns"><button class="btn primary" data-a="apps_update" ${s.jobs.apps.running ? 'disabled' : ''}>${s.jobs.apps.running ? 'Mise à jour…' : 'Mettre à jour les applis'}</button></div>
+    ${s.jobs.apps.result === 'error' ? '<p class="hint">La dernière mise à jour a échoué : vérifie la connexion.</p>' : ''}
+  </section>
+  <section class="card"><h2>ℹ️ Système</h2>
+    <p class="hint">${esc(s.system)} · noyau ${esc(s.info.kernel)} · ${esc(s.info.ram)} de mémoire${s.info.temp ? ' · processeur à ' + esc(s.info.temp) : ''} · allumé depuis ${esc(s.info.uptime)}</p>
+    ${s.windows ? '<div class="btns"><button class="btn" data-a="windows">Redémarrer sur Windows</button></div><p class="hint">Une seule fois : au redémarrage suivant, retour à Smoky OS.</p>' : ''}
+  </section>
   <section class="card"><h2>💾 Sauvegardes</h2>
     <p class="hint">Sauvegarde automatique de ton dossier personnel sur Google Drive (ou un disque, un NAS), avec restauration en quelques clics.</p>
     <div class="btns"><button class="btn primary" data-a="backup_open">Ouvrir les sauvegardes</button></div>
@@ -110,6 +166,10 @@ function bind() {
       if (key === 'battery') act({ action: 'battery', limit: Number(v) }, `Charge limitée à ${v} %`);
       if (key === 'profile') act({ action: 'profile', name: v });
       if (key === 'gpu') act({ action: 'gpu', mode: v });
+      if (key.startsWith('g:')) {
+        const name = key.slice(2), cur = S.g[name];
+        act({ action: 'gset', name, value: typeof cur === 'string' ? v : Number(v) });
+      }
     };
   });
   document.querySelectorAll('[data-sw]').forEach((inp) => {
@@ -120,6 +180,9 @@ function bind() {
       if (k === 'vpn') act({ action: 'vpn', on });
     };
   });
+  document.querySelectorAll('[data-g]').forEach((inp) => {
+    inp.onchange = () => act({ action: 'gset', name: inp.dataset.g, value: inp.dataset.inv ? !inp.checked : inp.checked });
+  });
   document.querySelectorAll('[data-focus]').forEach((btn) => {
     btn.onclick = () => act({ action: 'focus_start', minutes: Number(btn.dataset.focus) }, `Concentration : ${btn.dataset.focus} minutes`);
   });
@@ -128,8 +191,10 @@ function bind() {
       const a = btn.dataset.a;
       if (a === 'home_token') return act({ action: 'home_token', token: $('#home-token').value }, 'Boutons maison reliés');
       if (a === 'vpn_import') return $('#vpn-file').click();
+      if (a === 'windows' && !confirm('Redémarrer sur Windows maintenant ?\n\nEnregistre ton travail avant. Au redémarrage suivant, le PC revient sur Smoky OS.')) return;
+      if (a === 'clean' && !confirm('Vider la corbeille et les caches ?\n\nTes fichiers et tes notes ne sont pas touchés.')) return;
       if (a === 'reboot' && !confirm('Redémarrer maintenant pour appliquer la mise à jour ?\n\nEnregistre ton travail avant.')) return;
-      const msgs = { update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
+      const msgs = { clean: 'Nettoyage lancé', apps_update: 'Mise à jour des applis lancée', update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
       return act({ action: a }, msgs[a]);
     };
   });
@@ -154,6 +219,6 @@ refresh();
 // rafraîchissement plus rapide pendant une mise à jour
 // fenêtre cachée ou réduite : aucune interrogation (économise la batterie)
 const visible = () => document.visibilityState === 'visible';
-setInterval(() => { if (visible() && S && S.update && S.update.running) refresh(); }, 4000);
+setInterval(() => { if (visible() && S && ((S.update && S.update.running) || S.jobs.apps.running || S.jobs.clean.running)) refresh(); }, 4000);
 setInterval(() => { if (visible()) refresh(); }, 15000);
 document.addEventListener('visibilitychange', () => { if (visible()) refresh(); });

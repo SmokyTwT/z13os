@@ -40,6 +40,8 @@ dnf -y install rclone zenity
 
 # --- Smoky Moodle (import des PDF de cours, échéances) : pdfinfo + trousseau GNOME
 dnf -y install poppler-utils libsecret
+# redémarrer sur Windows depuis Smoky Center (double démarrage)
+dnf -y install efibootmgr
 mkdir -p /etc/smokyos
 echo "${MOODLE_URL:-https://moodle.uphf.fr/}" > /etc/smokyos/moodle-url
 
@@ -265,7 +267,7 @@ dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/u
 
 # --- Services ----------------------------------------------------------------
 chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/bin/smoky-center \
-  /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/*.py /usr/libexec/smokyos/smoky-focus.sh
+  /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/*.py /usr/libexec/smokyos/*.sh
 systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-firstboot.service smoky-focus-cleanup.service \

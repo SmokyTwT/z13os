@@ -1,0 +1,6 @@
+[Unit]
+Description=Smoky OS : redémarrer sur Windows (une seule fois)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/smokyos/smoky-windows.sh

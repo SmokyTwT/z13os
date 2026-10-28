@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import threading
 import time
@@ -106,6 +107,166 @@ def do_update():
     UPDATE["running"] = False
 
 
+# --- Réglages GNOME modifiables (liste fermée : rien d'autre ne peut être changé) -----------------
+# nom : (schéma, clé, type GVariant, valeurs permises ; None = booléen)
+GSET = {
+    "night_light": ("org.gnome.settings-daemon.plugins.color", "night-light-enabled", "b", None),
+    "night_light_temp": ("org.gnome.settings-daemon.plugins.color", "night-light-temperature", "u", (2700, 3500, 4500)),
+    "night_light_auto": ("org.gnome.settings-daemon.plugins.color", "night-light-schedule-automatic", "b", None),
+    "ambient": ("org.gnome.settings-daemon.plugins.power", "ambient-enabled", "b", None),
+    "rotation_lock": ("org.gnome.settings-daemon.peripherals.touchscreen", "orientation-lock", "b", None),
+    "text_scale": ("org.gnome.desktop.interface", "text-scaling-factor", "d", (1.0, 1.1, 1.25)),
+    "idle_delay": ("org.gnome.desktop.session", "idle-delay", "u", (120, 300, 600, 900, 0)),
+    "sleep_battery": ("org.gnome.settings-daemon.plugins.power", "sleep-inactive-battery-timeout", "i", (600, 900, 1800, 3600)),
+    "sleep_ac": ("org.gnome.settings-daemon.plugins.power", "sleep-inactive-ac-type", "s", ("suspend", "nothing")),
+    "show_banners": ("org.gnome.desktop.notifications", "show-banners", "b", None),
+    "lock_notifs": ("org.gnome.desktop.notifications", "show-in-lock-screen", "b", None),
+    "lock_delay": ("org.gnome.desktop.screensaver", "lock-delay", "u", (0, 60, 300)),
+    "recent_files": ("org.gnome.desktop.privacy", "remember-recent-files", "b", None),
+    "old_trash": ("org.gnome.desktop.privacy", "remove-old-trash-files", "b", None),
+    "old_temp": ("org.gnome.desktop.privacy", "remove-old-temp-files", "b", None),
+    "camera_off": ("org.gnome.desktop.privacy", "disable-camera", "b", None),
+    "location": ("org.gnome.system.location", "enabled", "b", None),
+    "volume_boost": ("org.gnome.desktop.sound", "allow-volume-above-100-percent", "b", None),
+    "event_sounds": ("org.gnome.desktop.sound", "event-sounds", "b", None),
+    "dock_size": ("org.gnome.shell.extensions.dash-to-dock", "dash-max-icon-size", "i", (44, 52, 60)),
+    "dock_fixed": ("org.gnome.shell.extensions.dash-to-dock", "dock-fixed", "b", None),
+    "battery_pct": ("org.gnome.desktop.interface", "show-battery-percentage", "b", None),
+    "hot_corner": ("org.gnome.desktop.interface", "enable-hot-corners", "b", None),
+    "animations": ("org.gnome.desktop.interface", "enable-animations", "b", None),
+    "tap_click": ("org.gnome.desktop.peripherals.touchpad", "tap-to-click", "b", None),
+    "natural_scroll": ("org.gnome.desktop.peripherals.touchpad", "natural-scroll", "b", None),
+}
+
+try:
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+except (ImportError, ValueError):
+    Gio = None
+_SETTINGS = {}
+
+
+def gsettings(schema):
+    if Gio is None:
+        return None
+    if schema not in _SETTINGS:
+        src = Gio.SettingsSchemaSource.get_default()
+        _SETTINGS[schema] = Gio.Settings.new(schema) if src and src.lookup(schema, True) else None
+    return _SETTINGS[schema]
+
+
+def gset_state():
+    out = {}
+    for name, (schema, key, _t, _ok) in GSET.items():
+        st = gsettings(schema)
+        if st is not None and st.props.settings_schema.has_key(key):
+            out[name] = st.get_value(key).unpack()
+    return out
+
+
+def gset_write(name, value):
+    if name not in GSET or isinstance(value, (dict, list)):
+        return False
+    schema, key, typ, allowed = GSET[name]
+    st = gsettings(schema)
+    if st is None or not st.props.settings_schema.has_key(key):
+        return False
+    if allowed is None:
+        if not isinstance(value, bool):
+            return False
+    else:
+        match = [v for v in allowed if v == value and not isinstance(value, bool)]
+        if not match:
+            return False
+        value = match[0]
+    st.set_value(key, GLib.Variant(typ, value))
+    Gio.Settings.sync()
+    return True
+
+
+# --- Stockage, applis, Windows ---------------------------------------------------------------
+def human(n):
+    for unit in ("o", "Ko", "Mo", "Go", "To"):
+        if n < 1024 or unit == "To":
+            return f"{n:.0f} {unit}" if unit in ("o", "Ko") else f"{n:.1f} {unit}".replace(".", ",")
+        n /= 1024
+
+
+def dir_size(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(root, f)).st_size
+            except OSError:
+                pass
+    return total
+
+
+JOBS = {"apps": {"running": False, "result": ""}, "clean": {"running": False, "result": ""}}
+
+
+def do_apps_update():
+    code, _ = run("flatpak", "update", "-y", "--noninteractive", timeout=3600)
+    JOBS["apps"].update(running=False, result="ok" if code == 0 else "error")
+    spawn("notify-send", "-a", "Smoky OS", "-i", "system-software-update",
+          "Applis à jour" if code == 0 else "Mise à jour des applis incomplète",
+          "Spotify, Proton VPN et les autres applis sont à jour." if code == 0 else "Réessaie plus tard.")
+
+
+CHROME_PROFILES = (".config/google-chrome", ".config/smoky-notes-chrome", ".config/smoky-center-chrome",
+                   ".config/smoky-home-chrome")
+
+
+def do_clean():
+    """Corbeille, miniatures, caches de Chrome et moteurs Flatpak inutilisés (jamais tes fichiers)."""
+    before = shutil.disk_usage(HOME).free
+    run("gio", "trash", "--empty", timeout=120)
+    shutil.rmtree(HOME / ".cache/thumbnails", ignore_errors=True)
+    for d in CHROME_PROFILES:
+        for sub in ("Default/Cache", "Default/Code Cache", "Default/GPUCache", "GrShaderCache", "ShaderCache"):
+            shutil.rmtree(HOME / d / sub, ignore_errors=True)
+    run("flatpak", "uninstall", "--unused", "-y", "--noninteractive", timeout=600)
+    freed = max(0, shutil.disk_usage(HOME).free - before)
+    JOBS["clean"].update(running=False, result=human(freed))
+    spawn("notify-send", "-a", "Smoky OS", "-i", "user-trash", "Nettoyage terminé", f"{human(freed)} libérés.")
+
+
+def windows_entry():
+    _, out = run("efibootmgr", timeout=5)
+    m = re.search(r"^Boot([0-9A-Fa-f]{4})\*?\s+Windows Boot Manager", out, re.M)
+    return m.group(1) if m else None
+
+
+_STORAGE = {"at": 0, "data": {}}
+
+
+def storage():
+    """Tailles des dossiers : coûteux, recalculé au plus toutes les 2 minutes."""
+    du = shutil.disk_usage(HOME)
+    if time.time() - _STORAGE["at"] > 120 or JOBS["clean"]["result"]:
+        _STORAGE.update(at=time.time(), data={
+            "trash": human(dir_size(HOME / ".local/share/Trash")),
+            "cache": human(dir_size(HOME / ".cache") + sum(dir_size(HOME / d / "Default/Cache") for d in CHROME_PROFILES))})
+    return {"total": human(du.total), "free": human(du.free),
+            "used_pct": round(100 * (du.total - du.free) / du.total), **_STORAGE["data"]}
+
+
+def sysinfo():
+    mem = re.search(r"MemTotal:\s+(\d+)", read("/proc/meminfo"))
+    up = float((read("/proc/uptime", "0").split() or ["0"])[0])
+    temp = ""
+    for z in sorted(Path("/sys/class/thermal").glob("thermal_zone*")):
+        if read(z / "type") in ("x86_pkg_temp", "TCPU", "acpitz"):
+            t = read(z / "temp")
+            if t.isdigit():
+                temp = f"{int(t) // 1000} °C"
+                break
+    return {"kernel": os.uname().release.split("-")[0], "ram": human(int(mem.group(1)) * 1024) if mem else "?",
+            "uptime": f"{int(up // 3600)} h {int(up % 3600 // 60):02d}", "temp": temp}
+
+
 # --- État de la machine -------------------------------------------------------------------
 def state():
     bat = "/sys/class/power_supply/BAT0"
@@ -135,6 +296,11 @@ def state():
         "moodle": moodle,
         "vpn": {"configured": VPN in conns.splitlines(), "active": VPN in active.splitlines()},
         "focus": focus,
+        "g": gset_state(),
+        "jobs": {k: dict(v) for k, v in JOBS.items()},
+        "windows": windows_entry() is not None,
+        "info": sysinfo(),
+        "storage": storage(),
     }
 
 
@@ -222,6 +388,20 @@ def act(a):
     if kind == "icons_regen":
         spawn("python3", f"{LIBEXEC}/smoky-autoicons.py")
         return {"ok": True}
+    if kind == "gset":
+        ok = gset_write(str(a.get("name")), a.get("value"))
+        return {"ok": True} if ok else {"ok": False, "message": "Réglage indisponible sur cette machine."}
+    if kind in ("apps_update", "clean"):
+        job = JOBS["apps" if kind == "apps_update" else "clean"]
+        if not job["running"]:
+            job.update(running=True, result="")
+            threading.Thread(target=do_apps_update if kind == "apps_update" else do_clean, daemon=True).start()
+        return {"ok": True}
+    if kind == "windows":
+        if not windows_entry():
+            return {"ok": False, "message": "Windows introuvable sur ce PC."}
+        code, out = run("systemctl", "start", "--no-block", "smoky-windows.service", timeout=20)
+        return {"ok": True} if code == 0 else {"ok": False, "message": out or "Redémarrage refusé."}
     if kind == "update":
         if not UPDATE["running"]:
             UPDATE.update(running=True, result="")

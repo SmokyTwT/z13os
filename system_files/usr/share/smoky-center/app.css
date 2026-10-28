@@ -40,3 +40,8 @@ input[type=text], input[type=password] { width: 100%; height: 40px; padding: 0 1
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 12px 18px; border-radius: 14px;
   background: #ececef; color: #0e0e10; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.5); max-width: 80vw; }
 .hidden { display: none !important; }
+.bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; margin: 6px 0 2px; }
+.bar i { display: block; height: 100%; background: linear-gradient(90deg,#c9c9d0,#fff); box-shadow: 0 0 10px rgba(255,255,255,.4); border-radius: 999px; }
+.seg { flex-shrink: 0; }
+.seg button { white-space: nowrap; }
+.row > span { flex: 1; min-width: 0; }
