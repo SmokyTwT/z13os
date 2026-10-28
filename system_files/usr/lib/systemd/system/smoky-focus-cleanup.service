@@ -7,6 +7,11 @@ Before=network-pre.target
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/smokyos/smoky-focus.sh stop
+ProtectSystem=strict
+ReadWritePaths=/etc
+ProtectHome=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target

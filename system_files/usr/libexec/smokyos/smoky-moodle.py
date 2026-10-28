@@ -48,7 +48,16 @@ def run(args, **kw):
 def site():
     url = os.environ.get("SMOKY_MOODLE_URL") or (SITE_FILE.read_text().strip() if SITE_FILE.exists() else "https://moodle.uphf.fr/")
     p = urllib.parse.urlsplit(url)
+    # le mot de passe et le jeton ne circulent qu'en HTTPS (HTTP seulement pour un test local)
+    if p.scheme != "https" and p.hostname not in ("127.0.0.1", "localhost"):
+        sys.exit("Adresse Moodle refusée : HTTPS obligatoire.")
     return f"{p.scheme}://{p.netloc}"
+
+
+def same_site(url):
+    """Le jeton n'est jamais envoyé à un autre site que Moodle (lien externe dans un cours…)."""
+    a, b = urllib.parse.urlsplit(url), urllib.parse.urlsplit(site())
+    return (a.scheme, a.netloc) == (b.scheme, b.netloc)
 
 
 def notify(title, body, icon="smokyos-moodle"):
@@ -102,10 +111,16 @@ def token_clear():
 
 
 # --- API Moodle (services web de l'appli mobile officielle) ----------------------------------
+MAX_DOWNLOAD = 200 * 1024 * 1024        # un PDF de cours plus gros est ignoré
+
+
 def http(url, data=None, timeout=60):
     req = urllib.request.Request(url, data=data, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+        body = r.read(MAX_DOWNLOAD + 1)
+    if len(body) > MAX_DOWNLOAD:
+        raise ValueError("fichier trop volumineux")
+    return body
 
 
 def ws(token, fn, **params):
@@ -245,6 +260,8 @@ def sync():
                     if f.get("type") != "file" or not f.get("filename", "").lower().endswith(".pdf"):
                         continue
                     key = f.get("fileurl", "").split("?")[0]
+                    if not same_site(key):
+                        continue
                     known = st["files"].get(key)
                     if known and known["mtime"] >= f.get("timemodified", 0):
                         continue
@@ -294,7 +311,7 @@ def deadlines(token, st):
     for e in events:
         t = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(e["time"]))
         lines += ["BEGIN:VEVENT", f"UID:moodle-{e['id']}@smokyos", f"DTSTAMP:{t}", f"DTSTART:{t}", f"DTEND:{t}",
-                  f"SUMMARY:{ics_escape(e['name'])}", f"DESCRIPTION:{ics_escape(e['course'])}", f"URL:{e['url']}",
+                  f"SUMMARY:{ics_escape(e['name'])}", f"DESCRIPTION:{ics_escape(e['course'])}", f"URL:{re.sub(r'[\s;,]', '', e['url'])}",
                   "BEGIN:VALARM", "TRIGGER:-PT24H", "ACTION:DISPLAY", f"DESCRIPTION:{ics_escape(e['name'])}",
                   "END:VALARM", "END:VEVENT"]
     lines.append("END:VCALENDAR")

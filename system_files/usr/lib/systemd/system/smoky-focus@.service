@@ -5,3 +5,17 @@ Description=Smoky OS : mode concentration (%i minutes)
 Type=simple
 ExecStart=/usr/libexec/smokyos/smoky-focus.sh start %i
 ExecStopPost=/usr/libexec/smokyos/smoky-focus.sh stop
+# ne fait que modifier /etc/hosts : tout le reste est verrouillé
+ProtectSystem=strict
+ReadWritePaths=/etc
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native

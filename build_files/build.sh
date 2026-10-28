@@ -226,8 +226,8 @@ if [[ "${NVIDIA:-0}" == 1 ]]; then
   # Dans un conteneur, le script d'installation d'akmod-nvidia tente de compiler en root
   # avant que l'utilisateur « akmods » existe : dnf signale un échec alors que les paquets
   # sont bien installés. On vérifie les paquets, puis on compile nous-mêmes.
-  dnf -y install "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia-cuda || \
-    rpm -q "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia xorg-x11-drv-nvidia-cuda
+  dnf -y install "kernel-devel-$KVER" akmod-nvidia || \
+    rpm -q "kernel-devel-$KVER" akmod-nvidia xorg-x11-drv-nvidia
   systemd-sysusers
   akmods --force --kernels "$KVER" --kmod nvidia || { cat /var/cache/akmods/nvidia/*.log 2>/dev/null | tail -60; exit 1; }
   ls /usr/lib/modules/"$KVER"/extra/nvidia/nvidia*.ko* >/dev/null   # le module doit exister

@@ -69,12 +69,26 @@ def jsave(path, data):
     path.write_text(json.dumps(data, indent=1))
 
 
+_OSTREE = {"at": 0, "image": "", "staged": False}
+
+
+def ostree_status(fresh=False):
+    """rpm-ostree status est lent : relu au plus une fois par minute (ou après une mise à jour)."""
+    if fresh or time.time() - _OSTREE["at"] > 60:
+        _, ost = run("rpm-ostree", "status", "--json", timeout=10)
+        try:
+            deps = json.loads(ost).get("deployments", [])
+            booted = next((d for d in deps if d.get("booted")), {})
+            _OSTREE.update(image=booted.get("container-image-reference", ""),
+                           staged=any(d.get("staged") for d in deps))
+        except ValueError:
+            pass
+        _OSTREE["at"] = time.time()
+    return _OSTREE["image"], _OSTREE["staged"]
+
+
 def staged_update():
-    _, ost = run("rpm-ostree", "status", "--json", timeout=10)
-    try:
-        return any(d.get("staged") for d in json.loads(ost).get("deployments", []))
-    except ValueError:
-        return False
+    return ostree_status(fresh=True)[1]
 
 
 def do_update():
@@ -106,15 +120,7 @@ def state():
         moodle = json.loads(moodle) if code == 0 else {"connected": False}
     except ValueError:
         moodle = {"connected": False}
-    _, ost = run("rpm-ostree", "status", "--json", timeout=10)
-    image, staged = "", False
-    try:
-        deps = json.loads(ost).get("deployments", [])
-        booted = next((d for d in deps if d.get("booted")), {})
-        image = booted.get("container-image-reference", "")
-        staged = any(d.get("staged") for d in deps)
-    except ValueError:
-        pass
+    image, staged = ostree_status()
     focus = jload(FOCUS, {"end": 0, "minutes": 0})
     if focus["end"] < time.time():
         focus = {"end": 0, "minutes": 0}

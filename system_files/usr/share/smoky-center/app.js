@@ -159,5 +159,8 @@ async function refresh() {
 
 refresh();
 // rafraîchissement plus rapide pendant une mise à jour
-setInterval(() => { if (S && S.update && S.update.running) refresh(); }, 4000);
-setInterval(refresh, 15000);
+// fenêtre cachée ou réduite : aucune interrogation (économise la batterie)
+const visible = () => document.visibilityState === 'visible';
+setInterval(() => { if (visible() && S && S.update && S.update.running) refresh(); }, 4000);
+setInterval(() => { if (visible()) refresh(); }, 15000);
+document.addEventListener('visibilitychange', () => { if (visible()) refresh(); });

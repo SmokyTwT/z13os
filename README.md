@@ -97,6 +97,10 @@ Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home
   (empreinte sha256) ; bibliothèques PDF de Smoky Notes copiées dans le dépôt.
 - **Mises à jour** : image reconstruite chaque lundi, téléchargée en arrière-plan, appliquée au
   redémarrage ; bouton « Rechercher une mise à jour » dans Smoky Center pour le faire tout de suite ; en cas de souci, revenir à la version précédente depuis le menu de démarrage.
+- **Moodle** : connexion en HTTPS uniquement, le jeton n'est jamais envoyé à un autre site que
+  Moodle (liens externes dans les cours ignorés), téléchargements limités à 200 Mo.
+- **Mode concentration** : le service qui modifie /etc/hosts tourne dans un bac à sable (pas de
+  réseau, pas d'accès au dossier personnel, seul /etc est modifiable).
 - **Allégé** : pas de Firefox (Chrome suffit), pas de visite guidée, pas de variantes d'icônes
   inutiles ; Smoky Home ne tourne que quand l'appli est ouverte.
 
