@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Smoky Mail
+Comment=Tes mails, triés automatiquement par Claude
+Exec=/usr/bin/smoky-mail
+Icon=smoky-mail
+StartupWMClass=chrome-127.0.0.1__mail-Default
+Categories=Network;Email;
+Keywords=mail;courriel;gmail;outlook;claude;tri;
+Terminal=false

@@ -1,0 +1,8 @@
+[Unit]
+Description=Smoky Mail : relève et tri des mails
+ConditionPathExists=%h/.local/share/smoky-mail/account.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/libexec/smokymail/server.py --sync
+Nice=10

@@ -184,7 +184,12 @@ icons["portail"] = ('<path d="M17 25 a21 21 0 0 1 30 0 M21.5 30 a14.5 14.5 0 0 1
                     '<circle cx="32" cy="40" r="2.6" ' + F + '/>'
                     '<path d="M39 41 l3.2 3.2 l6 -6.4" ' + S + ' stroke-width="2.6"/>', "#3b82ff")
 FILES["portail"] = "smoky-portail.svg"
-KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail"}
+# Smoky Mail : enveloppe et petite étincelle (le tri par Claude)
+icons["mail"] = ('<rect x="13" y="19" width="34" height="24" rx="4" ' + S + ' stroke-width="2.6"/>'
+                 '<path d="M14.5 21.5 L30 33 L45.5 21.5" ' + S + ' stroke-width="2.4"/>'
+                 '<path d="M47 11 l1.4 3.4 l3.4 1.4 l-3.4 1.4 l-1.4 3.4 l-1.4 -3.4 l-3.4 -1.4 l3.4 -1.4 z" ' + F + '/>', "#ffffff")
+FILES["mail"] = "smoky-mail.svg"
+KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail", "mail"}
 icons = {k: v for k, v in icons.items() if k in KEEP}
 
 os.makedirs(OUT, exist_ok=True)
