@@ -91,7 +91,20 @@ Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home
 - **Ajouter un logiciel** : passe par l'app *Logiciels* (Flatpak) ou ajoute un paquet dans
   `build_files/build.sh`, et GitHub reconstruit l'image.
 
+## Autonomie et durée de vie de la batterie
+- **Limite de charge à 80 %** (plus de cycles avant usure) ; bouton « Charger à 100 % pour cette
+  fois » dans Smoky Center : la limite revient toute seule au débranchement.
+- **Débranché** : écran à 60 Hz, « Performance » repasse en « Équilibré » (et revient au rebranchement),
+  RTX coupée par défaut, Wi-Fi en économie d'énergie, Chrome en économiseur de batterie sous 20 %.
+- **Rien ne tourne pour rien** : les serveurs de Smoky Notes / Center / Mail s'arrêtent avec leur
+  fenêtre ; Chrome ne reste pas en arrière-plan ; synchro des notes toutes les 10 min (30 sur
+  batterie), relève des mails 15 min (30 sur batterie) ; mises à jour des applis une fois par jour
+  et seulement sur secteur ; GNOME Logiciels, ROG Control Center et ModemManager ne tournent plus
+  en permanence.
+
 ## Sécurité, stabilité, légèreté
+- **Noyau durci** : un programme ne peut plus lire la mémoire d'un autre, pas de remplacement du
+  noyau à chaud, redirections réseau ignorées (Wi-Fi publics).
 - **Pare-feu en zone « public »** : rien n'est joignable depuis le réseau (Wi-Fi publics compris),
   sauf la découverte des Google Home/Chromecast et GSConnect. Smoky Notes et Smoky Home ne
   répondent qu'au PC lui-même.

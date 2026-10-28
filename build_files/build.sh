@@ -30,7 +30,7 @@ dnf -y install intel-media-driver libva-utils
 
 # --- Support ASUS ROG + énergie ----------------------------------------------
 dnf -y install asusctl supergfxctl thermald
-dnf -y install asusctl-rog-gui || dnf -y install rog-control-center || echo "AVERTISSEMENT : pas d'interface ROG"
+# (pas d'interface ROG Control Center : Smoky Center fait la même chose sans tourner en arrière-plan)
 
 # --- Allègement : Firefox fait doublon avec Chrome, la visite guidée ne sert qu'une fois
 dnf -y remove firefox firefox-langpacks gnome-tour || true
@@ -271,7 +271,18 @@ chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-status /usr/bin/z13-notes-setup /u
 systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-firstboot.service smoky-focus-cleanup.service \
-  rpm-ostreed-automatic.timer
+  rpm-ostreed-automatic.timer smoky-flatpak-update.timer
+
+# --- Autonomie ----------------------------------------------------------------------------------
+# Pas de modem 4G/5G sur le Z13 : ModemManager ne sert à rien
+systemctl mask ModemManager.service || true
+# GNOME Logiciels ne reste plus ouvert en permanence en arrière-plan (≈ 150 Mo de mémoire, réveils
+# réguliers) : les applis se mettent à jour une fois par jour, sur secteur (smoky-flatpak-update),
+# et le système via rpm-ostree. L'appli Logiciels reste utilisable normalement.
+if [[ -f /etc/xdg/autostart/org.gnome.Software.desktop ]]; then
+  grep -q '^Hidden=true' /etc/xdg/autostart/org.gnome.Software.desktop || \
+    sed -i '/^\[Desktop Entry\]/a Hidden=true' /etc/xdg/autostart/org.gnome.Software.desktop
+fi
 
 # Mises à jour système téléchargées en arrière-plan, appliquées au prochain redémarrage
 sed -i 's/^#\?AutomaticUpdatePolicy=.*/AutomaticUpdatePolicy=stage/' /etc/rpm-ostreed.conf

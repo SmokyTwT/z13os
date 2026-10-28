@@ -310,7 +310,19 @@ def act(a):
     if kind == "gpu" and a.get("mode") in ("Integrated", "Hybrid"):
         code, out = run("supergfxctl", "-m", a["mode"], timeout=30)
         return {"ok": code == 0, "message": "Déconnecte-toi puis reconnecte-toi pour appliquer." if code == 0 else out}
+    if kind == "charge_once":
+        # 100 % pour un trajet ; smoky-adaptive remet la limite habituelle au débranchement
+        prev = read("/sys/class/power_supply/BAT0/charge_control_end_threshold", "80")
+        prev = prev if prev in ("60", "80") else "80"
+        code, _ = run("asusctl", "-c", "100")
+        if code != 0:
+            code, _ = run("asusctl", "battery", "limit", "100")
+        if code == 0:
+            CFG.mkdir(parents=True, exist_ok=True)
+            (CFG / "charge-once").write_text(prev)
+        return {"ok": code == 0}
     if kind == "battery" and a.get("limit") in (60, 80, 100):
+        (CFG / "charge-once").unlink(missing_ok=True)
         code, _ = run("asusctl", "-c", str(a["limit"]))
         if code != 0:
             code, _ = run("asusctl", "battery", "limit", str(a["limit"]))

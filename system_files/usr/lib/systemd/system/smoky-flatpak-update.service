@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS : mise à jour des applis (Flatpak), sur secteur uniquement
+Wants=network-online.target
+After=network-online.target
+ConditionACPower=true
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=/usr/bin/flatpak update --system -y --noninteractive
+ExecStart=/usr/bin/flatpak uninstall --system -y --noninteractive --unused

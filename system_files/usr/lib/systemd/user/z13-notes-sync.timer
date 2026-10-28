@@ -1,9 +1,9 @@
 [Unit]
-Description=Synchronisation des notes toutes les 5 minutes
+Description=Synchronisation des notes (10 min sur secteur, 30 min sur batterie)
 
 [Timer]
 OnStartupSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=10min
 
 [Install]
 WantedBy=timers.target

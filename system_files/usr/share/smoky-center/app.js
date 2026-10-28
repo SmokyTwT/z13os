@@ -51,7 +51,9 @@ function render() {
   $('#grid').innerHTML = `
   <section class="card"><h2>🔋 Énergie <small>${esc(b.capacity)} % · ${b.status === 'Charging' ? 'en charge' : b.status === 'Discharging' ? 'sur batterie' : esc(b.status)}</small></h2>
     <div class="row"><span>Limite de charge</span>${seg('battery', [[60, '60 %'], [80, '80 %'], [100, '100 %']], b.limit)}</div>
-    <p class="hint">80 % préserve la batterie si le PC est souvent branché ; 100 % avant un long trajet.</p>
+    <p class="hint">80 % préserve la batterie si le PC est souvent branché (bien plus de cycles avant usure).</p>
+    <div class="btns"><button class="btn" data-a="charge_once">Charger à 100 % pour cette fois</button></div>
+    <p class="hint">Pour un long trajet : la limite revient toute seule dès que tu débranches.</p>
     <div class="row"><span>Profil</span>${seg('profile', [['power-saver', 'Économie'], ['balanced', 'Équilibré'], ['performance', 'Performance']], s.profile)}</div>
     <div class="row"><span>Écran 120 Hz sur secteur, 60 Hz sur batterie</span>${sw('refresh', ad.refresh)}</div>
   </section>
@@ -194,7 +196,7 @@ function bind() {
       if (a === 'windows' && !confirm('Redémarrer sur Windows maintenant ?\n\nEnregistre ton travail avant. Au redémarrage suivant, le PC revient sur Smoky OS.')) return;
       if (a === 'clean' && !confirm('Vider la corbeille et les caches ?\n\nTes fichiers et tes notes ne sont pas touchés.')) return;
       if (a === 'reboot' && !confirm('Redémarrer maintenant pour appliquer la mise à jour ?\n\nEnregistre ton travail avant.')) return;
-      const msgs = { clean: 'Nettoyage lancé', apps_update: 'Mise à jour des applis lancée', update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
+      const msgs = { charge_once: 'Charge jusqu’à 100 %, puis retour à la limite au débranchement', clean: 'Nettoyage lancé', apps_update: 'Mise à jour des applis lancée', update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
       return act({ action: a }, msgs[a]);
     };
   });

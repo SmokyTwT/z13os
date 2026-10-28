@@ -12,7 +12,8 @@ dans la page, en-tête Host vérifié, aucune commande libre.
   du texte de chaque nouveau mail, sans aucun outil, et renvoie une catégorie, une priorité
   et un résumé d'une ligne. Sans Claude, un tri simple sur place (listes de diffusion,
   « no-reply », Moodle, commandes…) prend le relais.
-* « server.py --sync » : relève et tri en arrière-plan (minuteur toutes les 15 min).
+* « server.py --sync » : relève et tri en arrière-plan (minuteur : 15 min sur secteur,
+  30 min sur batterie). Le serveur de l'appli s'arrête quand sa fenêtre se ferme.
 """
 import base64
 import email
@@ -144,6 +145,14 @@ def secret_clear(kind):
     except (OSError, subprocess.TimeoutExpired):
         pass
     (DATA / f".{kind}").unlink(missing_ok=True)
+
+
+def on_battery():
+    supplies = list(Path("/sys/class/power_supply").glob("*"))
+    for s in supplies:
+        if (s / "type").exists() and (s / "type").read_text().strip() == "Mains" and (s / "online").read_text().strip() == "1":
+            return False
+    return any((s / "type").exists() and (s / "type").read_text().strip() == "Battery" for s in supplies)
 
 
 # --- Comptes et réglages -------------------------------------------------------------------------
@@ -874,20 +883,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send(200, res)
 
 
-def background_sync():
-    while True:
-        time.sleep(300)
-        try:
-            sync()
-        except Exception as e:  # le serveur doit survivre à une relève ratée
-            print("relève :", e, file=sys.stderr)
-
-
 if __name__ == "__main__":
     if sys.argv[1:] == ["--sync"]:
+        # minuteur (15 min) : sur batterie, une relève toutes les 30 min suffit
+        if on_battery() and time.time() - settings().get("last_sync", 0) < 1800:
+            sys.exit(0)
         r = sync()
         sys.exit(0 if r.get("ok") else 1)
     DATA.mkdir(parents=True, exist_ok=True)
     os.chmod(DATA, 0o700)
-    threading.Thread(target=background_sync, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

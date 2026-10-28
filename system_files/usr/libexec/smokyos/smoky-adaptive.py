@@ -5,6 +5,9 @@
 * Mode tablette (bouton dans le menu en haut à droite ou Smoky Center) : grandes icônes
   dans le dock et clavier à l'écran ; désactivé → retour à la normale.
 * VPN : sur un Wi-Fi ouvert (sans mot de passe), active la connexion « Smoky VPN ».
+* Batterie : « Performance » repasse en « Équilibré » une fois débranché (et revient au
+  rebranchement) ; après une charge à 100 % « pour cette fois », la limite habituelle
+  revient dès que le PC est débranché.
 
 Réglages : ~/.config/smoky/adaptive.json (modifiés par Smoky Center), relus à chaud.
 """
@@ -19,6 +22,7 @@ CONF = Path.home() / ".config/smoky/adaptive.json"
 STATE = Path.home() / ".config/smoky/adaptive-state.json"
 DEFAULTS = {"refresh": True, "tablet_mode": False, "vpn_auto": False, "tablet_open_notes": True}
 VPN_NAME = "Smoky VPN"
+CHARGE_ONCE = Path.home() / ".config/smoky/charge-once"   # limite à rétablir après une charge à 100 %
 
 
 def load(path, default):
@@ -38,6 +42,13 @@ def run(*args):
         return subprocess.run(args, capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ""
+
+
+def run_ok(*args):
+    try:
+        return subprocess.run(args, capture_output=True, timeout=20).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def settings(schema):
@@ -93,8 +104,30 @@ class Adaptive:
         except GLib.Error:
             return
         if batt != self.on_battery:
+            first = self.on_battery is None
             self.on_battery = batt
             self.apply_refresh()
+            if not first:
+                threading.Thread(target=self.power_changed, args=(batt,), daemon=True).start()
+
+    # --- Batterie : profil d'énergie et charge complète « une fois » ----------------------
+    def power_changed(self, on_battery):
+        if on_battery:
+            # « Performance » sur batterie vide la batterie pour rien : retour à « Équilibré »
+            if run("powerprofilesctl", "get").strip() == "performance":
+                run("powerprofilesctl", "set", "balanced")
+                self.state["restore_performance"] = True
+                save(STATE, self.state)
+            # charge à 100 % demandée pour un trajet : on revient à la limite habituelle
+            if CHARGE_ONCE.exists():
+                prev = CHARGE_ONCE.read_text().strip() or "80"
+                if prev in ("60", "80") and (run_ok("asusctl", "-c", prev) or run_ok("asusctl", "battery", "limit", prev)):
+                    CHARGE_ONCE.unlink(missing_ok=True)
+                    run("notify-send", "-a", "Smoky OS", "-i", "battery", "Batterie",
+                        f"Charge complète terminée : limite remise à {prev} % pour préserver la batterie.")
+        elif self.state.pop("restore_performance", False):
+            run("powerprofilesctl", "set", "performance")
+            save(STATE, self.state)
 
     def apply_refresh(self):
         if not self.conf["refresh"] or self.on_battery is None:

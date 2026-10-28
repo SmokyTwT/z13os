@@ -1,4 +1,6 @@
 {
   "BrowserThemeColor": "#111113",
-  "AudioCaptureAllowedUrls": ["http://127.0.0.1:47813"]
+  "AudioCaptureAllowedUrls": ["http://127.0.0.1:47813"],
+  "BackgroundModeEnabled": false,
+  "BatterySaverModeAvailability": 1
 }
