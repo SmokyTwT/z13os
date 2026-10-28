@@ -103,6 +103,9 @@ Ensuite, le robot (avec la carte) se pilote de n'importe où : appli Xiaomi Home
   en permanence.
 
 ## Sécurité, stabilité, légèreté
+- **Secure Boot compatible** : Smoky OS garde le noyau et le chargeur de démarrage signés de
+  Fedora, et n'ajoute aucun pilote non signé (pas de pilote NVIDIA propriétaire). Tu peux activer
+  le Secure Boot dans le BIOS (F2) ; Windows continue de démarrer normalement à côté.
 - **Noyau durci** : un programme ne peut plus lire la mémoire d'un autre, pas de remplacement du
   noyau à chaud, redirections réseau ignorées (Wi-Fi publics).
 - **Pare-feu en zone « public »** : rien n'est joignable depuis le réseau (Wi-Fi publics compris),
