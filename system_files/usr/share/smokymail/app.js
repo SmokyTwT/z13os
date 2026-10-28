@@ -4,10 +4,7 @@ const TOKEN = document.querySelector('meta[name="smoky-token"]').content;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const CAT_ICONS = { all: '📥', important: '⭐', cours: '🎓', perso: '💬', achats: '🧾', newsletters: '📰', notifications: '🔔', indesirable: '🚫' };
-const COST = {
-  'claude-opus-5-5': 'Claude Opus 5.5 : le tri le plus fin. Ordre de grandeur : 30 centimes pour 100 mails.',
-  'claude-haiku-5-5': 'Claude Haiku 5.5 : environ 40 fois moins cher (moins d’un centime pour 100 mails), un peu moins fin sur les cas ambigus.',
-};
+const CSTATE = { ready: '✅ connecté', logged_out: 'pas connecté', absent: 'pas encore installé' };
 let S = null;
 let current = 'all';
 let openUid = null;
@@ -34,10 +31,10 @@ async function api(path, body) {
   return r.json();
 }
 
-async function act(body, okMsg) {
+async function act(body, okMsg, ms) {
   const r = await api('action', body);
   if (!r.ok) toast(r.message || 'Action impossible', 5000);
-  else if (okMsg) toast(okMsg);
+  else if (okMsg) toast(okMsg, ms);
   return r;
 }
 
@@ -72,7 +69,7 @@ function render() {
   }).join('');
   document.querySelectorAll('[data-cat]').forEach((b) => { b.onclick = () => { current = b.dataset.cat; render(); }; });
 
-  const by = S.account.claude ? `Tri : ${esc(S.models[S.account.model] || 'Claude')}` : 'Tri simple (sans Claude)';
+  const by = S.account.claude ? `Tri par Claude (${esc((S.models[S.account.model] || '').split(' ')[0])})` : 'Tri simple (sans Claude)';
   const last = S.last_sync ? ` · relevé à ${fmtTime.format(new Date(S.last_sync * 1000))}` : '';
   $('#sortinfo').innerHTML = by + last + (S.sort_status ? `<br>⚠ ${esc(S.sort_status)}` : '');
   $('#status').textContent = S.status;
@@ -208,23 +205,20 @@ $('#s-cancel').onclick = () => { $('#setup').classList.add('hidden'); $('#app').
 function openPrefs() {
   $('#p-model').innerHTML = Object.entries(S.models).map(([id, l]) => `<option value="${id}" ${S.account.model === id ? 'selected' : ''}>${esc(l)}</option>`).join('');
   $('#p-claude').checked = S.account.claude;
-  $('#p-keystate').textContent = S.has_key ? '— clé enregistrée' : '— aucune clé';
-  $('#p-key').value = '';
-  $('#p-cost').textContent = COST[S.account.model] || '';
+  $('#p-cstate').textContent = CSTATE[S.claude_state] || S.claude_state;
+  $('#p-connect').textContent = S.claude_state === 'ready' ? 'Changer de compte Claude' : 'Connecter mon compte Claude';
   $('#p-account').textContent = `${S.account.email} (${S.account.imap})`;
   $('#prefs').classList.remove('hidden');
 }
-$('#p-model').onchange = (e) => { $('#p-cost').textContent = COST[e.target.value] || ''; };
 $('#settings').onclick = openPrefs;
 $('#p-close').onclick = () => $('#prefs').classList.add('hidden');
+$('#p-connect').onclick = () => act({ action: 'claude_connect' }, 'Suis les étapes dans la fenêtre qui s’ouvre, puis clique sur « Vérifier ».', 6000);
+$('#p-recheck').onclick = async () => { await refresh(); openPrefs(); toast(S.claude_state === 'ready' ? 'Compte Claude connecté' : 'Pas encore connecté'); };
 $('#p-save').onclick = async () => {
-  const key = $('#p-key').value.trim();
-  if (!key && !S.has_key && $('#p-claude').checked) return toast('Colle d’abord ta clé d’API Claude.');
-  const r = await act({ action: 'claude', key, enabled: $('#p-claude').checked, model: $('#p-model').value },
+  const r = await act({ action: 'claude', enabled: $('#p-claude').checked, model: $('#p-model').value },
     $('#p-claude').checked ? 'Tri par Claude activé : les mails sont en cours de tri…' : 'Réglages enregistrés');
-  if (r.ok) { $('#prefs').classList.add('hidden'); await refresh(); setTimeout(refresh, 8000); }
+  if (r.ok) { $('#prefs').classList.add('hidden'); await refresh(); setTimeout(refresh, 15000); }
 };
-$('#p-forget').onclick = async () => { await act({ action: 'forget_key' }, 'Clé oubliée'); await refresh(); openPrefs(); };
 $('#p-change').onclick = () => {
   $('#prefs').classList.add('hidden');
   $('#s-email').value = S.account.email; $('#s-name').value = S.account.name;

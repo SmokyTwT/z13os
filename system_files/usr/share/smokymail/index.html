@@ -70,13 +70,13 @@
     <div class="modal-card">
       <h2>Réglages</h2>
       <h3>Tri automatique par Claude</h3>
-      <p class="hint">Claude lit l'expéditeur, l'objet et le début de chaque nouveau mail, puis le range (Important, Cours, Achats…) avec un résumé d'une ligne. Ces extraits sont envoyés au service Claude d'Anthropic avec ta clé d'API, rien d'autre. Sans clé, un tri simple se fait sur ce PC.</p>
-      <p class="hint">La clé se crée sur console.anthropic.com (« API Keys ») ; l'API est payante à l'usage, séparément de l'abonnement Claude.</p>
-      <label>Clé d'API Claude <span id="p-keystate" class="hint"></span><input id="p-key" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+      <p class="hint">Claude lit l'expéditeur, l'objet et le début de chaque nouveau mail, puis le range (Important, Cours, Achats…) avec un résumé d'une ligne. Il utilise ton compte Claude, le même que l'appli : pas de clé d'API, rien à payer en plus ; le tri compte simplement dans ton forfait (Pro ou Max). Claude n'a accès à rien d'autre : ni tes fichiers, ni Internet.</p>
+      <div class="row"><span>Compte Claude</span><b id="p-cstate"></b></div>
+      <div class="btns"><button id="p-connect" class="btn">Connecter mon compte Claude</button><button id="p-recheck" class="btn">Vérifier</button></div>
       <div class="row"><span>Trier avec Claude</span><label class="switch"><input id="p-claude" type="checkbox"><i></i></label></div>
       <div class="row"><span>Modèle</span><select id="p-model"></select></div>
-      <p class="hint" id="p-cost"></p>
-      <div class="btns"><button id="p-save" class="btn primary">Enregistrer</button><button id="p-forget" class="btn">Oublier la clé</button></div>
+      <p class="hint">Sans Claude, un tri simple se fait directement sur ce PC.</p>
+      <div class="btns"><button id="p-save" class="btn primary">Enregistrer</button></div>
       <h3>Compte</h3>
       <p class="hint" id="p-account"></p>
       <div class="btns"><button id="p-change" class="btn">Changer de compte</button><button id="p-logout" class="btn danger">Se déconnecter</button><button id="p-close" class="btn">Fermer</button></div>
