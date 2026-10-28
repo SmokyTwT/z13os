@@ -697,6 +697,7 @@ function endAction(e) {
       v.page.items = v.page.items.filter((it) => !gone.has(it));
       renderInk(v);
       recordItems(v, a.before);
+      fadeErased(v, [...gone]);
       toast(gone.size > 1 ? `${gone.size} éléments effacés` : 'Effacé', 900);
       return;
     }
@@ -739,7 +740,49 @@ function drawLive() {
   const a = action, v = a.v;
   const ctx = v.live.getContext('2d');
   ctx.clearRect(0, 0, v.live.width, v.live.height);
+  // Gribouillis repéré pendant le tracé : trait rouge + aperçu de ce qui va être effacé
+  if (a.tool === 'pen' && !a.shaped && S.cfg.pen.scribble !== false) {
+    const n = a.item.points.length / 3;
+    if (n >= 12 && n - (a.scribbleAt || 0) >= 4) {
+      a.scribbleAt = n;
+      a.scribble = isScribble(a.item.points) ? scribbleTargets(v.page.items, a.item.points, itemBounds) : null;
+    }
+    if (a.scribble && a.scribble.length) {
+      drawTargets(ctx, v, a.scribble, 0.85);
+      ctx.save(); ctx.globalAlpha = 0.55;
+      drawStroke(ctx, { ...a.item, color: SCRIBBLE_RED }, v.scale);
+      ctx.restore();
+      return;
+    }
+  }
   drawStroke(ctx, a.item, v.scale);
+}
+
+const SCRIBBLE_RED = '#ff4d5e';
+function drawTargets(ctx, v, items, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  for (const it of items) {
+    if (it.type === 'stroke') drawStroke(ctx, { ...it, color: SCRIBBLE_RED }, v.scale);
+    else {
+      const b = itemBounds(it);
+      ctx.fillStyle = 'rgba(255, 77, 94, 0.28)';
+      ctx.fillRect(b.x * v.scale, b.y * v.scale, b.w * v.scale, (b.h || 20) * v.scale);
+    }
+  }
+  ctx.restore();
+}
+
+// Ce qui vient d'être effacé par un gribouillis s'estompe en rouge (~0,3 s)
+function fadeErased(v, items) {
+  const ctx = v.live.getContext('2d');
+  const t0 = performance.now();
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / 320);
+    ctx.clearRect(0, 0, v.live.width, v.live.height);
+    if (k < 1 && !action) { drawTargets(ctx, v, items, 0.85 * (1 - k)); requestAnimationFrame(step); }
+  };
+  requestAnimationFrame(step);
 }
 
 // Maintenir immobile ~0,6 s : le trait devient une forme parfaite

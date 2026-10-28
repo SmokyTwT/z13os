@@ -1,0 +1,161 @@
+/* Smoky OS — thème des applis GNOME (GTK 4 / libadwaita : Paramètres, Fichiers,
+   Terminal, Logiciels…) assorti au fond d'écran « smoky » : noir profond, argent
+   lumineux, néon blanc. Copié dans ~/.config/gtk-4.0 à chaque connexion tant que
+   cette première ligne est conservée ; la modifier pour garder son propre thème. */
+
+/* libadwaita récent : variables CSS */
+:root {
+  --accent-bg-color: #d9d9df;
+  --accent-fg-color: #0e0e10;
+  --accent-color: #e4e4ea;
+  --window-bg-color: #111113;
+  --window-fg-color: #ececef;
+  --view-bg-color: #0c0c0d;
+  --view-fg-color: #ececef;
+  --headerbar-bg-color: #161618;
+  --headerbar-fg-color: #f2f2f5;
+  --headerbar-backdrop-color: #111113;
+  --sidebar-bg-color: rgba(16, 16, 18, 0.72);
+  --sidebar-backdrop-color: rgba(14, 14, 16, 0.78);
+  --secondary-sidebar-bg-color: rgba(16, 16, 18, 0.6);
+  --card-bg-color: rgba(255, 255, 255, 0.05);
+  --dialog-bg-color: #18181a;
+  --popover-bg-color: #18181a;
+}
+
+/* anciennes versions : couleurs nommées */
+@define-color accent_bg_color #d9d9df;
+@define-color accent_fg_color #0e0e10;
+@define-color accent_color #e4e4ea;
+@define-color window_bg_color #111113;
+@define-color view_bg_color #0c0c0d;
+@define-color headerbar_bg_color #161618;
+@define-color sidebar_bg_color rgba(16, 16, 18, 0.72);
+@define-color card_bg_color rgba(255, 255, 255, 0.05);
+@define-color dialog_bg_color #18181a;
+@define-color popover_bg_color #18181a;
+
+/* boutons principaux : dégradé argent avec un léger halo, comme les volutes */
+button.suggested-action,
+switch:checked,
+checkbutton check:checked,
+scale highlight {
+  background-image: linear-gradient(180deg, #ffffff, #c4c4cc);
+  color: #0e0e10;
+}
+button.suggested-action { box-shadow: 0 0 12px rgba(255, 255, 255, 0.18); }
+
+/* contour des fenêtres : liseré argenté et halo doux, comme les volutes */
+window.csd {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16),
+              0 0 22px rgba(255, 255, 255, 0.07),
+              0 12px 32px rgba(0, 0, 0, 0.6);
+}
+window.csd.maximized, window.csd.fullscreen, window.csd.tiled,
+window.csd.tiled-top, window.csd.tiled-left, window.csd.tiled-right, window.csd.tiled-bottom {
+  box-shadow: none;
+}
+headerbar { box-shadow: inset 0 -1px rgba(255, 255, 255, 0.08); }
+
+/* boutons fermer / réduire / agrandir : blanc néon luisant, comme le curseur */
+windowcontrols > button > image {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  -gtk-icon-shadow: 0 0 4px rgba(255, 255, 255, 0.9);
+}
+windowcontrols > button:hover > image {
+  background-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.75), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+windowcontrols > button.close:hover > image {
+  background-color: #ffffff;
+  color: #0e0e10;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.95);
+  -gtk-icon-shadow: none;
+}
+windowcontrols > button:active > image { background-color: rgba(255, 255, 255, 0.42); }
+
+/* ---- Fond fumé : les volutes « smoky » floutées derrière les fenêtres principales ---- */
+window.background:not(.popup):not(.tooltip):not(.dialog-action-area) {
+  background-image: linear-gradient(180deg, rgba(11, 11, 12, 0.66), rgba(11, 11, 12, 0.86)),
+                    url("smoky-bg.jpg");
+  background-size: cover;
+  background-position: center;
+}
+headerbar, .top-bar, toolbarview > .top-bar headerbar {
+  background-color: rgba(18, 18, 20, 0.55);
+}
+window.background:backdrop headerbar { background-color: rgba(14, 14, 16, 0.6); }
+
+/* ---- Barre latérale (Paramètres, Fichiers…) : ligne active en néon ---- */
+.navigation-sidebar > row, .sidebar-pane row {
+  border-radius: 12px;
+  margin: 1px 6px;
+}
+.navigation-sidebar > row:hover, .sidebar-pane row:hover { background-color: rgba(255, 255, 255, 0.06); }
+.navigation-sidebar > row:selected, .sidebar-pane row:selected {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), 0 0 12px rgba(255, 255, 255, 0.18);
+}
+.navigation-sidebar > row:selected image, .sidebar-pane row:selected image {
+  -gtk-icon-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+/* ---- Listes et cartes : verre fumé à liseré argenté ---- */
+.boxed-list, .boxed-list-separate > row, .card, list.content {
+  background-color: rgba(255, 255, 255, 0.045);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.11), 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+.boxed-list > row.activatable:hover, .boxed-list-separate > row.activatable:hover,
+.card.activatable:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+.boxed-list > row:focus-visible, .card:focus-visible { outline-color: rgba(255, 255, 255, 0.85); }
+preferencesgroup > box > .title, .heading { color: #f4f4f6; }
+.dim-label, .subtitle, row .subtitle { color: rgba(236, 236, 239, 0.62); }
+
+/* ---- Interrupteurs, cases, curseurs : argent qui s'allume ---- */
+switch { background-color: rgba(255, 255, 255, 0.12); }
+switch:checked { box-shadow: 0 0 10px rgba(255, 255, 255, 0.35); }
+switch > slider { background-color: #f4f4f6; box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
+switch:checked > slider { background-color: #0e0e10; box-shadow: none; }
+scale slider { background-color: #ffffff; box-shadow: 0 0 8px rgba(255, 255, 255, 0.6); }
+progressbar > trough > progress, levelbar block.filled { background-color: #e4e4ea; box-shadow: 0 0 6px rgba(255, 255, 255, 0.4); }
+
+/* ---- Champs de saisie et focus : liseré néon ---- */
+entry, spinbutton, .search-entry, searchentry {
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+entry:focus-within, spinbutton:focus-within, searchentry:focus-within {
+  outline-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.25);
+}
+*:focus-visible { outline-color: rgba(255, 255, 255, 0.85); }
+
+/* ---- Boutons ---- */
+button.flat:hover, button:hover { box-shadow: 0 0 8px rgba(255, 255, 255, 0.12); }
+button.pill, button.suggested-action { border-radius: 999px; }
+button.destructive-action { box-shadow: 0 0 10px rgba(255, 70, 70, 0.25); }
+
+/* ---- Menus, bulles, dialogues : verre fumé ---- */
+popover > contents, popover > arrow, .menu {
+  background-color: rgba(20, 20, 23, 0.94);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+dialog-host > dialog.floating sheet, window.dialog, .message-dialog, dialog > widget > sheet {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 0 26px rgba(255, 255, 255, 0.08), 0 14px 40px rgba(0, 0, 0, 0.7);
+}
+toast { background-color: rgba(20, 20, 23, 0.94); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 14px rgba(255, 255, 255, 0.15); }
+
+/* ---- Barres de défilement fines et argentées ---- */
+scrollbar slider { background-color: rgba(255, 255, 255, 0.28); }
+scrollbar slider:hover { background-color: rgba(255, 255, 255, 0.55); }
+
+/* ---- Sélection de texte et liens ---- */
+selection, text selection { background-color: rgba(255, 255, 255, 0.28); color: #ffffff; }
+link, .link { color: #f0f0f4; }

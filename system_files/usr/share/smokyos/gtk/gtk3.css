@@ -1,4 +1,5 @@
-/* Smoky OS — applis GTK 3 assorties au fond d'écran « smoky ». */
+/* Smoky OS — applis GTK 3 assorties au fond d'écran « smoky ». Copié dans ~/.config/gtk-3.0
+   à chaque connexion tant que cette première ligne est conservée. */
 @define-color theme_selected_bg_color #d9d9df;
 @define-color theme_selected_fg_color #0e0e10;
 @define-color accent_bg_color #d9d9df;
@@ -25,4 +26,20 @@ headerbar button.titlebutton:hover, .titlebar button.titlebutton:hover {
 headerbar button.titlebutton.close:hover, .titlebar button.titlebutton.close:hover {
   background-color: #ffffff;
   color: #0e0e10;
+}
+
+/* fond, listes, champs et sélection dans le même esprit que les applis GTK 4 */
+@define-color theme_fg_color #ececef;
+@define-color theme_text_color #ececef;
+@define-color borders rgba(255, 255, 255, 0.12);
+window.background { background-color: #111113; }
+headerbar, .titlebar { background-image: none; background-color: #161618; border-color: rgba(255, 255, 255, 0.08); }
+entry { background-color: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.16); }
+entry:focus { border-color: rgba(255, 255, 255, 0.85); box-shadow: 0 0 8px rgba(255, 255, 255, 0.25); }
+*:selected, selection { background-color: rgba(255, 255, 255, 0.24); color: #ffffff; }
+switch:checked { background-image: linear-gradient(180deg, #ffffff, #c4c4cc); color: #0e0e10; }
+scrollbar slider { background-color: rgba(255, 255, 255, 0.28); }
+.sidebar row:selected, placessidebar row:selected {
+  background-color: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }

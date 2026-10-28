@@ -202,6 +202,9 @@ enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'ap
 
 [org.gnome.shell.extensions.user-theme]
 name='Smoky'
+
+[org.gnome.Ptyxis.Profile]
+palette-id='smoky'
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
