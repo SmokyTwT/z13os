@@ -45,3 +45,22 @@ input[type=text], input[type=password] { width: 100%; height: 40px; padding: 0 1
 .seg { flex-shrink: 0; }
 .seg button { white-space: nowrap; }
 .row > span { flex: 1; min-width: 0; }
+
+/* --- Animations légères (opacité / transformations, jamais en boucle) --- */
+body.intro .card { animation: sc-up 380ms cubic-bezier(.2, .9, .3, 1) both; }
+body.intro .card:nth-child(3n+2) { animation-delay: 50ms; }
+body.intro .card:nth-child(3n+3) { animation-delay: 100ms; }
+body.intro .card:nth-child(n+4) { animation-delay: 140ms; }
+body.intro .card:nth-child(n+10) { animation-delay: 200ms; }
+.card { transition: border-color .25s, box-shadow .25s; }
+.card:hover { border-color: rgba(255,255,255,.2); box-shadow: 0 0 22px rgba(255,255,255,.05); }
+.btn, .seg button { transition: background .18s, box-shadow .2s, transform .1s, color .18s; }
+.btn:hover { box-shadow: 0 0 12px rgba(255,255,255,.14); }
+.btn:active, .seg button:active { transform: scale(.95); }
+.bar i { transition: width .6s ease-out; }
+.toast { animation: sc-rise 240ms cubic-bezier(.2, .9, .3, 1.1); }
+@keyframes sc-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sc-rise { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

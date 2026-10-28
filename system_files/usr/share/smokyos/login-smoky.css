@@ -48,3 +48,5 @@
 .login-dialog .user-widget-label,
 .login-dialog-prompt-label { color: #f2f2f4; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); }
 .login-dialog-message { color: #c9c9d2; }
+.login-dialog StEntry, .login-dialog-prompt-entry, .login-dialog .button, .login-dialog-button,
+.login-dialog-user-list-view .login-dialog-user-list-item { transition-duration: 200ms; }

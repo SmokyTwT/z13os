@@ -29,6 +29,7 @@ revenir à la version précédente depuis le menu de démarrage.
 | Sauvegardes | Déjà Dup (sauvegardes automatiques chiffrées de ton dossier personnel, vers Google Drive ou un disque) |
 | Démarrage et connexion | Écran de démarrage Smoky (Plymouth) : fond « smoky » et volute argentée ; écran de connexion au même fond, champs et boutons à liseré néon blanc |
 | Thème Smoky partout | Paramètres, Fichiers, Logiciels et toutes les applis GNOME : fond aux volutes « smoky » floutées, barre latérale et listes en verre fumé, interrupteurs, champs et sélection en néon blanc ; Terminal en palette « Smoky » ; mis à jour avec le système à chaque connexion (un thème personnel dans ~/.config/gtk-4.0/gtk.css sans la ligne « Smoky OS » est respecté) |
+| Animations légères | Transitions courtes au survol et au clic (bureau, dock, centre de contrôle, connexion, applis GNOME), apparition en fondu des menus et notifications, cartes de Smoky Center en cascade à l'ouverture, ouvertures douces dans Smoky Notes ; uniquement opacité, couleurs et halos (calculés par la puce graphique), jamais en boucle ; tout se coupe avec « Animations » dans Smoky Center |
 | Notes sauvegardées | Dossier **Notes** synchronisé toutes les 5 min avec Google Drive > « Notes Z13 » |
 
 ## Obtenir l'ISO (GitHub la construit pour toi, gratuitement)

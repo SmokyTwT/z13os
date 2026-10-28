@@ -215,6 +215,9 @@ async function refresh() {
   }
 }
 
+// entrée des cartes en cascade : seulement à l'ouverture, pas à chaque rafraîchissement
+document.body.classList.add('intro');
+setTimeout(() => document.body.classList.remove('intro'), 1200);
 refresh();
 // rafraîchissement plus rapide pendant une mise à jour
 // fenêtre cachée ou réduite : aucune interrogation (économise la batterie)

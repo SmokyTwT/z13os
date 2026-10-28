@@ -155,3 +155,28 @@
   background-color: rgba(255, 255, 255, 0.16);
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
 }
+
+/* --- Animations légères : transitions courtes déclenchées au survol ou au clic seulement
+   (aucune animation en boucle). Coupées avec le réglage « Animations » de Smoky Center. --- */
+.quick-toggle, .quick-toggle-arrow, .quick-settings .icon-button,
+.popup-menu-item, .message, .message-list-clear-button,
+#panel .panel-button, .search-entry, .dash-label,
+#dashtodockContainer .app-well-app .overview-icon,
+.grid-search-result .overview-icon, .app-well-app .overview-icon,
+.login-dialog-button, .modal-dialog-button-box .button, .button {
+  transition-duration: 180ms;
+}
+.quick-slider .slider { transition-duration: 120ms; }
+.workspace-thumbnail, .window-caption { transition-duration: 200ms; }
+
+/* survol des icônes (dock, grille d'applis, recherche) : halo argenté qui s'allume en douceur */
+.app-well-app:hover .overview-icon, .grid-search-result:hover .overview-icon {
+  background-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.16);
+}
+#dashtodockContainer .app-well-app:hover .overview-icon { box-shadow: 0 0 18px rgba(255, 255, 255, 0.22); }
+/* notifications : liseré qui s'éclaire au survol */
+.message:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 14px rgba(255, 255, 255, 0.10); }
+/* bouton actif du centre de contrôle : le halo s'intensifie au survol */
+.quick-toggle:checked:hover { box-shadow: 0 0 20px rgba(255, 255, 255, 0.38); }
+.quick-settings .icon-button:hover { background-color: rgba(255, 255, 255, 0.14); box-shadow: 0 0 12px rgba(255, 255, 255, 0.16); }

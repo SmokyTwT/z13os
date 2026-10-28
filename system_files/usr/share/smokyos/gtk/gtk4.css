@@ -159,3 +159,19 @@ scrollbar slider:hover { background-color: rgba(255, 255, 255, 0.55); }
 /* ---- Sélection de texte et liens ---- */
 selection, text selection { background-color: rgba(255, 255, 255, 0.28); color: #ffffff; }
 link, .link { color: #f0f0f4; }
+
+/* ---- Animations légères : transitions courtes au survol / au clic (aucune boucle) ;
+   coupées avec le réglage « Animations » de Smoky Center ---- */
+button, row, .navigation-sidebar > row, .sidebar-pane row, .card, entry, searchentry,
+spinbutton, switch, switch > slider, checkbutton check, scale slider, tab, stackswitcher > button,
+windowcontrols > button > image, popover > contents {
+  transition: background-color 180ms ease-out, box-shadow 220ms ease-out, color 180ms ease-out,
+              outline-color 180ms ease-out, border-color 180ms ease-out;
+}
+/* un clic « s'enfonce » brièvement */
+button:active, .card.activatable:active, row.activatable:active { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
+/* menus, bulles et dialogues : apparition en fondu */
+popover > contents { animation: smoky-fade 160ms ease-out; }
+toast { animation: smoky-rise 220ms ease-out; }
+@keyframes smoky-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes smoky-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

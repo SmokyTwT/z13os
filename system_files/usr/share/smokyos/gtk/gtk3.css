@@ -43,3 +43,8 @@ scrollbar slider { background-color: rgba(255, 255, 255, 0.28); }
   background-color: rgba(255, 255, 255, 0.14);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
+
+/* animations légères : transitions courtes au survol / au clic */
+button, entry, row, switch, switch slider, scale slider, decoration button.titlebutton {
+  transition: background-color 180ms ease-out, box-shadow 220ms ease-out, color 180ms ease-out, border-color 180ms ease-out;
+}

@@ -194,3 +194,20 @@ input, select { font: inherit; color: inherit; }
 .due span { font-size: 12px; color: var(--fg-2); }
 .due.soon { border-color: rgba(255, 255, 255, .55); box-shadow: 0 0 14px rgba(255, 255, 255, .15); }
 .due-title { flex: none; align-self: center; font-size: 12px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--fg-2); }
+
+/* --- Animations légères : opacité et transformations uniquement (calculées par la carte
+   graphique), jouées à l'ouverture ou au toucher, jamais en boucle --- */
+.view { animation: sn-in 240ms ease-out; }
+.modal { animation: sn-fade 160ms ease-out; }
+.modal-card { animation: sn-pop 220ms cubic-bezier(.2, .9, .3, 1.15); }
+.menu { animation: sn-pop 150ms ease-out; transform-origin: top left; }
+.toast { animation: sn-rise 240ms cubic-bezier(.2, .9, .3, 1.1); }
+.btn:active, .icon-btn:active, .tool:active, .swatch:active { transform: scale(.93); }
+.tool.active, .tool[aria-pressed="true"] { transition: background .2s, color .2s, box-shadow .25s; }
+@keyframes sn-in { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes sn-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sn-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes sn-rise { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
