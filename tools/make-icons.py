@@ -194,7 +194,12 @@ icons["agenda"] = ('<rect x="14" y="17" width="36" height="30" rx="5" ' + S + ' 
                    '<path d="M14 25 H50 M23 13 v8 M41 13 v8" ' + S + ' stroke-width="2.6"/>'
                    '<path d="M24 36 l5 5 l11 -11" ' + S + ' stroke-width="3"/>', "#c7a3e8")
 FILES["agenda"] = "smoky-agenda.svg"
-KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail", "mail", "agenda"}
+# Synchro des notes avec Google Drive : nuage et deux flèches qui tournent
+icons["drivesync"] = ('<path d="M22 41 h21 a8 8 0 0 0 1 -15.9 a11 11 0 0 0 -21.3 -2.6 a7.5 7.5 0 0 0 -0.7 18.5 z" ' + S + ' stroke-width="2.6"/>'
+                      '<path d="M27.5 31.5 a5 5 0 0 1 8.6 -2.8 M36.5 33 a5 5 0 0 1 -8.6 2.8" ' + S + ' stroke-width="2.2"/>'
+                      '<path d="M36.6 26 v3 h-3 M27.4 38.6 v-3 h3" ' + S + ' stroke-width="2.2"/>', "#34a853")
+FILES["drivesync"] = "smoky-drive-sync.svg"
+KEEP = {"tf1", "m6", "moodle", "notes", "home", "center", "whatsapp", "portail", "mail", "agenda", "drivesync"}
 icons = {k: v for k, v in icons.items() if k in KEEP}
 
 os.makedirs(OUT, exist_ok=True)
