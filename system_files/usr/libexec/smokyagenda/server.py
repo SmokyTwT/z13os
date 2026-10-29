@@ -57,7 +57,8 @@ DEFAULTS = {
     "gym_per_week": 3, "gym_min": 90, "gym_from": "17:00", "gym_to": "21:30",
     "groceries_day": 5, "groceries_time": "10:00", "groceries_min": 60,
     "revision_weekday_min": 120, "revision_weekend_min": 180, "block_min": 50,
-    "subjects": [], "reminders": True, "remind_before": 10, "model": "opus",
+    "subjects": ["Algèbre", "Analyse", "Anglais", "Allemand", "Optique", "Électro", "INSA Culture", "Algo",
+                 "BDR", "MNA", "Méca", "Magnéto", "CDM"], "reminders": True, "remind_before": 10, "model": "opus",
 }
 
 
@@ -78,7 +79,10 @@ def jsave(path, data):
 
 
 def settings():
-    return jload(SETTINGS, DEFAULTS)
+    conf = jload(SETTINGS, DEFAULTS)
+    if not conf["subjects"]:                     # réglages enregistrés avant la liste des matières
+        conf["subjects"] = list(DEFAULTS["subjects"])
+    return conf
 
 
 def store():

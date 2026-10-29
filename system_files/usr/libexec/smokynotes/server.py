@@ -14,6 +14,7 @@ import secrets
 import shutil
 import sys
 import time
+import unicodedata
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
@@ -227,8 +228,56 @@ class Handler(BaseHTTPRequestHandler):
         return self.fail(404, "route inconnue")
 
 
+# Carnets des matières, créés une fois (classeur « Cours ») ; un carnet supprimé ne revient pas.
+SUBJECTS_VERSION = 1
+SUBJECTS = [  # (titre, papier : grid = quadrillé pour les sciences, lined = ligné)
+    ("Algèbre", "grid"), ("Analyse", "grid"), ("Anglais", "lined"), ("Allemand", "lined"),
+    ("Optique", "grid"), ("Électro", "grid"), ("INSA Culture", "lined"), ("Algo", "grid"),
+    ("BDR", "grid"), ("MNA", "grid"), ("Méca", "grid"), ("Magnéto", "grid"), ("CDM", "grid"),
+]
+COVERS = ["ink", "slate", "ember", "sage", "graphite", "ash", "ivory", "onyx"]
+PAGE_A4 = (595, 842)
+
+
+def _key(title):
+    t = unicodedata.normalize("NFKD", str(title or "")).encode("ascii", "ignore").decode()
+    return t.lower().strip()
+
+
+def seed_subjects():
+    marker = DATA_DIR / f".matieres-{SUBJECTS_VERSION}"
+    if marker.exists():
+        return
+    have = set()
+    for meta in DATA_DIR.glob("*/meta.json"):
+        try:
+            have.add(_key(json.loads(meta.read_text()).get("title")))
+        except (OSError, ValueError):
+            pass
+    now = int(time.time() * 1000)
+    for i, (title, template) in enumerate(SUBJECTS):
+        if _key(title) in have:
+            continue
+        nid = f"n{now + i:x}-{secrets.token_hex(3)}"
+        d = DATA_DIR / nid
+        page = {"id": f"p{now + i:x}-{secrets.token_hex(3)}", "w": PAGE_A4[0], "h": PAGE_A4[1],
+                "template": template, "paper": "white", "bg": None, "items": [], "marked": False}
+        nb = {"id": nid, "version": 1, "title": title, "cover": COVERS[i % len(COVERS)],
+              "created": now + i, "updated": now + i, "favorite": False, "folder": "Cours",
+              "defaults": {"size": "a4", "template": template, "paper": "white"}, "pages": [page]}
+        meta = {k: nb[k] for k in ("id", "title", "cover", "created", "updated", "favorite", "folder")}
+        meta["pages"] = 1
+        write_atomic(d / "notebook.json", json.dumps(nb, separators=(",", ":")).encode())
+        write_atomic(d / "meta.json", json.dumps(meta).encode())
+    marker.touch()
+
+
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        seed_subjects()
+    except OSError as e:
+        print(f"Carnets des matières non créés : {e}", file=sys.stderr)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
     TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
