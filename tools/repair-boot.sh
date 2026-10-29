@@ -20,6 +20,16 @@ if ! rpm-ostree status --booted | grep -q 'ghcr.io/smokytwt/z13os'; then
   ask "Basculer dessus maintenant (téléchargement) ?" && bootc switch ghcr.io/smokytwt/z13os:latest
 fi
 
+# Les entrées de démarrage doivent être écrites telles quelles (le menu GRUB les lit
+# avec blscfg) : sans ce réglage, ostree tente de régénérer la config GRUB à l'arrêt,
+# échoue, et la mise à jour préparée est perdue.
+echo "== Écriture des entrées de démarrage"
+echo "Dernier arrêt :"; journalctl -b -1 -u ostree-finalize-staged.service --no-pager -q 2>/dev/null | tail -4 || true
+if [ "$(ostree config --repo=/ostree/repo get sysroot.bootloader 2>/dev/null || true)" != none ]; then
+  ostree config --repo=/ostree/repo set sysroot.bootloader none
+  echo "Réglé (sysroot.bootloader=none)."
+fi
+
 # 1. Paramètres du noyau manquants dans l'entrée de démarrage
 echo "== Paramètres du noyau"
 ARGS=(--append-if-missing="root=UUID=$ROOT_UUID" --append-if-missing=rw)
@@ -29,6 +39,14 @@ if rpm-ostree kargs | grep -q "root=UUID=$ROOT_UUID"; then
 else
   rpm-ostree kargs "${ARGS[@]}"
 fi
+
+# Entrées déjà présentes : on y ajoute aussi les paramètres, pour que le prochain
+# démarrage marche même si la mise à jour préparée n'était pas appliquée.
+ROOTARGS="root=UUID=$ROOT_UUID${SUBVOL:+ rootflags=subvol=$SUBVOL} rw"
+for f in /boot/loader/entries/*.conf; do
+  [ -f "$f" ] || continue
+  grep -q '^options.* root=' "$f" || sed -i "s|^options |options $ROOTARGS |" "$f"
+done
 
 # 2. Partition EFI
 ESP=$(lsblk -nrpo NAME,PARTTYPE | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')
