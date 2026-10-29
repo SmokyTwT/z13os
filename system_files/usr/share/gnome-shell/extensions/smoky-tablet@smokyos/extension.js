@@ -46,14 +46,48 @@ class TabletToggle extends QuickToggle {
     }
 });
 
+// Tuiles inutiles retirées du centre de contrôle : « Clavier » (rétroéclairage, déjà réglé
+// par asusd et sans objet avec un clavier Bluetooth)
+const HIDDEN = [/KeyboardBrightness/i, /^Clavier$|^Keyboard$/i];
+
+function hideUseless(actor) {
+    const name = actor.constructor?.name ?? '';
+    const title = actor.title ?? '';
+    if (!HIDDEN.some(re => re.test(name) || re.test(title)))
+        return;
+    actor.hide();
+    // GNOME la réaffiche quand le rétroéclairage change : on la recache aussitôt
+    actor._smokyHideSig ??= actor.connect('notify::visible', () => {
+        if (actor.visible)
+            actor.hide();
+    });
+}
+
 export default class SmokyTablet extends Extension {
     enable() {
         this._indicator = new SystemIndicator();
         this._indicator.quickSettingsItems.push(new TabletToggle());
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
+        // les tuiles arrivent parfois après le démarrage : on surveille la grille
+        const grid = Main.panel.statusArea.quickSettings.menu._grid;
+        if (grid) {
+            grid.get_children().forEach(hideUseless);
+            this._gridSig = grid.connect('child-added', (_g, child) => hideUseless(child));
+            this._grid = grid;
+        }
     }
 
     disable() {
+        if (this._grid && this._gridSig)
+            this._grid.disconnect(this._gridSig);
+        this._grid?.get_children().forEach(c => {
+            if (c._smokyHideSig) {
+                c.disconnect(c._smokyHideSig);
+                delete c._smokyHideSig;
+                c.show();
+            }
+        });
+        this._grid = this._gridSig = null;
         this._indicator.quickSettingsItems.forEach(i => i.destroy());
         this._indicator.destroy();
         this._indicator = null;

@@ -110,9 +110,8 @@ fi
 FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'smoky-center.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
 # --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
-# gsconnect : relie ton téléphone (notifications, fichiers, presse-papiers)
 # caffeine : empêche la veille d'un clic (cours en visio, lecture)
-for ext in dash-to-dock blur-my-shell appindicator gsconnect caffeine; do
+for ext in dash-to-dock blur-my-shell appindicator caffeine; do
   dnf -y install "gnome-shell-extension-$ext" || echo "AVERTISSEMENT : extension $ext indisponible"
 done
 
@@ -219,7 +218,7 @@ show-in-lock-screen=false
 
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'smoky-maximize@smokyos', 'smoky-home@smokyos', 'smoky-tablet@smokyos', 'smoky-lockinfo@smokyos']
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'caffeine@patapon.info', 'smoky-maximize@smokyos', 'smoky-home@smokyos', 'smoky-tablet@smokyos', 'smoky-lockinfo@smokyos']
 
 [org.gnome.shell.extensions.user-theme]
 name='Smoky'
@@ -254,10 +253,9 @@ rm -rf "$XH"
 # --- Pare-feu ------------------------------------------------------------------
 # Fedora ouvre par défaut les ports 1025-65535 (zone FedoraWorkstation). Sur des Wi-Fi
 # publics, on passe en zone « public » : rien n'est joignable depuis le réseau, sauf la
-# découverte locale (mDNS : Google Home, Chromecast) et GSConnect (téléphone).
+# découverte locale (mDNS : Google Home, Chromecast).
 # Smoky Notes et Smoky Home (port 8123) ne sont donc accessibles que depuis ce PC.
 firewall-offline-cmd --set-default-zone=public
-firewall-offline-cmd --zone=public --add-service=kdeconnect || true
 firewall-offline-cmd --zone=public --remove-service=ssh || true
 
 # --- Écran de connexion Smoky (GDM) ----------------------------------------------
