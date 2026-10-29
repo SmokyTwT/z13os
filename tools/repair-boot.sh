@@ -14,6 +14,12 @@ ROOT_UUID=$(findmnt -no UUID /sysroot)
 SUBVOL=$(findmnt -no OPTIONS /sysroot | tr ',' '\n' | sed -n 's/^subvol=\/*//p')
 echo "/boot : $BOOT_UUID   système : $ROOT_UUID (sous-volume « ${SUBVOL:-aucun} »)"
 
+# 0. Mises à jour depuis le dépôt de Smoky OS (avant les kargs : une bascule repart du système démarré)
+if ! rpm-ostree status --booted | grep -q 'ghcr.io/smokytwt/z13os'; then
+  echo "L'image suivie n'est pas ghcr.io/smokytwt/z13os:latest (les mises à jour ne marcheraient pas)."
+  ask "Basculer dessus maintenant (téléchargement) ?" && bootc switch ghcr.io/smokytwt/z13os:latest
+fi
+
 # 1. Paramètres du noyau manquants dans l'entrée de démarrage
 echo "== Paramètres du noyau"
 ARGS=(--append-if-missing="root=UUID=$ROOT_UUID" --append-if-missing=rw)
@@ -85,18 +91,14 @@ fi
 FED=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\? \+Fedora.*/\1/p' | head -1)
 if [ -n "$FED" ]; then
   ORDER=$(efibootmgr | sed -n 's/^BootOrder: //p')
-  NEW=$(echo "$FED,$ORDER" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd,)
+  EXIST=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\? .*/\1/p' | paste -sd' ')
+  NEW=$(echo "$FED,$ORDER" | tr ',' '\n' | awk -v ok=" $EXIST " 'NF && index(ok," "$0" ") && !seen[$0]++' | paste -sd,)
   if [ "$NEW" != "$ORDER" ]; then
     efibootmgr -q -o "$NEW" && echo "Smoky OS passe en premier." \
       || echo "Le firmware refuse de changer l'ordre : mets « Fedora » en premier dans le BIOS (F2)."
   fi
 fi
 
-# 6. Mises à jour depuis le dépôt de Smoky OS
-if ! rpm-ostree status --booted | grep -q 'ghcr.io/smokytwt/z13os'; then
-  echo "L'image suivie n'est pas ghcr.io/smokytwt/z13os:latest (les mises à jour ne marcheraient pas)."
-  ask "Basculer dessus maintenant (téléchargement) ?" && bootc switch ghcr.io/smokytwt/z13os:latest
-fi
 
 echo
 echo "Terminé. Redémarre : le menu Smoky OS / Windows doit apparaître tout seul."
