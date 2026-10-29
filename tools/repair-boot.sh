@@ -18,7 +18,11 @@ echo "/boot : $BOOT_UUID   système : $ROOT_UUID (sous-volume « ${SUBVOL:-aucun
 echo "== Paramètres du noyau"
 ARGS=(--append-if-missing="root=UUID=$ROOT_UUID" --append-if-missing=rw)
 [ -n "$SUBVOL" ] && ARGS+=(--append-if-missing="rootflags=subvol=$SUBVOL")
-rpm-ostree kargs "${ARGS[@]}"
+if rpm-ostree kargs | grep -q "root=UUID=$ROOT_UUID"; then
+  echo "Déjà en place."
+else
+  rpm-ostree kargs "${ARGS[@]}"
+fi
 
 # 2. Partition EFI
 ESP=$(lsblk -nrpo NAME,PARTTYPE | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')
@@ -69,7 +73,9 @@ echo "== Entrées du firmware"
 efibootmgr
 CACHY=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\? \+[Cc]achy[Oo][Ss].*/\1/p')
 for n in $CACHY; do
-  ask "Supprimer l'entrée de démarrage CachyOS (Boot$n) ?" && efibootmgr -q -b "$n" -B
+  if ask "Supprimer l'entrée de démarrage CachyOS (Boot$n) ?"; then
+    efibootmgr -q -b "$n" -B || echo "Le firmware refuse la suppression : elle se fera depuis le BIOS (sans gravité)."
+  fi
 done
 if [ -d "$ESPDIR/EFI/cachyos" ] && ask "Supprimer le dossier EFI/cachyos (restes de CachyOS) ?"; then
   rm -rf "$ESPDIR/EFI/cachyos"
@@ -80,7 +86,10 @@ FED=$(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\? \+Fedora.*/\1/p' | he
 if [ -n "$FED" ]; then
   ORDER=$(efibootmgr | sed -n 's/^BootOrder: //p')
   NEW=$(echo "$FED,$ORDER" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd,)
-  [ "$NEW" != "$ORDER" ] && efibootmgr -q -o "$NEW"
+  if [ "$NEW" != "$ORDER" ]; then
+    efibootmgr -q -o "$NEW" && echo "Smoky OS passe en premier." \
+      || echo "Le firmware refuse de changer l'ordre : mets « Fedora » en premier dans le BIOS (F2)."
+  fi
 fi
 
 # 6. Mises à jour depuis le dépôt de Smoky OS
