@@ -14,7 +14,8 @@ mkdir -p "$STATE"
 # Spotify en Wayland dessine lui-même sa barre de titre (boutons bleus de Chromium, hors thème) :
 # en XWayland, c'est GNOME qui la dessine, au thème Smoky (net grâce à xwayland-native-scaling).
 # Appliqué à chaque démarrage (réglage léger), même quand la liste des applis n'a pas changé.
-flatpak override --system --nosocket=wayland com.spotify.Client 2>/dev/null || true
+# (--socket=x11 indispensable : sans Wayland, « fallback-x11 » ne donne pas X11 et Spotify ne s'ouvre plus)
+flatpak override --system --nosocket=wayland --socket=x11 com.spotify.Client 2>/dev/null || true
 
 [[ "$(cat "$STATE/apps.version" 2>/dev/null)" == "$APPS_VERSION" ]] && exit 0
 
