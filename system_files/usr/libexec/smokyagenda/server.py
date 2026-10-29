@@ -35,6 +35,8 @@ DATA = Path(os.environ.get("SMOKYAGENDA_DATA", Path.home() / ".local/share/smoky
 SETTINGS = DATA / "settings.json"
 STORE = DATA / "agenda.json"
 ICS_CACHE = DATA / "edt-cache.ics"
+ICS_FILE = DATA / "edt-import.ics"           # fichier .ics importé à la main (sans lien)
+ICS_MAX = 5 * 1024 * 1024
 DEADLINES = Path.home() / ".local/share/smoky-moodle/echeances.json"
 EXPORT = Path.home() / "Notes" / "Planning Smoky.ics"
 TOKEN = secrets.token_urlsafe(24)
@@ -143,7 +145,11 @@ def parse_ics(text):
             name, *raw = head.split(";")
             params = dict(p.split("=", 1) for p in raw if "=" in p)
             if name in ("DTSTART", "DTEND"):
-                dt, allday = ics_time(value.strip(), params)
+                try:
+                    dt, allday = ics_time(value.strip(), params)
+                except ValueError:                              # date illisible : on saute cet événement
+                    cur = None
+                    continue
                 cur["start" if name == "DTSTART" else "end"] = dt
                 cur["allday"] = allday
             elif name in ("SUMMARY", "LOCATION", "DESCRIPTION"):
@@ -152,6 +158,12 @@ def parse_ics(text):
 
 
 def fetch_ics(force=False):
+    """Cours du lien iCal + ceux du fichier importé."""
+    imported = ICS_FILE.read_text(errors="replace") if ICS_FILE.exists() else ""
+    return fetch_url_ics(force) + "\n" + imported
+
+
+def fetch_url_ics(force=False):
     url = settings()["ics_url"]
     if not url:
         return ""
@@ -162,7 +174,7 @@ def fetch_ics(force=False):
         req = urllib.request.Request(url, headers={"User-Agent": "SmokyAgenda/1.0"})
         with urllib.request.urlopen(req, timeout=30) as r:
             body = r.read(5 * 1024 * 1024 + 1)
-        if len(body) > 5 * 1024 * 1024 or b"BEGIN:VCALENDAR" not in body[:2000]:
+        if len(body) > ICS_MAX or b"BEGIN:VCALENDAR" not in body[:2000]:
             raise ValueError("ce lien ne renvoie pas un calendrier iCal")
         DATA.mkdir(parents=True, exist_ok=True)
         ICS_CACHE.write_bytes(body)
@@ -502,7 +514,8 @@ def state(offset):
     return {"week_start": start.isoformat(), "today": date.today().isoformat(), "now": iso(datetime.now()),
             "settings": settings(), "fixed": fixed_events(s0, s1), "plan": plan, "tasks": st["tasks"],
             "planned_by": st["planned_by"], "types": TYPES, "days": DAYS, "models": MODELS, "claude": claude_ok,
-            "edt_ok": bool(settings()["ics_url"]) and ICS_CACHE.exists(), "export": str(EXPORT)}
+            "edt_ok": bool(settings()["ics_url"]) and ICS_CACHE.exists(), "export": str(EXPORT),
+            "edt_file": ICS_FILE.exists()}
 
 
 TIME_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -556,13 +569,28 @@ def act(a):
             jsave(SETTINGS, conf)
             if a.get("values", {}).get("ics_url") is not None:
                 ICS_CACHE.unlink(missing_ok=True)
-                if conf["ics_url"] and not fetch_ics(force=True):
+                if conf["ics_url"] and not fetch_url_ics(force=True):
                     return {"ok": False, "message": "Emploi du temps introuvable à ce lien (vérifie qu'il s'agit d'un lien iCal)."}
             schedule_reminders()
             return {"ok": True}
         if kind == "plan":
             n = plan_week(off, by_claude=bool(a.get("claude")))
             return {"ok": True, "message": f"{n} blocs planifiés"}
+        if kind == "import_ics":
+            text = str(a.get("content", ""))
+            if len(text.encode()) > ICS_MAX or "BEGIN:VCALENDAR" not in text[:2000]:
+                return {"ok": False, "message": "Ce fichier n'est pas un calendrier .ics."}
+            n = len(parse_ics(text))
+            if not n:
+                return {"ok": False, "message": "Aucun cours trouvé dans ce fichier."}
+            DATA.mkdir(parents=True, exist_ok=True)
+            ICS_FILE.write_text(text)
+            schedule_reminders()
+            return {"ok": True, "message": f"{n} cours importé{'s' if n > 1 else ''}"}
+        if kind == "remove_ics":
+            ICS_FILE.unlink(missing_ok=True)
+            schedule_reminders()
+            return {"ok": True, "message": "Fichier retiré"}
         if kind == "refresh_edt":
             fetch_ics(force=True)
             return {"ok": True}
@@ -673,7 +701,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.ok_api() or self.path != "/api/action":
             return self.send(403, {"error": "refusé"})
         try:
-            a = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 100000)))
+            # assez grand pour un fichier .ics importé (encodé en JSON)
+            a = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 2 * ICS_MAX)))
         except ValueError:
             return self.send(400, {"error": "requête illisible"})
         try:

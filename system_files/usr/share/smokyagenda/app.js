@@ -115,7 +115,7 @@ function render() {
   document.querySelectorAll('[data-del]').forEach((b) => { b.onclick = async () => { await act({ action: 'delete', id: b.dataset.del }); refresh(); }; });
   $('#legend').innerHTML = Object.entries(S.types).map(([k, l]) => `<span><i class="dot" style="color:var(--${k})"></i>${esc(l)}</span>`).join('');
   $('#info').textContent = (S.settings.ics_url ? (S.edt_ok ? 'Emploi du temps relié. ' : 'Emploi du temps : lien enregistré, pas encore lu. ')
-    : 'Relie ton emploi du temps dans les réglages. ') + (S.planned_by === 'claude' ? 'Dernier planning fait par Claude. ' : '')
+    : S.edt_file ? 'Emploi du temps importé depuis un fichier. ' : 'Relie ton emploi du temps dans les réglages. ') + (S.planned_by === 'claude' ? 'Dernier planning fait par Claude. ' : '')
     + `Le planning est aussi dans Notes/Planning Smoky.ics.`;
   $('#plan-claude').disabled = !S.claude;
   $('#plan-claude').title = S.claude ? 'Claude organise ta semaine (ton compte Claude)' : 'Connecte d’abord ton compte Claude (Smoky Mail → Réglages)';
@@ -213,11 +213,24 @@ function openPrefs() {
   $('#p-ics').value = st.ics_url;
   $('#p-subjects').value = st.subjects.join(', ');
   $('#p-reminders').checked = st.reminders;
+  $('#p-icsremove').hidden = !S.edt_file;
   $('#p-claude').textContent = S.claude ? '✅ Compte Claude connecté : « ✨ Avec Claude » organise ta semaine (ça compte dans ton forfait).'
     : 'Pour « ✨ Avec Claude », connecte ton compte Claude dans Smoky Mail → Réglages (une seule fois pour tout Smoky OS).';
   $('#prefs').classList.remove('hidden');
 }
 $('#prefs-btn').onclick = openPrefs;
+$('#p-icsfile').onchange = async (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  if (f.size > 5 * 1024 * 1024) { toast('Fichier trop gros (5 Mo maximum)', 5000); return; }
+  const r = await act({ action: 'import_ics', content: await f.text() });
+  if (r.ok) { await refresh(); $('#p-icsremove').hidden = false; }
+};
+$('#p-icsremove').onclick = async () => {
+  const r = await act({ action: 'remove_ics' });
+  if (r.ok) { await refresh(); $('#p-icsremove').hidden = true; }
+};
 $('#p-cancel').onclick = () => $('#prefs').classList.add('hidden');
 $('#p-save').onclick = async () => {
   const values = { ics_url: $('#p-ics').value, subjects: $('#p-subjects').value, reminders: $('#p-reminders').checked };
