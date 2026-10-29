@@ -1,6 +1,10 @@
 {
-  "BrowserThemeColor": "#111113",
-  "AudioCaptureAllowedUrls": ["http://127.0.0.1:47813"],
+  "AudioCaptureAllowedUrls": [
+    "http://127.0.0.1:47813"
+  ],
   "BackgroundModeEnabled": false,
-  "BatterySaverModeAvailability": 1
+  "BatterySaverModeAvailability": 1,
+  "ExtensionInstallForcelist": [
+    "dgniaklnedgaocgcclfbmloppngbpppk;https://raw.githubusercontent.com/SmokyTwT/z13os/main/chrome-theme/updates.xml"
+  ]
 }

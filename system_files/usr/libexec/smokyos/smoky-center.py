@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
@@ -147,6 +148,17 @@ try:
 except (ImportError, ValueError):
     Gio = None
 _SETTINGS = {}
+# Ce serveur n'a pas de boucle GLib : sans elle, GSettings ne voit jamais les changements faits
+# ailleurs (menu en haut à droite, Paramètres…) et affichait d'anciennes valeurs. On traite les
+# notifications en attente avant chaque lecture, sous verrou (plusieurs requêtes en parallèle).
+_GLOCK = threading.Lock()
+
+
+def _pump():
+    ctx = GLib.MainContext.default()
+    for _ in range(200):
+        if not ctx.iteration(False):
+            break
 
 
 def gsettings(schema):
@@ -160,6 +172,14 @@ def gsettings(schema):
 
 def gset_state():
     out = {}
+    if Gio is None:
+        return out
+    with _GLOCK:
+        _pump()
+        return _gset_read(out)
+
+
+def _gset_read(out):
     for name, (schema, key, _t, _ok) in GSET.items():
         st = gsettings(schema)
         if st is not None and st.props.settings_schema.has_key(key):
@@ -168,6 +188,14 @@ def gset_state():
 
 
 def gset_write(name, value):
+    if Gio is None:
+        return False
+    with _GLOCK:
+        _pump()
+        return _gset_write(name, value)
+
+
+def _gset_write(name, value):
     if name not in GSET or isinstance(value, (dict, list)):
         return False
     schema, key, typ, allowed = GSET[name]
@@ -235,10 +263,16 @@ def do_clean():
     spawn("notify-send", "-a", "Smoky OS", "-i", "user-trash", "Nettoyage terminé", f"{human(freed)} libérés.")
 
 
+_WINDOWS = []
+
+
 def windows_entry():
+    if _WINDOWS:                                     # les entrées du firmware ne changent pas en cours de route
+        return _WINDOWS[0]
     _, out = run("efibootmgr", timeout=5)
     m = re.search(r"^Boot([0-9A-Fa-f]{4})\*?\s+Windows Boot Manager", out, re.M)
-    return m.group(1) if m else None
+    _WINDOWS.append(m.group(1) if m else None)
+    return _WINDOWS[0]
 
 
 _STORAGE = {"at": 0, "data": {}}
@@ -270,19 +304,37 @@ def sysinfo():
 
 
 # --- État de la machine -------------------------------------------------------------------
+_MOODLE = {"at": 0, "data": {"connected": False}}
+_POOL = ThreadPoolExecutor(max_workers=8)
+
+
+def moodle_status():
+    """Lance Python + le trousseau : relu au plus toutes les 60 s (ou après une action Moodle)."""
+    if time.time() - _MOODLE["at"] > 60:
+        code, out = run("python3", f"{LIBEXEC}/smoky-moodle.py", "status", timeout=10)
+        try:
+            _MOODLE["data"] = json.loads(out) if code == 0 else {"connected": False}
+        except ValueError:
+            _MOODLE["data"] = {"connected": False}
+        _MOODLE["at"] = time.time()
+    return _MOODLE["data"]
+
+
 def state():
     bat = "/sys/class/power_supply/BAT0"
-    _, gpu = run("supergfxctl", "-g")
-    _, profile = run("powerprofilesctl", "get")
-    _, conns = run("nmcli", "-t", "-f", "NAME", "connection", "show")
-    _, active = run("nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
-    _, home_active = run("systemctl", "--user", "is-active", "smoky-home.service")
-    code, moodle = run("python3", f"{LIBEXEC}/smoky-moodle.py", "status", timeout=10)
-    try:
-        moodle = json.loads(moodle) if code == 0 else {"connected": False}
-    except ValueError:
-        moodle = {"connected": False}
-    image, staged = ostree_status()
+    # les commandes lentes tournent en même temps : la page se met à jour bien plus vite
+    jobs = {k: _POOL.submit(f) for k, f in {
+        "gpu": lambda: run("supergfxctl", "-g")[1],
+        "profile": lambda: run("powerprofilesctl", "get")[1],
+        "conns": lambda: run("nmcli", "-t", "-f", "NAME", "connection", "show")[1],
+        "active": lambda: run("nmcli", "-t", "-f", "NAME", "connection", "show", "--active")[1],
+        "home": lambda: run("systemctl", "--user", "is-active", "smoky-home.service")[1],
+        "moodle": moodle_status, "ostree": ostree_status, "windows": windows_entry,
+        "g": gset_state, "storage": lambda: storage(),
+    }.items()}
+    r = {k: f.result() for k, f in jobs.items()}
+    gpu, profile, conns, active, home_active, moodle = r["gpu"], r["profile"], r["conns"], r["active"], r["home"], r["moodle"]
+    image, staged = r["ostree"]
     focus = jload(FOCUS, {"end": 0, "minutes": 0})
     if focus["end"] < time.time():
         focus = {"end": 0, "minutes": 0}
@@ -298,11 +350,11 @@ def state():
         "moodle": moodle,
         "vpn": {"configured": VPN in conns.splitlines(), "active": VPN in active.splitlines()},
         "focus": focus,
-        "g": gset_state(),
+        "g": r["g"],
         "jobs": {k: dict(v) for k, v in JOBS.items()},
-        "windows": windows_entry() is not None,
+        "windows": r["windows"] is not None,
         "info": sysinfo(),
-        "storage": storage(),
+        "storage": r["storage"],
     }
 
 
@@ -360,6 +412,7 @@ def act(a):
         spawn("/usr/bin/smoky-home")
         return {"ok": True}
     if kind in ("moodle_connect", "moodle_sync", "moodle_disconnect"):
+        _MOODLE["at"] = 0
         spawn("python3", f"{LIBEXEC}/smoky-moodle.py", kind.split("_")[1])
         return {"ok": True}
     if kind == "vpn_import":

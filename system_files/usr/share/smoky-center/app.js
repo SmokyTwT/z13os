@@ -33,12 +33,24 @@ async function api(path, body) {
   return r.json();
 }
 
+// Une action : le bouton change tout de suite (sans attendre la machine), puis l'état réel
+// est relu deux fois (certains réglages, comme la charge ou le profil, s'appliquent avec un temps de retard).
+let busy = 0;
 async function act(body, okMsg) {
-  const r = await api('action', body);
+  busy++;
+  let r;
+  try {
+    r = await api('action', body);
+  } catch {
+    r = { ok: false };
+  }
+  busy--;
   if (r.message) toast(r.message, 5000);
   else if (r.ok && okMsg) toast(okMsg);
   else if (!r.ok) toast('Action impossible');
-  await refresh();
+  lastJson = '';                                // redessine même si rien n'a changé (annule l'affichage anticipé)
+  await refresh(true);
+  setTimeout(() => refresh(true), 1500);
   return r;
 }
 
@@ -175,6 +187,7 @@ function bind() {
   document.querySelectorAll('[data-seg] button').forEach((btn) => {
     btn.onclick = () => {
       const key = btn.parentElement.dataset.seg, v = btn.dataset.v;
+      btn.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btn));
       if (key === 'battery') act({ action: 'battery', limit: Number(v) }, `Charge limitée à ${v} %`);
       if (key === 'profile') act({ action: 'profile', name: v });
       if (key === 'gpu') act({ action: 'gpu', mode: v });
@@ -206,6 +219,8 @@ function bind() {
       if (a === 'windows' && !confirm('Redémarrer sur Windows maintenant ?\n\nEnregistre ton travail avant. Au redémarrage suivant, le PC revient sur Smoky OS.')) return;
       if (a === 'clean' && !confirm('Vider la corbeille et les caches ?\n\nTes fichiers et tes notes ne sont pas touchés.')) return;
       if (a === 'reboot' && !confirm('Redémarrer maintenant pour appliquer la mise à jour ?\n\nEnregistre ton travail avant.')) return;
+      btn.disabled = true;                       // pas de double clic pendant l'action
+      btn.classList.add('wait');
       const msgs = { charge_once: 'Charge jusqu’à 100 %, puis retour à la limite au débranchement', clean: 'Nettoyage lancé', apps_update: 'Mise à jour des applis lancée', update: 'Recherche de mise à jour lancée', moodle_sync: 'Synchronisation lancée', moodle_connect: 'Fenêtre de connexion ouverte', icons_regen: 'Logos en cours de génération' };
       return act({ action: a }, msgs[a]);
     };
@@ -218,10 +233,22 @@ $('#vpn-file').onchange = async (e) => {
   if (file) act({ action: 'vpn_import', content: await file.text() }, 'VPN importé');
 };
 
-async function refresh() {
+// La page n'est redessinée que si quelque chose a vraiment changé (pas de clignotement ni de
+// saut de défilement toutes les 15 s), et jamais pendant une action ou une saisie.
+let lastJson = '';
+async function refresh(force = false) {
+  if (busy && !force) return;
   try {
-    S = await api('state');
-    if (!document.activeElement || document.activeElement.tagName !== 'INPUT' || document.activeElement.type !== 'password') render();
+    const raw = await api('state');
+    const json = JSON.stringify(raw);
+    S = raw;
+    const typing = document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'password';
+    if (json !== lastJson && !typing) {
+      lastJson = json;
+      const y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+    }
   } catch {
     toast('Smoky Center ne répond pas');
   }

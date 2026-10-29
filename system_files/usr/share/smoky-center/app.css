@@ -64,3 +64,6 @@ body.intro .card:nth-child(n+10) { animation-delay: 200ms; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+/* action en cours : le bouton pulse doucement au lieu de rester figé */
+.btn.wait { animation: smoky-wait 1s ease-in-out infinite alternate; }
+@keyframes smoky-wait { from { opacity: 1; } to { opacity: .55; } }

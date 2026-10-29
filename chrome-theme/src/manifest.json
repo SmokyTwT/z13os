@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Smoky OS",
+  "description": "Thème Smoky OS pour Google Chrome (fumée, noir et blanc lumineux).",
+  "version": "1.0.0",
+  "theme": {
+    "images": {
+      "theme_frame": "images/frame.png",
+      "theme_frame_inactive": "images/frame_inactive.png",
+      "theme_ntp_background": "images/ntp.jpg"
+    },
+    "colors": {
+      "frame": [14, 14, 16],
+      "frame_inactive": [10, 10, 12],
+      "toolbar": [26, 26, 30],
+      "toolbar_text": [242, 242, 244],
+      "toolbar_button_icon": [232, 232, 238],
+      "tab_text": [244, 244, 247],
+      "tab_background_text": [165, 165, 175],
+      "tab_background_text_inactive": [130, 130, 140],
+      "bookmark_text": [222, 222, 228],
+      "omnibox_background": [16, 16, 19],
+      "omnibox_text": [242, 242, 244],
+      "ntp_background": [11, 11, 12],
+      "ntp_text": [242, 242, 244],
+      "ntp_link": [255, 255, 255],
+      "ntp_header": [26, 26, 30],
+      "button_background": [255, 255, 255, 0]
+    },
+    "tints": {
+      "buttons": [-1, -1, 0.95]
+    },
+    "properties": {
+      "ntp_background_alignment": "center",
+      "ntp_background_repeat": "no-repeat",
+      "ntp_logo_alternate": 1
+    }
+  }
+}
