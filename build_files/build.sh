@@ -212,9 +212,12 @@ ambient-enabled=true
 [org.gnome.desktop.session]
 idle-delay=uint32 300
 
+[org.gnome.desktop.notifications]
+show-in-lock-screen=false
+
 [org.gnome.shell]
 favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'smoky-maximize@smokyos', 'smoky-home@smokyos', 'smoky-tablet@smokyos']
+enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'gsconnect@andyholmes.github.io', 'caffeine@patapon.info', 'smoky-maximize@smokyos', 'smoky-home@smokyos', 'smoky-tablet@smokyos', 'smoky-lockinfo@smokyos']
 
 [org.gnome.shell.extensions.user-theme]
 name='Smoky'

@@ -25,3 +25,17 @@ cmp -s "$SRC/smoky-bg.jpg" "$HOME/.config/gtk-4.0/smoky-bg.jpg" || cp "$SRC/smok
 PAL="${XDG_DATA_HOME:-$HOME/.local/share}/org.gnome.Ptyxis/palettes"
 mkdir -p "$PAL"
 cmp -s /usr/share/smokyos/ptyxis/smoky.palette "$PAL/smoky.palette" || cp /usr/share/smokyos/ptyxis/smoky.palette "$PAL/smoky.palette"
+
+# Nouveautés appliquées une fois aux comptes existants (les nouveaux les ont par défaut) :
+# écran de verrouillage sans notifications, avec météo et état du PC (smoky-lockinfo).
+MARK="$HOME/.config/smoky/setup-lockinfo"
+if [[ ! -e "$MARK" ]] && command -v gsettings >/dev/null; then
+  gsettings set org.gnome.desktop.notifications show-in-lock-screen false
+  # liste déjà personnalisée (sinon la valeur par défaut de Smoky OS l'inclut déjà)
+  cur=$(dconf read /org/gnome/shell/enabled-extensions 2>/dev/null)
+  if [[ -n "$cur" && "$cur" != *smoky-lockinfo@smokyos* ]]; then
+    if [[ "$cur" == "@as []" || "$cur" == "[]" ]]; then new="['smoky-lockinfo@smokyos']"; else new="${cur%]}, 'smoky-lockinfo@smokyos']"; fi
+    gsettings set org.gnome.shell enabled-extensions "$new"
+  fi
+  mkdir -p "$(dirname "$MARK")" && touch "$MARK"
+fi

@@ -1,0 +1,8 @@
+{
+  "uuid": "smoky-lockinfo@smokyos",
+  "name": "Smoky : écran de verrouillage",
+  "description": "Météo, processeur, mémoire et batterie sous l'horloge de l'écran de verrouillage, à la place des notifications.",
+  "shell-version": ["47", "48", "49", "50", "51", "52"],
+  "session-modes": ["user", "unlock-dialog"],
+  "version": 1
+}

@@ -1,0 +1,7 @@
+.smoky-lockinfo { spacing: 10px; padding-top: 18px; }
+.smoky-lockinfo-weather { spacing: 10px; font-size: 20pt; font-weight: 600; color: #f4f4f7;
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.35); }
+.smoky-lockinfo-icon { color: #f4f4f7; }
+.smoky-lockinfo-stats { font-size: 12pt; color: rgba(255, 255, 255, 0.78);
+  background-color: rgba(10, 10, 12, 0.45); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px; padding: 6px 16px; }
