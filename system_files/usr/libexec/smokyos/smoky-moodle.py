@@ -106,6 +106,18 @@ def subject_for(course):
     return None
 
 
+# Documents sans intérêt pour réviser : jamais importés dans Smoky Notes
+USELESS = ["reglement", "charte", "modalites", "mcc", "emploi du temps", "edt", "planning", "calendrier",
+           "convocation", "inscription", "attestation", "formulaire", "fiche d inscription", "consignes d examen",
+           "trombinoscope", "liste des groupes", "groupes de td", "groupes de tp", "repartition", "affectation", "covid", "plan d acces",
+           "livret d accueil", "presentation de la formation", "enquete", "questionnaire", "evaluation des enseignements"]
+
+
+def useless(filename):
+    name = re.sub(r"[^a-z0-9]+", " ", plain(filename.rsplit(".", 1)[0]))
+    return any(re.search(r"(?<![a-z0-9])" + re.escape(w) + r"(?![a-z0-9])", name) for w in USELESS)
+
+
 def set_folder(nid, folder, only_from):
     """Range un carnet importé avant les matières dans le classeur de sa matière, s'il est encore
     dans le classeur d'origine (un carnet que tu as déplacé toi-même ne bouge pas)."""
@@ -288,9 +300,13 @@ def sync():
         return 1
     added = []
     subjects = st.setdefault("subjects", {})          # id du cours → matière (pour Smoky Agenda)
+    skipped = st.setdefault("skipped", {})            # cours hors de tes matières (non importés)
     for c in courses:
         subject = subject_for(c)
         subjects[str(c["id"])] = subject
+        if not subject:                               # sport, infos de promo… : échéances seulement
+            skipped[str(c["id"])] = c.get("fullname") or c.get("shortname") or ""
+            continue
         course_folder = re.sub(r"\s+", " ", c.get("shortname") or c.get("fullname") or "Cours").strip()[:60]
         folder = subject or course_folder
         try:
@@ -304,7 +320,7 @@ def sync():
                     if f.get("type") != "file" or not f.get("filename", "").lower().endswith(".pdf"):
                         continue
                     key = f.get("fileurl", "").split("?")[0]
-                    if not same_site(key):
+                    if not same_site(key) or useless(f["filename"]):
                         continue
                     known = st["files"].get(key)
                     if known and known["mtime"] >= f.get("timemodified", 0):
@@ -376,8 +392,9 @@ def deadlines(token, st):
 
 def status():
     st = load_state()
+    skipped = sorted(set(st.get("skipped", {}).values()))
     ev = json.loads(DEADLINES.read_text()) if DEADLINES.exists() else []
-    print(json.dumps({"connected": bool(token_get()), "site": site(), "documents": len(st["files"]),
+    print(json.dumps({"connected": bool(token_get()), "site": site(), "documents": len(st["files"]), "skipped_courses": skipped,
                       "deadlines": ev[:10]}, ensure_ascii=False))
     return 0
 
