@@ -13,10 +13,23 @@ if [ ! -f "$DATA/configuration.yaml" ]; then
   mkdir -p "$DATA"
   cp -rn "$SEED/." "$DATA/"
 fi
+# Intégrations livrées avec Smoky OS (Dreame Vacuum, Xiaomi Home) : copiées, puis remplacées
+# quand Smoky OS en apporte une nouvelle version (le moteur redémarre alors pour la charger).
 mkdir -p "$DATA/custom_components"
-[ -d "$DATA/custom_components/dreame_vacuum" ] || cp -r /usr/share/smoky-home/custom_components/dreame_vacuum "$DATA/custom_components/"
+changed=0
+for src in /usr/share/smoky-home/custom_components/*/; do
+  name=$(basename "$src")
+  dst="$DATA/custom_components/$name"
+  if ! cmp -s "$src/manifest.json" "$dst/manifest.json"; then
+    rm -rf "$dst" && cp -r "$src" "$dst" && changed=1
+  fi
+done
 
 up() { curl -fs -o /dev/null --max-time 2 "$URL"; }
+if [ "$changed" = 1 ] && up; then
+  systemctl --user restart smoky-home.service
+  sleep 3
+fi
 if ! up; then
   systemctl --user daemon-reload
   if ! podman image exists ghcr.io/home-assistant/home-assistant:2026.10.1; then

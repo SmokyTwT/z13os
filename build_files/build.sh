@@ -239,6 +239,17 @@ curl -fsSL "https://github.com/Tasshack/dreame-vacuum/archive/${DREAME_REV}.tar.
 cp -r "$DV/dreame-vacuum-${DREAME_REV}/custom_components/dreame_vacuum" /usr/share/smoky-home/custom_components/
 cp "$DV/dreame-vacuum-${DREAME_REV}/LICENSE" /usr/share/smoky-home/custom_components/dreame_vacuum/LICENSE
 rm -rf "$DV"
+# Intégration officielle Xiaomi Home (licence Xiaomi : usage non commercial avec Home Assistant),
+# version figée : robots Xiaomi que Dreame Vacuum ne connaît pas (X20 Max = xiaomi.vacuum.d109gl).
+XIAOMI_HOME_REV=75b3acb6325a3a8d295688b13904737d6738a6a5   # v0.5.0
+XH=$(mktemp -d)
+curl -fsSL "https://github.com/XiaoMi/ha_xiaomi_home/archive/${XIAOMI_HOME_REV}.tar.gz" | tar -xz -C "$XH"
+cp -r "$XH/ha_xiaomi_home-${XIAOMI_HOME_REV}/custom_components/xiaomi_home" /usr/share/smoky-home/custom_components/
+cp "$XH/ha_xiaomi_home-${XIAOMI_HOME_REV}/LICENSE.md" /usr/share/smoky-home/custom_components/xiaomi_home/LICENSE.md
+rm -rf "$XH"
+# Sa connexion au compte Xiaomi revient sur http://homeassistant.local:8123 (adresse imposée) :
+# system_files/etc/hosts fait pointer ce nom vers Smoky Home sur ce PC (jamais un autre appareil
+# du réseau). Fichier livré tel quel : pendant la construction, /etc/hosts n'est pas modifiable.
 
 # --- Pare-feu ------------------------------------------------------------------
 # Fedora ouvre par défaut les ports 1025-65535 (zone FedoraWorkstation). Sur des Wi-Fi
