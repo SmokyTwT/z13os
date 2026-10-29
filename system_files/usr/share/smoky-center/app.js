@@ -164,7 +164,7 @@ function render() {
     ${s.jobs.clean.result ? `<p class="hint">Dernier nettoyage : ${esc(s.jobs.clean.result)} libérés.</p>` : ''}
   </section>
   <section class="card"><h2>📦 Applis</h2>
-    <p class="hint">Les applis (Spotify, Proton VPN, Déjà Dup…) se mettent à jour avec le système ; ce bouton le fait tout de suite.</p>
+    <p class="hint">Les applis (Proton VPN, mpv, Déjà Dup…) se mettent à jour avec le système ; ce bouton le fait tout de suite.</p>
     <div class="btns"><button class="btn primary" data-a="apps_update" ${s.jobs.apps.running ? 'disabled' : ''}>${s.jobs.apps.running ? 'Mise à jour…' : 'Mettre à jour les applis'}</button></div>
     ${s.jobs.apps.result === 'error' ? '<p class="hint">La dernière mise à jour a échoué : vérifie la connexion.</p>' : ''}
   </section>

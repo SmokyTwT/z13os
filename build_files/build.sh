@@ -98,9 +98,11 @@ make_webapp prime   "Prime Video"  "https://www.primevideo.com"       primevideo
 make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf1    "AudioVideo;Video;"
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
 make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
+# Spotify en appli web : l'appli Flatpak dessinait une barre de titre bleue impossible à thémer
+make_webapp spotify "Spotify"      "https://open.spotify.com"         smokyos-spotify "AudioVideo;Audio;Music;Player;"
 make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;" solo
-FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'smoky-agenda.desktop'"
+FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'z13-spotify.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'smoky-agenda.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
@@ -130,7 +132,7 @@ gtk-update-icon-cache -f /usr/share/icons/WhiteSur || true
 
 # Thème d'icônes « Smoky-icons » : chaque appli livrée avec le système reçoit la
 # version Smoky de son vrai logo (argent, carré noir, trait néon à sa couleur),
-# générée par smoky-autoicons. Les applis installées plus tard (Flatpak : Spotify,
+# générée par smoky-autoicons. Les applis installées plus tard (Flatpak : mpv,
 # Proton VPN…) sont traitées sur la machine, à la connexion et à chaque installation.
 # Dessinés à la main : TF1+, M6+, Moodle, WhatsApp et les applis Smoky (pas de logo d'origine installé).
 dnf -y install python3-pillow librsvg2-tools

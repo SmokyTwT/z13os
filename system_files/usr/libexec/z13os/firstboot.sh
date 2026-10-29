@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
-# Applis Flatpak de Smoky OS (Spotify, mpv, Déjà Dup, Proton VPN) + réglages du premier démarrage.
+# Applis Flatpak de Smoky OS (mpv, Déjà Dup, Proton VPN) + réglages du premier démarrage.
 # Relancé quand la liste change (numéro de version dans /var/lib/z13os/apps.version) :
 # les applis ajoutées sont installées, celles retirées de Smoky OS sont désinstallées.
 # Chaque appli est installée séparément : un échec n'empêche pas les autres, et le service
 # réessaie plus tard (sans tourner en boucle : voir StartLimit dans le service).
 set -uo pipefail
-APPS_VERSION=2
-APPS=(com.spotify.Client io.mpv.Mpv org.gnome.DejaDup com.protonvpn.www)
-RETIREES=(com.valvesoftware.Steam)
+APPS_VERSION=3
+APPS=(io.mpv.Mpv org.gnome.DejaDup com.protonvpn.www)
+# Spotify : remplacé par l'appli web Smoky (z13-spotify), au thème Smoky
+RETIREES=(com.valvesoftware.Steam com.spotify.Client)
 STATE=/var/lib/z13os
 mkdir -p "$STATE"
-
-# Spotify en Wayland dessine lui-même sa barre de titre (boutons bleus de Chromium, hors thème) :
-# en XWayland, c'est GNOME qui la dessine, au thème Smoky (net grâce à xwayland-native-scaling).
-# Appliqué à chaque démarrage (réglage léger), même quand la liste des applis n'a pas changé.
-# (--socket=x11 indispensable : sans Wayland, « fallback-x11 » ne donne pas X11 et Spotify ne s'ouvre plus)
-flatpak override --system --nosocket=wayland --socket=x11 com.spotify.Client 2>/dev/null || true
 
 [[ "$(cat "$STATE/apps.version" 2>/dev/null)" == "$APPS_VERSION" ]] && exit 0
 

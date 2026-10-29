@@ -242,7 +242,7 @@ def do_apps_update():
     JOBS["apps"].update(running=False, result="ok" if code == 0 else "error")
     spawn("notify-send", "-a", "Smoky OS", "-i", "system-software-update",
           "Applis à jour" if code == 0 else "Mise à jour des applis incomplète",
-          "Spotify, Proton VPN et les autres applis sont à jour." if code == 0 else "Réessaie plus tard.")
+          "Proton VPN, mpv et les autres applis sont à jour." if code == 0 else "Réessaie plus tard.")
 
 
 CHROME_PROFILES = (".config/google-chrome", ".config/smoky-notes-chrome", ".config/smoky-center-chrome",

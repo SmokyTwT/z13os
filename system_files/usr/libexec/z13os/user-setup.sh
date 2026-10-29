@@ -39,3 +39,9 @@ if [[ ! -e "$MARK" ]] && command -v gsettings >/dev/null; then
   fi
   mkdir -p "$(dirname "$MARK")" && touch "$MARK"
 fi
+
+# Spotify devient une appli web Smoky : son icône remplace l'ancienne dans le dock (liste personnalisée)
+favs=$(dconf read /org/gnome/shell/favorite-apps 2>/dev/null)
+if [[ "$favs" == *com.spotify.Client.desktop* ]]; then
+  gsettings set org.gnome.shell favorite-apps "${favs//com.spotify.Client.desktop/z13-spotify.desktop}"
+fi
