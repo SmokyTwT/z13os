@@ -25,6 +25,11 @@ for src in /usr/share/smoky-home/custom_components/*/; do
   fi
 done
 
+# Tableau de bord allégé (robot : commandes et réglages de nettoyage seulement), refait quand
+# un appareil arrive, tant que tu ne l'as pas modifié toi-même
+python3 /usr/libexec/smokyos/smoky-home-dashboard.py "$DATA"
+[ $? -eq 10 ] && changed=1
+
 up() { curl -fs -o /dev/null --max-time 2 "$URL"; }
 if [ "$changed" = 1 ] && up; then
   systemctl --user restart smoky-home.service
