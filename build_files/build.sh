@@ -65,13 +65,27 @@ chrome_app_id() { # url → identifiant de fenêtre Wayland de Chrome
   path="${path%%\?*}"; path="${path%%#*}"
   echo "chrome-${host}_${path//\//_}-Default"
 }
-make_webapp() { # id  nom  url  icône  catégories
-  local id="$1" name="$2" url="$3" icon="$4" cats="$5"
+# Appli web dans son propre profil Chrome (processus à part) : sa fenêtre n'est jamais rattachée
+# à Chrome, ni à une version « installée » du site par Chrome (claude.ai propose de s'installer).
+cat > /usr/libexec/smokyos/smoky-webapp <<EOF
+#!/usr/bin/bash
+id="\$1" url="\$2"; shift 2
+exec /usr/bin/google-chrome-stable ${CHROME_FLAGS} --no-first-run --no-default-browser-check \\
+  --user-data-dir="\${XDG_DATA_HOME:-\$HOME/.local/share}/smoky-webapps/\$id" --app="\$url" "\$@"
+EOF
+chmod 755 /usr/libexec/smokyos/smoky-webapp
+make_webapp() { # id  nom  url  icône  catégories  [solo = profil Chrome à part]
+  local id="$1" name="$2" url="$3" icon="$4" cats="$5" exec
+  if [[ "${6:-}" == solo ]]; then
+    exec="/usr/libexec/smokyos/smoky-webapp $id $url"
+  else
+    exec="/usr/bin/google-chrome-stable ${CHROME_FLAGS} --app=$url --class=z13-$id"
+  fi
   cat > "/usr/share/applications/z13-$id.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=$name
-Exec=/usr/bin/google-chrome-stable ${CHROME_FLAGS} --app=$url --class=z13-$id
+Exec=$exec
 Icon=$icon
 StartupWMClass=$(chrome_app_id "$url")
 Categories=$cats
@@ -85,7 +99,7 @@ make_webapp tf1     "TF1+"         "https://www.tf1.fr"               smokyos-tf
 make_webapp m6      "M6+"          "https://www.m6.fr"                smokyos-m6     "AudioVideo;Video;"
 make_webapp drive   "Google Drive" "https://drive.google.com"         google-drive   "Office;Education;"
 make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
-make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;"
+make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;" solo
 FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'com.spotify.Client.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'smoky-agenda.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
