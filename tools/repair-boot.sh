@@ -53,6 +53,9 @@ insmod ext2
 insmod fat
 search --no-floppy --fs-uuid --set=root $BOOT_UUID
 set boot=\$root
+function load_video {
+  insmod all_video
+}
 blscfg
 menuentry "Windows" {
   insmod chain
