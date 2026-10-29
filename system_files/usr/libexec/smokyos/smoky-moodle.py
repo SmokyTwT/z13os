@@ -7,7 +7,8 @@
   smoky-moodle.py status             état (JSON)
   smoky-moodle.py disconnect         oublie l'accès
 
-Les PDF arrivent dans Smoky Notes, un carnet par document, rangés dans un classeur au nom
+Les PDF arrivent dans Smoky Notes, un carnet par document, rangés dans le classeur de la
+matière (Algèbre, Méca… : /usr/share/smokyos/matieres.json), sinon dans un classeur au nom
 du cours. Rien n'est jamais modifié ni supprimé dans tes carnets existants. Le mot de passe
 n'est jamais enregistré : seul le jeton d'accès Moodle l'est, dans le trousseau GNOME.
 """
@@ -21,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -32,6 +34,7 @@ DEADLINES = STATE_DIR / "echeances.json"
 NOTES = HOME / "Notes"
 NOTEBOOKS = NOTES / "Smoky Notes"
 SITE_FILE = Path("/etc/smokyos/moodle-url")
+SUBJECTS_FILE = Path(os.environ.get("SMOKY_MATIERES", "/usr/share/smokyos/matieres.json"))
 SERVICE = "moodle_mobile_app"
 UA = "SmokyOS-Moodle/1.0"
 
@@ -81,6 +84,43 @@ def save_state(st):
     tmp = STATE.with_suffix(".tmp")
     tmp.write_text(json.dumps(st, indent=1))
     os.replace(tmp, STATE)
+
+
+# --- Matières --------------------------------------------------------------------------------
+def plain(s):
+    return unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()
+
+
+def subject_for(course):
+    """Matière d'un cours Moodle d'après son nom (« ALGEBRE LINEAIRE S1 » → Algèbre), sinon None."""
+    try:
+        matieres = json.loads(SUBJECTS_FILE.read_text())["matieres"]
+    except (OSError, ValueError, KeyError):
+        return None
+    names = " ".join(plain(course.get(k)) for k in ("shortname", "fullname", "displayname"))
+    names = re.sub(r"[^a-z0-9]+", " ", names)
+    for m in matieres:
+        for mot in m.get("mots", []):
+            if re.search(r"(?<![a-z0-9])" + re.escape(plain(mot)), names):
+                return m["nom"]
+    return None
+
+
+def set_folder(nid, folder, only_from):
+    """Range un carnet importé avant les matières dans le classeur de sa matière, s'il est encore
+    dans le classeur d'origine (un carnet que tu as déplacé toi-même ne bouge pas)."""
+    d = NOTEBOOKS / nid
+    try:
+        nb, meta = json.loads((d / "notebook.json").read_text()), json.loads((d / "meta.json").read_text())
+    except (OSError, ValueError):
+        return
+    if nb.get("folder") != only_from or only_from == folder:
+        return
+    nb["folder"] = meta["folder"] = folder
+    for name, obj in (("notebook.json", nb), ("meta.json", meta)):
+        tmp = d / f".{name}.tmp"
+        tmp.write_text(json.dumps(obj, separators=(",", ":")))
+        os.replace(tmp, d / name)
 
 
 # --- Jeton (trousseau GNOME, sinon fichier privé) ------------------------------------------
@@ -247,8 +287,12 @@ def sync():
         print(f"Moodle : {e}", file=sys.stderr)
         return 1
     added = []
+    subjects = st.setdefault("subjects", {})          # id du cours → matière (pour Smoky Agenda)
     for c in courses:
-        folder = re.sub(r"\s+", " ", c.get("shortname") or c.get("fullname") or "Cours").strip()[:60]
+        subject = subject_for(c)
+        subjects[str(c["id"])] = subject
+        course_folder = re.sub(r"\s+", " ", c.get("shortname") or c.get("fullname") or "Cours").strip()[:60]
+        folder = subject or course_folder
         try:
             sections = ws(token, "core_course_get_contents", courseid=c["id"])
         except Exception as e:
@@ -264,6 +308,7 @@ def sync():
                         continue
                     known = st["files"].get(key)
                     if known and known["mtime"] >= f.get("timemodified", 0):
+                        set_folder(known["notebook"], folder, course_folder)   # importés avant les matières
                         continue
                     url = f["fileurl"] + ("&" if "?" in f["fileurl"] else "?") + "token=" + token
                     try:
@@ -301,8 +346,10 @@ def deadlines(token, st):
     except Exception as e:
         print(f"échéances : {e}", file=sys.stderr)
         return
+    subjects = st.get("subjects", {})
     events = [{"id": e["id"], "name": e.get("activityname") or e.get("name", ""),
                "course": (e.get("course") or {}).get("fullname", ""), "time": e.get("timesort", 0),
+               "subject": subjects.get(str((e.get("course") or {}).get("id"))) or subject_for(e.get("course") or {}),
                "url": e.get("url", "")} for e in res.get("events", [])]
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     DEADLINES.write_text(json.dumps(events, ensure_ascii=False, indent=1))

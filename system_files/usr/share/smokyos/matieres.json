@@ -1,0 +1,114 @@
+{
+ "_doc": "Matières de Smoky OS : carnets de Smoky Notes, classement des cours Moodle, révisions de Smoky Agenda. « mots » = mots reconnus dans le nom du cours Moodle (sans accents, minuscules) ; la première matière qui correspond l'emporte.",
+ "matieres": [
+  {
+   "nom": "Magnéto",
+   "papier": "grid",
+   "mots": [
+    "magneto",
+    "magnetisme",
+    "electromagn"
+   ]
+  },
+  {
+   "nom": "MNA",
+   "papier": "grid",
+   "mots": [
+    "mna",
+    "methodes numeriques",
+    "methode numerique",
+    "analyse numerique"
+   ]
+  },
+  {
+   "nom": "Algèbre",
+   "papier": "grid",
+   "mots": [
+    "algebre"
+   ]
+  },
+  {
+   "nom": "Analyse",
+   "papier": "grid",
+   "mots": [
+    "analyse"
+   ]
+  },
+  {
+   "nom": "Anglais",
+   "papier": "lined",
+   "mots": [
+    "anglais",
+    "english"
+   ]
+  },
+  {
+   "nom": "Allemand",
+   "papier": "lined",
+   "mots": [
+    "allemand",
+    "german",
+    "deutsch"
+   ]
+  },
+  {
+   "nom": "Optique",
+   "papier": "grid",
+   "mots": [
+    "optique"
+   ]
+  },
+  {
+   "nom": "Électro",
+   "papier": "grid",
+   "mots": [
+    "electro",
+    "electricite",
+    "electrocinetique"
+   ]
+  },
+  {
+   "nom": "INSA Culture",
+   "papier": "lined",
+   "mots": [
+    "insa culture",
+    "culture"
+   ]
+  },
+  {
+   "nom": "Algo",
+   "papier": "grid",
+   "mots": [
+    "algo",
+    "algorithmique",
+    "programmation"
+   ]
+  },
+  {
+   "nom": "BDR",
+   "papier": "grid",
+   "mots": [
+    "bdr",
+    "base de donnees",
+    "bases de donnees"
+   ]
+  },
+  {
+   "nom": "Méca",
+   "papier": "grid",
+   "mots": [
+    "meca",
+    "mecanique"
+   ]
+  },
+  {
+   "nom": "CDM",
+   "papier": "grid",
+   "mots": [
+    "cdm",
+    "chimie",
+    "materiaux"
+   ]
+  }
+ ]
+}

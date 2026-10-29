@@ -40,6 +40,7 @@ ICS_FILE = DATA / "edt-import.ics"           # fichier .ics importé à la main 
 ICS_MAX = 5 * 1024 * 1024
 DEADLINES = Path.home() / ".local/share/smoky-moodle/echeances.json"
 EXPORT = Path.home() / "Notes" / "Planning Smoky.ics"
+SUBJECTS_FILE = Path(os.environ.get("SMOKY_MATIERES", "/usr/share/smokyos/matieres.json"))
 TOKEN = secrets.token_urlsafe(24)
 # le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
 TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-agenda.token"
@@ -57,8 +58,7 @@ DEFAULTS = {
     "gym_per_week": 3, "gym_min": 90, "gym_from": "17:00", "gym_to": "21:30",
     "groceries_day": 5, "groceries_time": "10:00", "groceries_min": 60,
     "revision_weekday_min": 120, "revision_weekend_min": 180, "block_min": 50,
-    "subjects": ["Algèbre", "Analyse", "Anglais", "Allemand", "Optique", "Électro", "INSA Culture", "Algo",
-                 "BDR", "MNA", "Méca", "Magnéto", "CDM"], "reminders": True, "remind_before": 10, "model": "opus",
+    "subjects": [], "reminders": True, "remind_before": 10, "model": "opus",
 }
 
 
@@ -78,10 +78,18 @@ def jsave(path, data):
     os.replace(tmp, path)
 
 
+def default_subjects():
+    """Matières communes à Smoky OS (carnets de Smoky Notes, cours Moodle)."""
+    try:
+        return [m["nom"] for m in json.loads(SUBJECTS_FILE.read_text())["matieres"]][:20]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
 def settings():
     conf = jload(SETTINGS, DEFAULTS)
     if not conf["subjects"]:                     # réglages enregistrés avant la liste des matières
-        conf["subjects"] = list(DEFAULTS["subjects"])
+        conf["subjects"] = default_subjects()
     return conf
 
 
@@ -251,7 +259,7 @@ def fixed_events(start, end):
             due = datetime.fromtimestamp(int(d.get("time", 0)))
             if start <= due < end:
                 out.append({"id": f"due-{d.get('id')}", "type": "devoir", "title": d.get("name", "Échéance"),
-                            "where": d.get("course", ""), "start": iso(due - timedelta(minutes=30)), "end": iso(due),
+                            "where": d.get("subject") or d.get("course", ""), "start": iso(due - timedelta(minutes=30)), "end": iso(due),
                             "allday": False, "source": "moodle"})
     except (OSError, ValueError, TypeError):
         pass

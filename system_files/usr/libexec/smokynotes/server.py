@@ -228,13 +228,9 @@ class Handler(BaseHTTPRequestHandler):
         return self.fail(404, "route inconnue")
 
 
-# Carnets des matières, créés une fois (classeur « Cours ») ; un carnet supprimé ne revient pas.
-SUBJECTS_VERSION = 1
-SUBJECTS = [  # (titre, papier : grid = quadrillé pour les sciences, lined = ligné)
-    ("Algèbre", "grid"), ("Analyse", "grid"), ("Anglais", "lined"), ("Allemand", "lined"),
-    ("Optique", "grid"), ("Électro", "grid"), ("INSA Culture", "lined"), ("Algo", "grid"),
-    ("BDR", "grid"), ("MNA", "grid"), ("Méca", "grid"), ("Magnéto", "grid"), ("CDM", "grid"),
-]
+# Carnets des matières (liste commune à Smoky OS) : un classeur par matière, où arrivent
+# aussi les cours Moodle de la matière. Créés une fois ; un carnet supprimé ne revient pas.
+SUBJECTS_FILE = Path(os.environ.get("SMOKY_MATIERES", "/usr/share/smokyos/matieres.json"))
 COVERS = ["ink", "slate", "ember", "sage", "graphite", "ash", "ivory", "onyx"]
 PAGE_A4 = (595, 842)
 
@@ -244,18 +240,39 @@ def _key(title):
     return t.lower().strip()
 
 
+def subjects():
+    try:
+        return [(m["nom"], m.get("papier", "grid")) for m in json.loads(SUBJECTS_FILE.read_text())["matieres"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
 def seed_subjects():
-    marker = DATA_DIR / f".matieres-{SUBJECTS_VERSION}"
-    if marker.exists():
-        return
-    have = set()
+    subj = subjects()
+    names = {_key(t): t for t, _ in subj}
+    metas = {}
     for meta in DATA_DIR.glob("*/meta.json"):
         try:
-            have.add(_key(json.loads(meta.read_text()).get("title")))
+            metas[meta.parent] = json.loads(meta.read_text())
         except (OSError, ValueError):
             pass
+    # v1 rangeait les carnets des matières dans un classeur « Cours » : chacun passe dans le sien
+    for d, meta in metas.items():
+        t = names.get(_key(meta.get("title")))
+        if meta.get("folder") == "Cours" and t:
+            try:
+                nb = json.loads((d / "notebook.json").read_text())
+                nb["folder"] = meta["folder"] = t
+                write_atomic(d / "notebook.json", json.dumps(nb, separators=(",", ":")).encode())
+                write_atomic(d / "meta.json", json.dumps(meta).encode())
+            except (OSError, ValueError):
+                pass
+    marker = DATA_DIR / ".matieres-1"
+    if marker.exists():
+        return
+    have = {_key(m.get("title")) for m in metas.values()}
     now = int(time.time() * 1000)
-    for i, (title, template) in enumerate(SUBJECTS):
+    for i, (title, template) in enumerate(subj):
         if _key(title) in have:
             continue
         nid = f"n{now + i:x}-{secrets.token_hex(3)}"
@@ -263,7 +280,7 @@ def seed_subjects():
         page = {"id": f"p{now + i:x}-{secrets.token_hex(3)}", "w": PAGE_A4[0], "h": PAGE_A4[1],
                 "template": template, "paper": "white", "bg": None, "items": [], "marked": False}
         nb = {"id": nid, "version": 1, "title": title, "cover": COVERS[i % len(COVERS)],
-              "created": now + i, "updated": now + i, "favorite": False, "folder": "Cours",
+              "created": now + i, "updated": now + i, "favorite": False, "folder": title,
               "defaults": {"size": "a4", "template": template, "paper": "white"}, "pages": [page]}
         meta = {k: nb[k] for k in ("id", "title", "cover", "created", "updated", "favorite", "folder")}
         meta["pages"] = 1
