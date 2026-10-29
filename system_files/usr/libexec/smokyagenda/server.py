@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -157,13 +158,47 @@ def parse_ics(text):
     return events
 
 
+DOWNLOADS = [Path.home() / "Téléchargements", Path.home() / "Downloads"]
+_seen_downloads = set()
+EDT_ERROR = ""                                   # pourquoi le lien n'a pas pu être lu (affiché dans l'appli)
+
+
+def pick_downloaded():
+    """Un emploi du temps .ics plus récent dans Téléchargements remplace l'import précédent :
+    il suffit de le retélécharger depuis l'ENT pour mettre l'agenda à jour.
+    (Moins de 5 cours = une simple invitation, ignorée.)"""
+    since = ICS_FILE.stat().st_mtime if ICS_FILE.exists() else 0
+    for d in DOWNLOADS:
+        try:
+            files = sorted(d.glob("*.ics"), key=lambda f: f.stat().st_mtime, reverse=True)
+        except OSError:
+            continue
+        for f in files:
+            st = f.stat()
+            if st.st_mtime <= since:
+                break
+            key = (str(f), st.st_mtime)
+            if key in _seen_downloads or st.st_size > ICS_MAX:
+                continue
+            _seen_downloads.add(key)
+            text = f.read_text(errors="replace")
+            if "BEGIN:VCALENDAR" in text[:2000] and len(parse_ics(text)) >= 5:
+                DATA.mkdir(parents=True, exist_ok=True)
+                ICS_FILE.write_text(text)
+                return True
+    return False
+
+
 def fetch_ics(force=False):
-    """Cours du lien iCal + ceux du fichier importé."""
+    """Cours du lien iCal + ceux du fichier importé (repris tout seul dans Téléchargements)."""
+    if pick_downloaded():
+        schedule_reminders()
     imported = ICS_FILE.read_text(errors="replace") if ICS_FILE.exists() else ""
     return fetch_url_ics(force) + "\n" + imported
 
 
 def fetch_url_ics(force=False):
+    global EDT_ERROR
     url = settings()["ics_url"]
     if not url:
         return ""
@@ -173,14 +208,26 @@ def fetch_url_ics(force=False):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "SmokyAgenda/1.0"})
         with urllib.request.urlopen(req, timeout=30) as r:
-            body = r.read(5 * 1024 * 1024 + 1)
-        if len(body) > ICS_MAX or b"BEGIN:VCALENDAR" not in body[:2000]:
+            body = r.read(ICS_MAX + 1)
+        if len(body) > ICS_MAX:
+            raise ValueError("le calendrier est trop gros (5 Mo maximum)")
+        if b"BEGIN:VCALENDAR" not in body[:2000]:
+            if b"<html" in body[:2000].lower():
+                raise ValueError("ce lien ouvre une page web (connexion à l'ENT ?) et non le fichier iCal : "
+                                 "prends le lien d'export « iCal / .ics » d'ADE")
             raise ValueError("ce lien ne renvoie pas un calendrier iCal")
         DATA.mkdir(parents=True, exist_ok=True)
         ICS_CACHE.write_bytes(body)
+        EDT_ERROR = ""
         return body.decode("utf-8", errors="replace")
-    except (OSError, ValueError):
-        return ICS_CACHE.read_text(errors="replace") if ICS_CACHE.exists() else ""
+    except urllib.error.HTTPError as e:
+        EDT_ERROR = f"le site de l'emploi du temps répond « erreur {e.code} »" + (
+            " : ce lien demande d'être connecté, prends le lien d'export iCal" if e.code in (401, 403) else "")
+    except urllib.error.URLError as e:
+        EDT_ERROR = f"site injoignable ({str(e.reason)[:80]}) : es-tu connecté à Internet ?"
+    except (OSError, ValueError) as e:
+        EDT_ERROR = str(e)[:200]
+    return ICS_CACHE.read_text(errors="replace") if ICS_CACHE.exists() else ""
 
 
 def fixed_events(start, end):
@@ -515,7 +562,7 @@ def state(offset):
             "settings": settings(), "fixed": fixed_events(s0, s1), "plan": plan, "tasks": st["tasks"],
             "planned_by": st["planned_by"], "types": TYPES, "days": DAYS, "models": MODELS, "claude": claude_ok,
             "edt_ok": bool(settings()["ics_url"]) and ICS_CACHE.exists(), "export": str(EXPORT),
-            "edt_file": ICS_FILE.exists()}
+            "edt_file": ICS_FILE.exists(), "edt_error": EDT_ERROR}
 
 
 TIME_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -529,7 +576,7 @@ def clean_settings(a):
         d = DEFAULTS[k]
         if k == "ics_url":
             v = str(v).strip().replace("webcal://", "https://", 1)
-            if v and (urlsplit(v).scheme != "https" or len(v) > 2000):
+            if v and (urlsplit(v).scheme not in ("https", "http") or not urlsplit(v).netloc or len(v) > 2000):
                 raise RuntimeError("le lien de l'emploi du temps doit commencer par https://")
             conf[k] = v
         elif k == "model":
@@ -570,7 +617,7 @@ def act(a):
             if a.get("values", {}).get("ics_url") is not None:
                 ICS_CACHE.unlink(missing_ok=True)
                 if conf["ics_url"] and not fetch_url_ics(force=True):
-                    return {"ok": False, "message": "Emploi du temps introuvable à ce lien (vérifie qu'il s'agit d'un lien iCal)."}
+                    return {"ok": False, "message": "Lien enregistré mais illisible : " + (EDT_ERROR or "aucun cours trouvé")}
             schedule_reminders()
             return {"ok": True}
         if kind == "plan":

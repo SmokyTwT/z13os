@@ -114,7 +114,8 @@ function render() {
     <button data-del="${esc(t.id)}" title="Supprimer">✕</button></div>`).join('') : '<p class="hint">Aucune tâche en attente.</p>';
   document.querySelectorAll('[data-del]').forEach((b) => { b.onclick = async () => { await act({ action: 'delete', id: b.dataset.del }); refresh(); }; });
   $('#legend').innerHTML = Object.entries(S.types).map(([k, l]) => `<span><i class="dot" style="color:var(--${k})"></i>${esc(l)}</span>`).join('');
-  $('#info').textContent = (S.settings.ics_url ? (S.edt_ok ? 'Emploi du temps relié. ' : 'Emploi du temps : lien enregistré, pas encore lu. ')
+  $('#info').textContent = (S.settings.ics_url ? (S.edt_ok && !S.edt_error ? 'Emploi du temps relié. '
+      : `Emploi du temps : lien pas lu${S.edt_error ? ' (' + S.edt_error + ')' : ''}. `)
     : S.edt_file ? 'Emploi du temps importé depuis un fichier. ' : 'Relie ton emploi du temps dans les réglages. ') + (S.planned_by === 'claude' ? 'Dernier planning fait par Claude. ' : '')
     + `Le planning est aussi dans Notes/Planning Smoky.ics.`;
   $('#plan-claude').disabled = !S.claude;
