@@ -10,6 +10,12 @@ APPS=(com.spotify.Client io.mpv.Mpv org.gnome.DejaDup com.protonvpn.www)
 RETIREES=(com.valvesoftware.Steam)
 STATE=/var/lib/z13os
 mkdir -p "$STATE"
+
+# Spotify en Wayland dessine lui-même sa barre de titre (boutons bleus de Chromium, hors thème) :
+# en XWayland, c'est GNOME qui la dessine, au thème Smoky (net grâce à xwayland-native-scaling).
+# Appliqué à chaque démarrage (réglage léger), même quand la liste des applis n'a pas changé.
+flatpak override --system --nosocket=wayland com.spotify.Client 2>/dev/null || true
+
 [[ "$(cat "$STATE/apps.version" 2>/dev/null)" == "$APPS_VERSION" ]] && exit 0
 
 flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo || exit 1
