@@ -172,7 +172,8 @@ function render() {
     <p class="hint">${esc(s.system)} · noyau ${esc(s.info.kernel)} · ${esc(s.info.ram)} de mémoire${s.info.temp ? ' · processeur à ' + esc(s.info.temp) : ''} · allumé depuis ${esc(s.info.uptime)}</p>
     <div class="row"><span>Secure Boot (démarrage vérifié)</span><span class="pill ${s.secureboot === 'on' ? 'on' : ''}">${s.secureboot === 'on' ? 'activé' : s.secureboot === 'off' ? 'désactivé' : 'inconnu'}</span></div>
     ${s.secureboot === 'off' ? '<p class="hint">À activer : redémarre, appuie sur F2 (BIOS) → Security → Secure Boot → Enabled, puis F10. Smoky OS et Windows démarrent tous les deux avec.</p>' : ''}
-    ${s.windows ? '<div class="btns"><button class="btn" data-a="windows">Redémarrer sur Windows</button></div><p class="hint">Une seule fois : au redémarrage suivant, retour à Smoky OS.</p>' : ''}
+    <div class="btns">${s.windows ? '<button class="btn" data-a="windows">Redémarrer sur Windows</button>' : ''}<button class="btn" data-a="firmware">Redémarrer vers l'UEFI (BIOS)</button></div>
+    ${s.windows ? '<p class="hint">Windows : une seule fois, au redémarrage suivant retour à Smoky OS. UEFI : ouvre directement les réglages du BIOS (Secure Boot, ordre de démarrage…), sans appuyer sur F2.</p>' : ''}
   </section>
   <section class="card"><h2>💾 Sauvegardes <small><span class="pill ${s.backup && !s.backup.late ? 'on' : ''}">${!s.backup || s.backup.days == null ? 'jamais faite' : s.backup.days === 0 ? "aujourd'hui" : 'il y a ' + s.backup.days + ' j'}</span></small></h2>
     <p class="hint">Sauvegarde automatique de ton dossier personnel sur Google Drive (ou un disque, un NAS), avec restauration en quelques clics.${s.backup && s.backup.late ? ' <b>Une sauvegarde est à faire</b> : un rappel s\'affiche chaque jour tant qu\'elle date de plus de 7 jours.' : ''}${s.backup && s.backup.days != null && !s.backup.periodic ? ' Active « Sauvegarde automatique » dans Déjà Dup pour ne plus y penser.' : ''}</p>
@@ -220,6 +221,7 @@ function bind() {
       if (a === 'vpn_import') return $('#vpn-file').click();
       if (a === 'windows' && !confirm('Redémarrer sur Windows maintenant ?\n\nEnregistre ton travail avant. Au redémarrage suivant, le PC revient sur Smoky OS.')) return;
       if (a === 'clean' && !confirm('Vider la corbeille et les caches ?\n\nTes fichiers et tes notes ne sont pas touchés.')) return;
+      if (a === 'firmware' && !confirm('Redémarrer dans les réglages UEFI (BIOS) maintenant ?\n\nEnregistre ton travail avant. Pour revenir : F10 (enregistrer) ou Échap (quitter sans changer).')) return;
       if (a === 'reboot' && !confirm('Redémarrer maintenant pour appliquer la mise à jour ?\n\nEnregistre ton travail avant.')) return;
       btn.disabled = true;                       // pas de double clic pendant l'action
       btn.classList.add('wait');

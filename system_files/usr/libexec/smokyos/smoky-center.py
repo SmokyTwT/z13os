@@ -497,6 +497,9 @@ def act(a):
         return {"ok": True}
     if kind == "reboot":
         return {"ok": run("systemctl", "reboot")[0] == 0}
+    if kind == "firmware":                       # redémarrer directement dans les réglages UEFI (BIOS)
+        code, out = run("systemctl", "reboot", "--firmware-setup", timeout=20)
+        return {"ok": code == 0, "message": None if code == 0 else (out or "Ce PC ne permet pas d'ouvrir l'UEFI ainsi : appuie sur F2 au démarrage.")}
     return {"ok": False, "message": "Action inconnue."}
 
 
