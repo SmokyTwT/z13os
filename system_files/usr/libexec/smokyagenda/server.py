@@ -438,13 +438,18 @@ def local_plan(start, conf, fixed, tasks):
     sessions = gym_sessions(conf)
     free_days = sorted((d for d in days if d.day not in exam_days), key=lambda d: -d.free_minutes())
     chosen = []
-    # 1er passage : jours sans examen, jamais deux de suite ; 2e : deux de suite permis ;
-    # 3e (seulement s'il le faut) : jours d'examen
-    for pool, spaced in ((free_days, True), (free_days, False), ([d for d in days if d.day in exam_days], False)):
+    # séances déjà prévues la semaine d'avant (pour l'espacement et la suite du programme)
+    before = sorted((b for b in store()["plan"] if b["type"] == "salle" and parse_iso(b["start"]).date() < start),
+                    key=lambda b: b["start"])
+    last_day = parse_iso(before[-1]["start"]).date() if before else None
+    # jours sans examen d'abord, puis (s'il le faut) le soir d'un jour d'examen ; jamais deux jours
+    # de suite : mieux vaut une séance de moins que des muscles qui ne récupèrent pas
+    for pool, spaced in ((free_days, True), ([d for d in days if d.day in exam_days], True)):
         for day in pool:
             if len(chosen) >= want:
                 break
-            if day in chosen or (spaced and any(abs((day.day - c.day).days) == 1 for c in chosen)):
+            if day in chosen or (spaced and (any(abs((day.day - c.day).days) == 1 for c in chosen)
+                                             or (last_day and (day.day - last_day).days == 1))):
                 continue
             s = day.find(conf["gym_min"], hm(conf["gym_from"]), hm(conf["gym_to"]))
             if s is not None:
@@ -452,7 +457,9 @@ def local_plan(start, conf, fixed, tasks):
                 put(day, s, conf["gym_min"], "salle", "Salle de sport")
     # séances dans l'ordre des jours, en continuant le programme là où la semaine d'avant s'est arrêtée
     if sessions:
-        first = start.isocalendar()[1] * max(1, want)
+        names = [x["name"] for x in sessions]
+        prev = before[-1]["title"].split(":", 1)[-1].strip() if before else None
+        first = names.index(prev) + 1 if prev in names else 0
         for i, b in enumerate(sorted((b for b in blocks if b["type"] == "salle"), key=lambda b: b["start"])):
             sess = sessions[(first + i) % len(sessions)]
             b["title"] = f"Salle : {sess['name']}"
