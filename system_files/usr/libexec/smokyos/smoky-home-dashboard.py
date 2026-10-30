@@ -53,6 +53,12 @@ def load(name):
         return {}
 
 
+def _old_generated(config):
+    """Tableau de bord écrit par une version précédente de ce script (avant la comparaison du contenu)."""
+    views = config.get("views") or []
+    return config.get("title") == "Smoky Home" and len(views) == 1 and views[0].get("path") == "maison"
+
+
 def main():
     entities = [e for e in load("core.entity_registry").get("entities", [])
                 if not e.get("disabled_by") and not e.get("hidden_by")]
@@ -112,25 +118,28 @@ def main():
                                                 "sections": [{"type": "grid", "cards": [c]} for c in cards]}]}
     new = json.dumps({"version": 1, "minor_version": 1, "key": "lovelace", "data": {"config": config}},
                      ensure_ascii=False, indent=2)
-    digest = hashlib.sha256(new.encode()).hexdigest()
+    # On compare le CONTENU du tableau de bord (Home Assistant peut réécrire le fichier autrement,
+    # sans rien changer) : s'il est encore celui généré la dernière fois, on peut le remplacer.
+    canon = lambda c: hashlib.sha256(json.dumps(c, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    digest = canon(config)
     if TARGET.exists():
-        cur = hashlib.sha256(TARGET.read_bytes()).hexdigest()
+        try:
+            current = json.loads(TARGET.read_text()).get("data", {}).get("config", {})
+        except ValueError:
+            return 0
         last = STAMP.read_text().strip() if STAMP.exists() else ""
-        if cur != last:            # tableau de bord modifié par toi (ou d'origine) : on ne touche à rien
-            if last:
-                return 0
-            try:                   # premier passage : on ne remplace qu'un tableau de bord jamais modifié
-                if json.loads(TARGET.read_text()).get("data", {}).get("config", {}).get("views"):
-                    return 0
-            except ValueError:
-                return 0
-        if cur == digest:
+        mine = canon(current) == last or (last and len(last) == 64 and not STAMP.with_suffix(".v2").exists()
+                                          and _old_generated(current))
+        if not mine and current.get("views"):   # modifié par toi : on ne touche à rien
+            return 0
+        if canon(current) == digest:
             return 0
     STORE.mkdir(parents=True, exist_ok=True)
     tmp = TARGET.with_suffix(".tmp")
     tmp.write_text(new)
     tmp.replace(TARGET)
     STAMP.write_text(digest)
+    STAMP.with_suffix(".v2").touch()
     return 10
 
 
