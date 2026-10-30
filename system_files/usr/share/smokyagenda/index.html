@@ -30,6 +30,10 @@
         <h2>Aujourd'hui</h2>
         <div id="agenda-today" class="mini"></div>
       </section>
+      <section class="panel hidden" id="exams-panel">
+        <h2>Examens à venir</h2>
+        <div id="exams" class="mini"></div>
+      </section>
       <section class="panel">
         <h2>Tâches à caser</h2>
         <div id="tasks" class="mini"></div>
@@ -90,6 +94,9 @@
         <label>Durée (min)<input id="p-gym_min" type="number" min="30" max="240"></label>
         <label>Pas avant<input id="p-gym_from" type="time"></label><label>Fini avant<input id="p-gym_to" type="time"></label>
       </div>
+      <label>Programme : une séance par paragraphe (1re ligne = nom de la séance, puis un exercice par ligne)
+        <textarea id="p-gym_program" rows="9" spellcheck="false"></textarea></label>
+      <p class="hint">Les séances sont planifiées dans l'ordre, d'une semaine à l'autre, jamais un jour d'examen. Les exercices s'affichent en touchant la séance.</p>
       <h3>Courses</h3>
       <div class="grid4">
         <label>Jour<select id="p-groceries_day"></select></label>

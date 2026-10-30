@@ -108,6 +108,15 @@ function render() {
   const today = items.filter((e) => !e.allday && dayOf(e.start) === S.today).sort((a, b) => a.start.localeCompare(b.start));
   $('#agenda-today').innerHTML = today.length ? today.map((e) => `<div class="it ${e.done ? 'done' : ''}"><i class="dot" style="color:var(--${esc(e.type)})"></i>
     <span class="t">${timeOf(e.start)}</span>${esc(e.title)}</div>`).join('') : '<p class="hint">Rien de prévu (ou autre semaine affichée).</p>';
+  // examens à venir, avec le compte à rebours
+  const exams = S.exams || [];
+  $('#exams-panel').classList.toggle('hidden', !exams.length);
+  $('#exams').innerHTML = exams.map((e) => {
+    const left = Math.round((new Date(dayOf(e.start) + 'T12:00') - new Date(S.today + 'T12:00')) / 864e5);
+    return `<div class="it" title="${esc(e.where || '')}"><i class="dot" style="color:var(--examen)"></i>${esc(e.title.replace(/^Examen\s+/i, ''))}
+      <span class="t">${fmtShort.format(new Date(dayOf(e.start) + 'T12:00'))}${e.allday ? '' : ' ' + timeOf(e.start)}</span>
+      <span class="exam-left">${left <= 0 ? 'auj.' : left === 1 ? 'demain' : 'J-' + left}</span></div>`;
+  }).join('');
   const tasks = S.tasks.filter((t) => !t.done);
   $('#tasks').innerHTML = tasks.length ? tasks.map((t) => `<div class="it"><i class="dot" style="color:var(--tache)"></i>${esc(t.title)}
     <span class="t">${t.minutes} min${t.due ? ' · ' + fmtShort.format(new Date(t.due.slice(0, 10) + 'T12:00')) : ''}</span>
@@ -132,6 +141,7 @@ function openPop(id, ev) {
   pop.innerHTML = `<h3>${esc(e.title)}</h3>
     <div class="meta">${esc(fmtLong.format(new Date(dayOf(e.start) + 'T12:00')))} · ${timeOf(e.start)} – ${timeOf(e.end)}${e.where ? '<br>' + esc(e.where) : ''}
     <br>${esc(S.types[e.type] || '')}${e.source === 'edt' ? ' · emploi du temps' : e.source === 'moodle' ? ' · échéance Moodle' : ''}</div>
+    ${e.notes ? `<div class="notes">${esc(e.notes)}</div>` : ''}
     <div class="btns">
       ${e.fixed ? '' : `<button class="btn primary" data-p="toggle">${e.done ? 'Pas fait' : 'Fait ✓'}</button>`}
       ${e.type === 'revision' && !e.done ? `<button class="btn" data-p="focus">Concentration ${Math.min(min, 240)} min</button>` : ''}
@@ -213,6 +223,7 @@ function openPrefs() {
   for (const f of FIELDS) $('#p-' + f).value = st[f];
   $('#p-ics').value = st.ics_url;
   $('#p-subjects').value = st.subjects.join(', ');
+  $('#p-gym_program').value = st.gym_program || S.gym_default || '';
   $('#p-reminders').checked = st.reminders;
   $('#p-icsremove').hidden = !S.edt_file;
   $('#p-claude').textContent = S.claude ? '✅ Compte Claude connecté : « ✨ Avec Claude » organise ta semaine (ça compte dans ton forfait).'
@@ -234,7 +245,8 @@ $('#p-icsremove').onclick = async () => {
 };
 $('#p-cancel').onclick = () => $('#prefs').classList.add('hidden');
 $('#p-save').onclick = async () => {
-  const values = { ics_url: $('#p-ics').value, subjects: $('#p-subjects').value, reminders: $('#p-reminders').checked };
+  const values = { ics_url: $('#p-ics').value, subjects: $('#p-subjects').value, reminders: $('#p-reminders').checked,
+    gym_program: $('#p-gym_program').value };
   for (const f of FIELDS) {
     const el = $('#p-' + f);
     values[f] = el.type === 'number' || f === 'groceries_day' ? Number(el.value) : el.value;

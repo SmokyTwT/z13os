@@ -1,0 +1,105 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Smoky OS//Examens//FR
+X-WR-CALNAME:Examens INSA SHPI 2A - S3 période 1 (2026-2027)
+BEGIN:VEVENT
+UID:insa2a-s3p1-0@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261106T133000
+DTEND:20261106T153000
+SUMMARY:Examen Algèbre
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:2 h · L. Vrancken · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-1@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261106T160000
+DTEND:20261106T173000
+SUMMARY:Examen LV2 Allemand
+LOCATION:AB1-200
+DESCRIPTION:1 h 30 · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-2@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261109T133000
+DTEND:20261109T153000
+SUMMARY:Examen Analyse
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:2 h · E. Andréo · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-3@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261109T160000
+DTEND:20261109T173000
+SUMMARY:Examen LV1 Anglais
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:1 h 30 · J. Lauro · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-4@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART;VALUE=DATE:20261110
+DTEND;VALUE=DATE:20261111
+SUMMARY:Entraînement calcul (45 min le matin\, voir la répartition reçue)
+LOCATION:Salles TP1 à TP5
+DESCRIPTION:Créneau de 45 min entre 8 h 30 et 11 h 30 selon la répartition envoyée · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-5@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261110T133000
+DTEND:20261110T150000
+SUMMARY:Examen Optique ondulatoire
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:1 h 30 · Z. Oumekloul · documents : non · calculatrice : OUI · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-6@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261110T153000
+DTEND:20261110T170000
+SUMMARY:Examen Culture et communication
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:1 h 30 · L. Courmont · documents : OUI · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-7@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261113T083000
+DTEND:20261113T100000
+SUMMARY:Examen Bases de données relationnelles
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:1 h 30 · C. Roze · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-8@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261113T103000
+DTEND:20261113T113000
+SUMMARY:Examen Méthodes numériques appliquées
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:1 h · F. Goichot · documents : non · calculatrice : non · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+BEGIN:VEVENT
+UID:insa2a-s3p1-9@smokyos
+DTSTAMP:20261019T000000Z
+DTSTART:20261113T133000
+DTEND:20261113T150000
+SUMMARY:Examen Électromagnétisme
+LOCATION:AB1-300 / AB1-200 / CLJ2 E8
+DESCRIPTION:1 h 30 · F. Lefebvre · documents : non · calculatrice : toutes sauf téléphone\, tablette et PC · planning du 19/10/2026\, peut encore changer
+CATEGORIES:EXAMEN
+END:VEVENT
+END:VCALENDAR
