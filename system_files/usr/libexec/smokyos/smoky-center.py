@@ -304,6 +304,24 @@ def sysinfo():
 
 
 # --- État de la machine -------------------------------------------------------------------
+def _json(text):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return {}
+
+
+_SB = []
+
+
+def secure_boot():
+    """« on », « off » ou « » (inconnu) ; ne change pas sans redémarrer, donc lu une fois."""
+    if not _SB:
+        _, out = run("mokutil", "--sb-state", timeout=5)
+        _SB.append("on" if "enabled" in out else "off" if "disabled" in out else "")
+    return _SB[0]
+
+
 _MOODLE = {"at": 0, "data": {"connected": False}}
 _POOL = ThreadPoolExecutor(max_workers=8)
 
@@ -330,6 +348,8 @@ def state():
         "active": lambda: run("nmcli", "-t", "-f", "NAME", "connection", "show", "--active")[1],
         "home": lambda: run("systemctl", "--user", "is-active", "smoky-home.service")[1],
         "moodle": moodle_status, "ostree": ostree_status, "windows": windows_entry,
+        "backup": lambda: _json(run("python3", f"{LIBEXEC}/smoky-backup-status.py", timeout=10)[1]),
+        "secureboot": secure_boot,
         "g": gset_state, "storage": lambda: storage(),
     }.items()}
     r = {k: f.result() for k, f in jobs.items()}
@@ -353,6 +373,7 @@ def state():
         "g": r["g"],
         "jobs": {k: dict(v) for k, v in JOBS.items()},
         "windows": r["windows"] is not None,
+        "backup": r["backup"], "secureboot": r["secureboot"],
         "info": sysinfo(),
         "storage": r["storage"],
     }

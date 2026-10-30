@@ -1,0 +1,11 @@
+[Unit]
+Description=Smoky OS : vérifie les sauvegardes chaque jour
+
+[Timer]
+OnStartupSec=20min
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

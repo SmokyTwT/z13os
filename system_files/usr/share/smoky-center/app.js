@@ -170,10 +170,12 @@ function render() {
   </section>
   <section class="card"><h2>ℹ️ Système</h2>
     <p class="hint">${esc(s.system)} · noyau ${esc(s.info.kernel)} · ${esc(s.info.ram)} de mémoire${s.info.temp ? ' · processeur à ' + esc(s.info.temp) : ''} · allumé depuis ${esc(s.info.uptime)}</p>
+    <div class="row"><span>Secure Boot (démarrage vérifié)</span><span class="pill ${s.secureboot === 'on' ? 'on' : ''}">${s.secureboot === 'on' ? 'activé' : s.secureboot === 'off' ? 'désactivé' : 'inconnu'}</span></div>
+    ${s.secureboot === 'off' ? '<p class="hint">À activer : redémarre, appuie sur F2 (BIOS) → Security → Secure Boot → Enabled, puis F10. Smoky OS et Windows démarrent tous les deux avec.</p>' : ''}
     ${s.windows ? '<div class="btns"><button class="btn" data-a="windows">Redémarrer sur Windows</button></div><p class="hint">Une seule fois : au redémarrage suivant, retour à Smoky OS.</p>' : ''}
   </section>
-  <section class="card"><h2>💾 Sauvegardes</h2>
-    <p class="hint">Sauvegarde automatique de ton dossier personnel sur Google Drive (ou un disque, un NAS), avec restauration en quelques clics.</p>
+  <section class="card"><h2>💾 Sauvegardes <small><span class="pill ${s.backup && !s.backup.late ? 'on' : ''}">${!s.backup || s.backup.days == null ? 'jamais faite' : s.backup.days === 0 ? "aujourd'hui" : 'il y a ' + s.backup.days + ' j'}</span></small></h2>
+    <p class="hint">Sauvegarde automatique de ton dossier personnel sur Google Drive (ou un disque, un NAS), avec restauration en quelques clics.${s.backup && s.backup.late ? ' <b>Une sauvegarde est à faire</b> : un rappel s\'affiche chaque jour tant qu\'elle date de plus de 7 jours.' : ''}${s.backup && s.backup.days != null && !s.backup.periodic ? ' Active « Sauvegarde automatique » dans Déjà Dup pour ne plus y penser.' : ''}</p>
     <div class="btns"><button class="btn primary" data-a="backup_open">Ouvrir les sauvegardes</button></div>
   </section>
   <section class="card"><h2>✨ Apparence</h2>

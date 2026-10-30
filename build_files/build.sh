@@ -297,7 +297,7 @@ dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/u
 chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/bin/smoky-center /usr/bin/smoky-mail /usr/libexec/smokymail/*.py /usr/libexec/smokymail/*.sh \
   /usr/bin/smoky-agenda /usr/libexec/smokyagenda/server.py \
   /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/*.py /usr/libexec/smokyos/*.sh
-systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer
+systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer smoky-backup-check.timer
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-powertune.service z13-firstboot.service smoky-focus-cleanup.service \
   rpm-ostreed-automatic.timer smoky-flatpak-update.timer

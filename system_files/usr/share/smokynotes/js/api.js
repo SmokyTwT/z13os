@@ -3,6 +3,10 @@
 // la page (un autre programme du PC qui lirait la page ne l'obtient pas). Gardé pour les rechargements.
 const TOKEN = (() => {
   const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+  const f = location.hash.match(/[#&]f=([^&]+)/);       // classeur à ouvrir (lien depuis Smoky Agenda)
+  if (f) {
+    try { sessionStorage.setItem('smoky-folder', decodeURIComponent(f[1]).slice(0, 60)); } catch { /* indisponible */ }
+  }
   if (m) {
     try { sessionStorage.setItem('smoky-k', m[1]); } catch { /* stockage indisponible */ }
     history.replaceState(null, '', location.pathname);

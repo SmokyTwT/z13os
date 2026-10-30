@@ -14,6 +14,10 @@ const fmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' })
 
 export function initLibrary(onOpen) {
   openEditor = onOpen;
+  try {                          // ouvert depuis Smoky Agenda sur une matière : son classeur d'abord
+    const f = sessionStorage.getItem('smoky-folder');
+    if (f) { filter = 'f:' + f; sessionStorage.removeItem('smoky-folder'); }
+  } catch { /* indisponible */ }
   hydrateIcons($('#library'));
   $('#lib-new').onclick = () => newNotebookDialog();
   $('#lib-import').onclick = () => pickPdf();

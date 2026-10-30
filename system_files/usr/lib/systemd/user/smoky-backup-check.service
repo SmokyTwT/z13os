@@ -1,0 +1,6 @@
+[Unit]
+Description=Smoky OS : rappel si la dernière sauvegarde est trop ancienne
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/libexec/smokyos/smoky-backup-status.py --check

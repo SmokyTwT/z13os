@@ -115,7 +115,7 @@ function render() {
     const left = Math.round((new Date(dayOf(e.start) + 'T12:00') - new Date(S.today + 'T12:00')) / 864e5);
     return `<div class="it" title="${esc(e.where || '')}"><i class="dot" style="color:var(--examen)"></i>${esc(e.title.replace(/^Examen\s+/i, ''))}
       <span class="t">${fmtShort.format(new Date(dayOf(e.start) + 'T12:00'))}${e.allday ? '' : ' ' + timeOf(e.start)}</span>
-      <span class="exam-left">${left <= 0 ? 'auj.' : left === 1 ? 'demain' : 'J-' + left}</span></div>`;
+      <span class="exam-left">${left <= 0 ? 'auj.' : left === 1 ? 'demain' : 'J-' + left}</span></div>${repLine(e)}`;
   }).join('');
   const tasks = S.tasks.filter((t) => !t.done);
   $('#tasks').innerHTML = tasks.length ? tasks.map((t) => `<div class="it"><i class="dot" style="color:var(--tache)"></i>${esc(t.title)}
@@ -131,6 +131,15 @@ function render() {
   $('#plan-claude').title = S.claude ? 'Claude organise ta semaine (ton compte Claude)' : 'Connecte d’abord ton compte Claude (Smoky Mail → Réglages)';
 }
 
+// bilan des révisions d'un examen : heures faites / prévues, et retard si des blocs passés sont restés non faits
+const hm = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m} min`);
+function repLine(e) {
+  const r = (S.report || []).find((x) => x.exam === e.id);
+  if (!r || !r.planned) return '';
+  const late = r.missed >= 60;
+  return `<div class="rep ${late ? 'late' : ''}">Révisé ${hm(r.done)} sur ${hm(r.planned)} prévues${late ? ` · ${hm(r.missed)} en retard` : ''}</div>`;
+}
+
 // --- Détail d'un bloc ---------------------------------------------------------------------------------
 function openPop(id, ev) {
   const e = [...S.fixed.map((x) => ({ ...x, fixed: true })), ...S.plan].find((x) => x.id === id);
@@ -141,13 +150,16 @@ function openPop(id, ev) {
   pop.innerHTML = `<h3>${esc(e.title)}</h3>
     <div class="meta">${esc(fmtLong.format(new Date(dayOf(e.start) + 'T12:00')))} · ${timeOf(e.start)} – ${timeOf(e.end)}${e.where ? '<br>' + esc(e.where) : ''}
     <br>${esc(S.types[e.type] || '')}${e.source === 'edt' ? ' · emploi du temps' : e.source === 'moodle' ? ' · échéance Moodle' : ''}</div>
-    ${e.notes ? `<div class="notes">${esc(e.notes)}</div>` : ''}
+    ${e.type === 'salle' && e.notes ? gymForm(e) : e.notes ? `<div class="notes">${esc(e.notes)}</div>` : ''}
     <div class="btns">
       ${e.fixed ? '' : `<button class="btn primary" data-p="toggle">${e.done ? 'Pas fait' : 'Fait ✓'}</button>`}
       ${e.type === 'revision' && !e.done ? `<button class="btn" data-p="focus">Concentration ${Math.min(min, 240)} min</button>` : ''}
+      ${(e.subject || '') && S.settings.subjects.includes(e.subject) ? `<button class="btn" data-p="notes">📓 Carnet ${esc(e.subject)}</button>` : ''}
+      ${e.type === 'salle' && e.notes ? '<button class="btn primary" data-p="gym">Noter la séance</button>' : ''}
       ${canEdit ? '<button class="btn danger" data-p="delete">Supprimer</button>' : ''}
       <button class="btn" data-p="close">Fermer</button>
     </div>`;
+  pop.classList.toggle('wide', e.type === 'salle' && !!e.notes);
   pop.classList.remove('hidden');
   const r = pop.getBoundingClientRect();
   pop.style.left = Math.min(window.innerWidth - r.width - 12, ev.clientX + 10) + 'px';
@@ -158,10 +170,31 @@ function openPop(id, ev) {
       pop.classList.add('hidden');
       if (p === 'toggle') { await act({ action: 'toggle', id }); refresh(); }
       if (p === 'delete') { await act({ action: 'delete', id }, 'Supprimé'); refresh(); }
+      if (p === 'notes') act({ action: 'open_notes', subject: e.subject });
+      if (p === 'gym') {
+        const entries = [...pop.querySelectorAll('[data-ex]')].map((row) => ({
+          exercise: row.dataset.ex, kg: row.querySelector('.kg').value, reps: row.querySelector('.reps').value,
+        })).filter((x) => x.kg !== '' && x.reps !== '');
+        await act({ action: 'gym_log', block: e.id, date: dayOf(e.start), entries });
+        if (!e.done) await act({ action: 'toggle', id });
+        refresh();
+      }
       if (p === 'focus') act({ action: 'focus', minutes: Math.max(5, Math.min(min, 240)) }, 'Concentration lancée : les sites qui distraient sont bloqués');
     };
   });
 }
+// séance de salle : une ligne par exercice (kg × répétitions), pré-remplie avec la dernière fois
+function gymForm(e) {
+  const rows = e.notes.split('\n').filter(Boolean).map((ex) => {
+    const last = (S.gym_last || {})[ex];
+    return `<div style="display:contents" data-ex="${esc(ex)}"><span>${esc(ex)}</span>
+      <input class="kg" type="number" min="0" max="500" step="0.5" placeholder="kg" value="${last ? last.kg : ''}">
+      <input class="reps" type="number" min="1" max="100" placeholder="rép." value="${last ? last.reps : ''}">
+      ${last ? `<span class="last">Dernière fois : ${last.kg} kg × ${last.reps} (${esc(fmtShort.format(new Date(last.date + 'T12:00')))})</span>` : ''}</div>`;
+  }).join('');
+  return `<div class="gym">${rows}</div>`;
+}
+
 document.addEventListener('click', (ev) => {
   const pop = $('#pop');
   if (!pop.classList.contains('hidden') && !pop.contains(ev.target) && !ev.target.closest('.blk')) pop.classList.add('hidden');
@@ -225,6 +258,7 @@ function openPrefs() {
   $('#p-subjects').value = st.subjects.join(', ');
   $('#p-gym_program').value = st.gym_program || S.gym_default || '';
   $('#p-reminders').checked = st.reminders;
+  $('#p-clean_during_class').checked = !!st.clean_during_class;
   $('#p-icsremove').hidden = !S.edt_file;
   $('#p-claude').textContent = S.claude ? '✅ Compte Claude connecté : « ✨ Avec Claude » organise ta semaine (ça compte dans ton forfait).'
     : 'Pour « ✨ Avec Claude », connecte ton compte Claude dans Smoky Mail → Réglages (une seule fois pour tout Smoky OS).';
@@ -246,7 +280,7 @@ $('#p-icsremove').onclick = async () => {
 $('#p-cancel').onclick = () => $('#prefs').classList.add('hidden');
 $('#p-save').onclick = async () => {
   const values = { ics_url: $('#p-ics').value, subjects: $('#p-subjects').value, reminders: $('#p-reminders').checked,
-    gym_program: $('#p-gym_program').value };
+    gym_program: $('#p-gym_program').value, clean_during_class: $('#p-clean_during_class').checked };
   for (const f of FIELDS) {
     const el = $('#p-' + f);
     values[f] = el.type === 'number' || f === 'groceries_day' ? Number(el.value) : el.value;

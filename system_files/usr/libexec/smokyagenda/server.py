@@ -80,7 +80,7 @@ DEFAULTS = {
     "gym_per_week": 3, "gym_min": 90, "gym_from": "17:00", "gym_to": "21:30",
     "groceries_day": 5, "groceries_time": "10:00", "groceries_min": 60,
     "revision_weekday_min": 120, "revision_weekend_min": 180, "block_min": 50,
-    "subjects": [], "gym_program": "", "reminders": True, "remind_before": 10, "model": "opus",
+    "subjects": [], "gym_program": "", "clean_during_class": False, "reminders": True, "remind_before": 10, "model": "opus",
 }
 
 
@@ -645,13 +645,15 @@ def validate_blocks(raw, start, conf, fixed, tasks):
 def schedule_reminders():
     """Une notification « remind_before » minutes avant chaque bloc des prochaines 36 h."""
     try:
-        out = subprocess.run(["systemctl", "--user", "list-units", "--plain", "--no-legend", "smoky-agenda-r-*.timer"],
+        out = subprocess.run(["systemctl", "--user", "list-units", "--plain", "--no-legend",
+                              "smoky-agenda-r-*.timer", "smoky-agenda-m-*.timer"],
                              capture_output=True, text=True, timeout=20).stdout
         for line in out.splitlines():
             subprocess.run(["systemctl", "--user", "stop", line.split()[0]], capture_output=True, timeout=20)
     except (OSError, subprocess.TimeoutExpired):
         return
     conf = settings()
+    schedule_cleaning(conf)
     if not conf["reminders"]:
         return
     now = datetime.now()
@@ -668,6 +670,49 @@ def schedule_reminders():
         subprocess.run(["systemd-run", "--user", "--quiet", f"--unit={unit}", f"--on-calendar={when:%Y-%m-%d %H:%M:00}",
                         "--timer-property=AccuracySec=30s", "notify-send", "-a", "Smoky Agenda", "-i", "smoky-agenda",
                         f"{label} : {b['title']}"[:120], body], capture_output=True, timeout=20)
+
+
+def schedule_cleaning(conf):
+    """Ménage pendant les cours : le robot part 10 min après le début du premier cours d'au moins
+    une heure de chaque journée (tu n'es pas dans la chambre), par Smoky Home."""
+    if not conf.get("clean_during_class"):
+        return
+    now = datetime.now()
+    days = {}
+    for e in fixed_events(now, now + timedelta(hours=37)):
+        if e.get("allday") or e["type"] not in ("cours", "examen"):
+            continue
+        s, f = parse_iso(e["start"]), parse_iso(e["end"])
+        if f - s >= timedelta(minutes=60) and s.date() not in days:
+            days[s.date()] = s
+    for d, s in sorted(days.items()):
+        when = s + timedelta(minutes=10)
+        if when <= now:
+            continue
+        subprocess.run(["systemd-run", "--user", "--quiet", f"--unit=smoky-agenda-m-{d:%Y%m%d}",
+                        f"--on-calendar={when:%Y-%m-%d %H:%M:00}", "--timer-property=AccuracySec=1min",
+                        "/usr/bin/python3", "/usr/libexec/smokyos/smoky-home-clean.py"],
+                       capture_output=True, timeout=20)
+
+
+def revision_report():
+    """Pour chaque examen à venir : minutes de révision faites / prévues sur sa matière (14 jours avant)."""
+    now = datetime.now()
+    plan = store()["plan"]
+    out = []
+    for e in upcoming_exams():
+        subj = e.get("subject") or subject_of(e["title"])
+        if not subj:
+            continue
+        exam = parse_iso(e["start"])
+        mine = [b for b in plan if b["type"] == "revision" and b.get("subject") == subj
+                and exam - timedelta(days=14) <= parse_iso(b["start"]) < exam]
+        minutes = lambda bs: sum(int((parse_iso(b["end"]) - parse_iso(b["start"])).total_seconds() // 60) for b in bs)
+        past = [b for b in mine if parse_iso(b["end"]) <= now]
+        done = [b for b in mine if b.get("done")]
+        out.append({"exam": e["id"], "subject": subj, "done": minutes(done), "planned": minutes(mine),
+                    "missed": minutes([b for b in past if not b.get("done")])})
+    return out
 
 
 def export_ics():
@@ -725,7 +770,16 @@ def state(offset):
             "planned_by": st["planned_by"], "types": TYPES, "days": DAYS, "models": MODELS, "claude": claude_ok,
             "edt_ok": bool(settings()["ics_url"]) and ICS_CACHE.exists(), "export": str(EXPORT),
             "edt_file": ICS_FILE.exists(), "edt_error": EDT_ERROR, "exams": upcoming_exams(),
+            "report": revision_report(), "gym_last": gym_last(),
             "gym_default": GYM_PROGRAM}
+
+
+def gym_last():
+    """Dernière charge notée pour chaque exercice : {exercice: {kg, reps, date}}."""
+    last = {}
+    for g in store().get("gym_log", []):
+        last[g["exercise"]] = {"kg": g["kg"], "reps": g["reps"], "date": g["date"]}
+    return last
 
 
 def upcoming_exams(days=45):
@@ -809,6 +863,29 @@ def act(a):
             ICS_FILE.write_text(text)
             schedule_reminders()
             return {"ok": True, "message": f"{n} cours importé{'s' if n > 1 else ''}"}
+        if kind == "open_notes":
+            subj = str(a.get("subject", ""))
+            if subj not in settings()["subjects"]:
+                return {"ok": False, "message": "Matière inconnue."}
+            subprocess.Popen(["/usr/bin/smoky-notes", "--classeur", subj], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            return {"ok": True}
+        if kind == "gym_log":
+            st = store()
+            day = str(a.get("date", ""))[:10] or date.today().isoformat()
+            date.fromisoformat(day)
+            log = [g for g in st.get("gym_log", []) if g["date"] != day or g.get("block") != a.get("block")]
+            for row in (a.get("entries") or [])[:30]:
+                ex = str(row.get("exercise", "")).strip()[:80]
+                try:
+                    kg, reps = round(float(row.get("kg")), 1), int(row.get("reps"))
+                except (TypeError, ValueError):
+                    continue
+                if ex and 0 <= kg <= 500 and 0 < reps <= 100:
+                    log.append({"date": day, "block": str(a.get("block", ""))[:40], "exercise": ex, "kg": kg, "reps": reps})
+            st["gym_log"] = log[-3000:]
+            jsave(STORE, st)
+            return {"ok": True, "message": "Séance notée"}
         if kind == "remove_ics":
             ICS_FILE.unlink(missing_ok=True)
             schedule_reminders()
