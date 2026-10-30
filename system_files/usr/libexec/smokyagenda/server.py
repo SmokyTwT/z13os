@@ -690,6 +690,7 @@ def export_ics():
 
 # --- État et actions -----------------------------------------------------------------------------
 def plan_week(offset, by_claude):
+    import_shipped_exams()
     start = week_start(offset)
     s0, s1 = at(start, 0), at(start + timedelta(days=7), 0)
     conf, st = settings(), store()
