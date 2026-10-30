@@ -26,7 +26,20 @@ STAMP = DATA / ".smoky-dashboard.sha256"
 KEEP = re.compile(r"suction|fan|aspir|puissan|mode|water|eau|mop|serpill|clean|nettoy|carpet|tapis|"
                   r"times|passage|repeat|route|intensit|level|niveau|edge|bord", re.I)
 SKIP = re.compile(r"status|statut|locked|sleep|remote|listen|system|firmware|debug|reset|life|"
-                  r"duree|left|restant|filter|filtre|brush|brosse", re.I)
+                  r"duree|left|restant|filter|filtre|brush|brosse|custom|^\W", re.I)
+# noms en français (le plus précis d'abord), sur le nom sans le nom de l'appareil
+FRENCH = [
+    (r"batter", "Batterie"),
+    (r"sweep.?mop.?type|clean.?mode.?type", "Aspiration, serpillière ou les deux"),
+    (r"sweep.?type", "Type d'aspiration"),
+    (r"suction|fan.?level|^(robot cleaner )?mode$", "Puissance d'aspiration"),
+    (r"clean.?times|repeat|passage", "Nombre de passages"),
+    (r"water.?output.?for.?wash", "Eau pour laver la serpillière"),
+    (r"frequency.?mop.?wash|mop.?wash.?freq", "Lavage de la serpillière (fréquence)"),
+    (r"mop.?water|water.?output|water.?level", "Niveau d'eau de la serpillière"),
+    (r"carpet", "Tapis"),
+    (r"dry", "Séchage de la serpillière"),
+]
 
 
 def plain(s):
@@ -50,25 +63,39 @@ def main():
     def label(e):
         return e.get("name") or e.get("original_name") or e["entity_id"].split(".", 1)[1].replace("_", " ")
 
+    def short(e, dev_name):
+        """Nom lisible : sans le nom de l'appareil ni « Robot Cleaner », traduit si possible."""
+        name = label(e)
+        if dev_name and name.lower().startswith(dev_name.lower()):
+            name = name[len(dev_name):]
+        name = re.sub(r"^\W*(robot cleaner|vacuum)\W*", "", name, flags=re.I).strip() or name
+        for pattern, fr in FRENCH:
+            if re.search(pattern, plain(name), re.I):
+                return fr
+        return name[:40]
+
     cards = []
     for vac in (e for e in entities if e["entity_id"].startswith("vacuum.")):
         dev = devices.get(vac.get("device_id"), {})
         same = [e for e in entities if e.get("device_id") and e.get("device_id") == vac.get("device_id")]
-        settings = [e["entity_id"] for e in same
+        dev_name = dev.get("name_by_user") or dev.get("name") or ""
+        settings = [{"entity": e["entity_id"], "name": short(e, dev_name)} for e in same
                     if e["entity_id"].split(".")[0] in ("select", "number", "switch")
                     and e.get("entity_category") != "diagnostic"
                     and KEEP.search(plain(label(e))) and not SKIP.search(plain(label(e)))]
-        battery = [e["entity_id"] for e in same if e["entity_id"].startswith("sensor.")
+        battery = [{"entity": e["entity_id"], "name": "Batterie"} for e in same if e["entity_id"].startswith("sensor.")
                    and re.search(r"batter", plain(label(e)) + e["entity_id"], re.I)][:1]
+        model = re.search(r"\b([A-Z]\d+[A-Za-z]*(?:\s(?:Max|Pro|Ultra|Plus))?)\b", dev_name)
         cards.append({"type": "tile", "entity": vac["entity_id"],
-                      "name": dev.get("name_by_user") or dev.get("name") or "Robot",
+                      "name": f"Robot {model.group(1)}" if model else (dev_name or "Robot"),
                       "vertical": False,
                       # puissance d'aspiration : en touchant la tuile (fenêtre détaillée du robot)
                       "features": [{"type": "vacuum-commands",
                                     "commands": ["start_pause", "stop", "return_home", "locate"]}]})
         if battery or settings:
             cards.append({"type": "entities", "title": "Réglages du nettoyage",
-                          "entities": battery + settings[:12]})
+                          # un réglage par nom (l'intégration en double certains)
+                          "entities": battery + list({x["name"]: x for x in settings}.values())[:10]})
     lights = [e["entity_id"] for e in entities if e["entity_id"].startswith("light.")]
     players = [e["entity_id"] for e in entities if e["entity_id"].startswith("media_player.")]
     if lights:
