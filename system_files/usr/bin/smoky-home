@@ -31,6 +31,16 @@ python3 /usr/libexec/smokyos/smoky-home-dashboard.py "$DATA"
 [ $? -eq 10 ] && changed=1
 
 up() { curl -fs -o /dev/null --max-time 2 "$URL"; }
+# Moteur démarré sans réseau : la découverte (zeroconf) a échoué et Xiaomi Home avec elle.
+# On le voit à la liste des composants chargés ; un redémarrage (réseau présent) répare.
+TOKEN_FILE="$HOME/.config/smoky-home/token"
+if [ "$changed" = 0 ] && up && [ -s "$TOKEN_FILE" ] && ip -4 route show default | grep -q .; then
+  comps=$(curl -fs --max-time 5 -H "Authorization: Bearer $(cat "$TOKEN_FILE")" "$URL/api/config" 2>/dev/null)
+  if [ -n "$comps" ] && ! printf '%s' "$comps" | grep -q '"zeroconf"'; then
+    notify-send -i smoky-home "Smoky Home" "Reconnexion au réseau (le robot revient dans une minute)…" || true
+    changed=1
+  fi
+fi
 if [ "$changed" = 1 ] && up; then
   systemctl --user restart smoky-home.service
   sleep 3

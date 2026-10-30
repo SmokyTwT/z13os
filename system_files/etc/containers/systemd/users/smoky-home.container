@@ -13,6 +13,9 @@ Volume=%h/.local/share/smoky-home:/config:Z
 Environment=TZ=Europe/Paris
 
 [Service]
+# Sans réseau au démarrage (PC tout juste allumé, Wi-Fi pas encore connecté), la découverte
+# réseau (zeroconf) échoue et entraîne Xiaomi Home avec elle : on attend une connexion (2 min max)
+ExecStartPre=/bin/sh -c 'for i in $(seq 60); do ip -4 route show default | grep -q . && exit 0; sleep 2; done; exit 0'
 Restart=on-failure
 # premier lancement : téléchargement de l'image (~1,5 Go)
 TimeoutStartSec=1800
