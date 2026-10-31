@@ -1,6 +1,7 @@
 // Smoky OS : l'utilisateur de la session active peut, sans mot de passe, démarrer/arrêter
 // le mode concentration (smoky-focus@N.service) et redémarrer sur Windows
-// (smoky-windows.service, l'équivalent du bouton « Redémarrer »). Rien d'autre.
+// ou dans les réglages UEFI (smoky-windows.service, smoky-firmware.service : l'équivalent du
+// bouton « Redémarrer »). Rien d'autre.
 polkit.addRule(function (action, subject) {
     if (action.id === "org.freedesktop.systemd1.manage-units" &&
         subject.local && subject.active &&
@@ -10,7 +11,7 @@ polkit.addRule(function (action, subject) {
     }
     if (action.id === "org.freedesktop.systemd1.manage-units" &&
         subject.local && subject.active &&
-        action.lookup("unit") === "smoky-windows.service" &&
+        ["smoky-windows.service", "smoky-firmware.service"].indexOf(action.lookup("unit")) >= 0 &&
         action.lookup("verb") === "start") {
         return polkit.Result.YES;
     }

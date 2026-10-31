@@ -1,0 +1,6 @@
+[Unit]
+Description=Smoky OS : redémarrer dans les réglages UEFI (BIOS), une seule fois
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/smokyos/smoky-bootonce.sh uefi

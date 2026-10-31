@@ -66,6 +66,15 @@ mkdir -p /boot/grub2
 cat > /boot/grub2/grub.cfg <<EOF
 set timeout=3
 set timeout_style=menu
+if [ -s \$prefix/grubenv ]; then
+  load_env
+fi
+if [ "\${next_entry}" ]; then
+  set default="\${next_entry}"
+  set next_entry=
+  save_env next_entry
+  set timeout=0
+fi
 insmod part_gpt
 insmod ext2
 insmod fat
