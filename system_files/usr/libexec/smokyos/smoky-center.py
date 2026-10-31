@@ -488,8 +488,11 @@ def act(a):
     if kind == "windows":
         if not windows_entry():
             return {"ok": False, "message": "Windows introuvable sur ce PC."}
-        code, out = run("systemctl", "start", "--no-block", "smoky-windows.service", timeout=20)
-        return {"ok": True} if code == 0 else {"ok": False, "message": out or "Redémarrage refusé."}
+        # attend le résultat : si le firmware refuse, on le dit au lieu de ne rien faire
+        code, _ = run("systemctl", "start", "smoky-windows.service", timeout=30)
+        return {"ok": True} if code in (0, 127) else {"ok": False, "message":
+                "Le firmware ASUS refuse de choisir Windows à l'avance : redémarre, appuie sur Échap "
+                "au logo ROG et choisis Windows Boot Manager."}
     if kind == "update":
         if not UPDATE["running"]:
             UPDATE.update(running=True, result="")

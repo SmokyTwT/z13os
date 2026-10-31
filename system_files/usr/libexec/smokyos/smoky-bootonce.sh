@@ -33,7 +33,9 @@ case "$target" in
   windows)
     id=$(efibootmgr | sed -nE 's/^Boot([0-9A-Fa-f]{4})\*?[[:space:]]+Windows Boot Manager.*/\1/p' | head -1)
     [[ -n "$id" ]] || { echo "Windows introuvable"; exit 1; }
-    if efibootmgr --bootnext "$id" >/dev/null 2>&1; then systemctl reboot; else grub_once "Windows"; fi ;;
+    # pas de repli par le menu GRUB : son passage vers Windows échoue sur ce PC (grub rescue)
+    if efibootmgr --bootnext "$id" >/dev/null 2>&1; then systemctl reboot
+    else echo "Le firmware refuse : redémarre, appuie sur Échap au logo ROG et choisis Windows Boot Manager"; exit 1; fi ;;
   uefi)
     systemctl reboot --firmware-setup 2>/dev/null || grub_once "Réglages du firmware (UEFI)" ;;
   *) echo "usage : $0 windows|uefi"; exit 2 ;;
