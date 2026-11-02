@@ -5,8 +5,8 @@
 # Chaque appli est installée séparément : un échec n'empêche pas les autres, et le service
 # réessaie plus tard (sans tourner en boucle : voir StartLimit dans le service).
 set -uo pipefail
-APPS_VERSION=3
-APPS=(io.mpv.Mpv org.gnome.DejaDup com.protonvpn.www)
+APPS_VERSION=4
+APPS=(io.mpv.Mpv org.gnome.DejaDup com.protonvpn.www dev.opengoal.OpenGOAL)
 # Spotify : remplacé par l'appli web Smoky (z13-spotify), au thème Smoky
 RETIREES=(com.valvesoftware.Steam com.spotify.Client)
 STATE=/var/lib/z13os
