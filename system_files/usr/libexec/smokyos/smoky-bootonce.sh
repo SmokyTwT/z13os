@@ -37,11 +37,17 @@ case "$target" in
     # Repli par le menu GRUB, seulement si le lanceur de Windows est le vrai : un autre Linux
     # (CachyOS ici) avait mis son GRUB à la place de bootmgfw.efi, d'où un « grub rescue »
     esp=$(lsblk -nrpo NAME,PARTTYPE | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')
-    mnt=$(mktemp -d)
-    if [[ -n "$esp" ]] && mount -o ro "$esp" "$mnt" 2>/dev/null; then
+    # partition EFI déjà montée ailleurs (/boot/efi…) : on lit là ; sinon montage en lecture seule
+    mnt=$(findmnt -nro TARGET --source "$esp" 2>/dev/null | head -1)
+    own=
+    if [[ -z "$mnt" && -n "$esp" ]]; then
+      mnt=$(mktemp -d)
+      mount -o ro "$esp" "$mnt" 2>/dev/null && own=1 || mnt=
+    fi
+    if [[ -n "$mnt" ]]; then
       real=1
       grep -qai grub "$mnt/EFI/Microsoft/Boot/bootmgfw.efi" 2>/dev/null && real=0
-      umount "$mnt"
+      [[ -n "$own" ]] && umount "$mnt"
       [[ "$real" = 1 ]] && grub_once "Windows"
     fi
     echo "Le firmware refuse : redémarre, appuie sur Échap au logo ROG et choisis Windows Boot Manager"; exit 1 ;;
