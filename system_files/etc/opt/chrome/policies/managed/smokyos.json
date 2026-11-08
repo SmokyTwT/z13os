@@ -6,5 +6,8 @@
   "BatterySaverModeAvailability": 1,
   "ExtensionInstallForcelist": [
     "dgniaklnedgaocgcclfbmloppngbpppk;https://raw.githubusercontent.com/SmokyTwT/z13os/main/chrome-theme/updates.xml"
-  ]
+  ],
+  "HighEfficiencyModeEnabled": true,
+  "PasswordLeakDetectionEnabled": true,
+  "HttpsUpgradesEnabled": true
 }

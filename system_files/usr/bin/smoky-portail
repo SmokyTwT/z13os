@@ -1,71 +1,129 @@
 #!/usr/bin/env bash
 # Smoky OS — valider un portail Wi-Fi (« accepter les conditions ») au nom d'un
-# appareil qui n'a pas de navigateur (robot aspirateur, console, enceinte…).
+# appareil qui n'a pas de navigateur (robot aspirateur, Google TV, ampoule…).
 # Le PC se connecte temporairement avec l'adresse MAC de l'appareil, tu acceptes
 # la page, puis le PC reprend sa propre adresse : l'appareil peut se connecter.
+# Les appareils sont retenus (~/.config/smoky/portail-appareils) : la fois suivante,
+# il suffit de les cocher, et plusieurs peuvent être validés à la suite.
 set -u
 export LC_ALL=C.UTF-8
 T="Portail Wi-Fi pour un appareil"
 TMP_CON="smoky-portail"
+DEVS="${XDG_CONFIG_HOME:-$HOME/.config}/smoky/portail-appareils"   # lignes « MAC|Nom »
+NEW="➕ Nouvel appareil"
+FORGET="🗑 Oublier un appareil"
 
-die() { zenity --error --title="$T" --width=420 --text="$1" 2>/dev/null; nmcli connection delete "$TMP_CON" >/dev/null 2>&1; exit 1; }
+cleanup() { nmcli connection delete "$TMP_CON" >/dev/null 2>&1; }
+die() { zenity --error --title="$T" --width=420 --text="$1" 2>/dev/null; cleanup; exit 1; }
+norm_mac() { echo "$1" | tr 'a-f-' 'A-F:' | tr -d ' '; }
+valid_mac() { [[ $1 =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]]; }
 
-zenity --info --title="$T" --width=460 --ok-label="Commencer" --text="Cet outil valide la page « accepter » d'un Wi-Fi public <b>au nom d'un appareil</b> (ton robot X20 Max par exemple).
+mkdir -p "$(dirname "$DEVS")"; touch "$DEVS"
 
-Avant de commencer :
-• note l'<b>adresse MAC</b> de l'appareil (appli Xiaomi Home → robot → Paramètres → Infos réseau) ;
-• si l'appareil est déjà sur ce Wi-Fi, <b>éteins-le</b> le temps de l'opération (1 minute)." 2>/dev/null || exit 0
+add_device() {
+  local name mac
+  name=$(zenity --entry --title="$T" --width=420 --text="Nom de l'appareil (ex. : Robot, Google TV, Ampoule) :" 2>/dev/null) || return 1
+  name=$(echo "$name" | tr -d '|' | sed 's/^ *//; s/ *$//'); [ -n "$name" ] || name="Appareil"
+  mac=$(zenity --entry --title="$T" --width=420 --text="Adresse MAC de « $name » (ex. : 5C:E5:0C:12:34:56).
 
-MAC=$(zenity --entry --title="$T" --width=420 --text="Adresse MAC de l'appareil (ex. : 5C:E5:0C:12:34:56) :" 2>/dev/null) || exit 0
-MAC=$(echo "$MAC" | tr 'a-f-' 'A-F:' | tr -d ' ')
-[[ $MAC =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || die "Adresse MAC invalide : « $MAC ».\nElle doit ressembler à 5C:E5:0C:12:34:56."
+Robot : appli Xiaomi Home → Paramètres → Infos réseau.
+Google TV : Paramètres → Système → À propos → État.
+Ampoule Tapo : appli Tapo → ⚙️ → Info appareil." 2>/dev/null) || return 1
+  mac=$(norm_mac "$mac")
+  valid_mac "$mac" || { zenity --error --title="$T" --width=420 --text="Adresse MAC invalide : « $mac »." 2>/dev/null; return 1; }
+  grep -v "^$mac|" "$DEVS" > "$DEVS.tmp"; echo "$mac|$name" >> "$DEVS.tmp"; mv "$DEVS.tmp" "$DEVS"
+  echo "$mac"
+}
 
+# 1. Quels appareils ?
+SELECTED=()
+while :; do
+  ROWS=()
+  while IFS='|' read -r m n; do [ -n "$m" ] && ROWS+=(FALSE "$n" "$m"); done < "$DEVS"
+  if [ ${#ROWS[@]} -eq 0 ]; then
+    zenity --info --title="$T" --width=460 --ok-label="Commencer" --text="Cet outil valide la page « accepter » d'un Wi-Fi public <b>au nom d'un appareil</b> (robot, Google TV, ampoule…).
+
+Il te faut l'<b>adresse MAC</b> de l'appareil. Elle sera retenue pour la prochaine fois." 2>/dev/null || exit 0
+    mac=$(add_device) || exit 0
+    SELECTED=("$mac"); break
+  fi
+  CHOICE=$(zenity --list --checklist --title="$T" --width=520 --height=420 --separator='|' \
+    --text="Coche les appareils à autoriser sur le Wi-Fi public :" \
+    --column="" --column="Appareil" --column="Adresse MAC" "${ROWS[@]}" \
+    FALSE "$NEW" "ajouter" FALSE "$FORGET" "oublier" --print-column=3 2>/dev/null) || exit 0
+  IFS='|' read -ra PICKED <<< "$CHOICE"
+  SELECTED=(); ACT=""
+  for p in "${PICKED[@]}"; do
+    case "$p" in ajouter|oublier) ACT=$p ;; ?*) SELECTED+=("$p") ;; esac
+  done
+  if [ "$ACT" = oublier ]; then
+    ROWS2=(); while IFS='|' read -r m n; do [ -n "$m" ] && ROWS2+=("$n" "$m"); done < "$DEVS"
+    GONE=$(zenity --list --title="$T" --width=460 --height=360 --text="Quel appareil oublier ?" \
+      --column="Appareil" --column="Adresse MAC" "${ROWS2[@]}" --print-column=2 2>/dev/null) || continue
+    grep -v "^$GONE|" "$DEVS" > "$DEVS.tmp"; mv "$DEVS.tmp" "$DEVS"
+    continue
+  fi
+  if [ "$ACT" = ajouter ]; then mac=$(add_device) && SELECTED+=("$mac"); fi
+  [ ${#SELECTED[@]} -gt 0 ] && break
+  zenity --warning --title="$T" --width=380 --text="Coche au moins un appareil." 2>/dev/null
+done
+name_of() { awk -F'|' -v m="$1" '$1==m{print $2; exit}' "$DEVS"; }
+
+# 2. Sur quel Wi-Fi ? (celui où le PC est connecté en premier)
 IFACE=$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')
 [ -n "$IFACE" ] || die "Aucune carte Wi-Fi trouvée."
-
 nmcli device wifi rescan ifname "$IFACE" >/dev/null 2>&1; sleep 2
+CURRENT_CON=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v d="$IFACE" '$2==d{print $1; exit}')
 CURRENT=$(nmcli -t -f ACTIVE,SSID device wifi list ifname "$IFACE" | awk -F: '$1=="yes"{print $2; exit}')
-mapfile -t NETS < <(nmcli -t -f SSID,SECURITY device wifi list ifname "$IFACE" | awk -F: 'length($1)>0 && !seen[$1]++ {print $1 "\n" ($2==""||$2=="--" ? "ouvert" : $2)}')
+mapfile -t NETS < <(nmcli -t -f SSID,SECURITY device wifi list ifname "$IFACE" | awk -F: -v c="$CURRENT" '
+  length($1)>0 && !seen[$1]++ { line=$1 "\n" ($2==""||$2=="--" ? "ouvert" : $2); if ($1==c) first=line; else rest=rest line "\n" }
+  END { if (first!="") print first; printf "%s", rest }')
 [ ${#NETS[@]} -gt 0 ] || die "Aucun réseau Wi-Fi détecté."
-SSID=$(zenity --list --title="$T" --width=460 --height=420 --text="Sur quel Wi-Fi public l'appareil doit-il se connecter ?" \
+SSID=$(zenity --list --title="$T" --width=460 --height=420 --text="Sur quel Wi-Fi public les appareils doivent-ils se connecter ?" \
   --column="Réseau" --column="Sécurité" "${NETS[@]}" 2>/dev/null) || exit 0
 [ -n "$SSID" ] || exit 0
-
 SEC=$(nmcli -t -f SSID,SECURITY device wifi list ifname "$IFACE" | awk -F: -v s="$SSID" '$1==s{print $2; exit}')
-nmcli connection delete "$TMP_CON" >/dev/null 2>&1
-nmcli connection add type wifi ifname "$IFACE" con-name "$TMP_CON" ssid "$SSID" \
-  802-11-wireless.cloned-mac-address "$MAC" connection.autoconnect no >/dev/null || die "Impossible de préparer la connexion."
+PASS=""
 if [ -n "$SEC" ] && [ "$SEC" != "--" ]; then
-  PASS=$(zenity --password --title="$T — mot de passe du Wi-Fi « $SSID »" 2>/dev/null) || { nmcli connection delete "$TMP_CON" >/dev/null; exit 0; }
-  nmcli connection modify "$TMP_CON" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASS" >/dev/null
+  PASS=$(zenity --password --title="$T — mot de passe du Wi-Fi « $SSID »" 2>/dev/null) || exit 0
 fi
 
-( nmcli connection up "$TMP_CON" >/dev/null 2>&1 ) | zenity --progress --pulsate --auto-close --no-cancel \
-  --title="$T" --text="Connexion à « $SSID » avec l'adresse de l'appareil…" 2>/dev/null
-nmcli -t -f GENERAL.STATE connection show "$TMP_CON" 2>/dev/null | grep -q activated || die "La connexion à « $SSID » a échoué."
+LIST=""; for m in "${SELECTED[@]}"; do LIST+="• $(name_of "$m") ($m)\n"; done
+zenity --question --title="$T" --width=460 --ok-label="C'est fait" --cancel-label="Annuler" --text="<b>Éteins</b> ces appareils le temps de l'opération (deux appareils ne peuvent pas avoir la même adresse) :
 
-xdg-open "http://neverssl.com" >/dev/null 2>&1 &
-zenity --info --title="$T" --width=460 --ok-label="J'ai accepté" --text="Une page s'ouvre dans le navigateur : <b>accepte les conditions</b> du Wi-Fi public.
+$LIST
+Le PC perd Internet quelques instants pour chaque appareil." 2>/dev/null || exit 0
 
-(Si la page n'apparaît pas, ouvre n'importe quel site non sécurisé, par exemple neverssl.com.)
+# 3. Un appareil après l'autre
+OK=""; KO=""
+for MAC in "${SELECTED[@]}"; do
+  NAME=$(name_of "$MAC"); NAME=${NAME:-$MAC}
+  cleanup
+  nmcli connection add type wifi ifname "$IFACE" con-name "$TMP_CON" ssid "$SSID" \
+    802-11-wireless.cloned-mac-address "$MAC" connection.autoconnect no >/dev/null || { KO+="• $NAME\n"; continue; }
+  [ -n "$PASS" ] && nmcli connection modify "$TMP_CON" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASS" >/dev/null
+  ( nmcli connection up "$TMP_CON" >/dev/null 2>&1 ) | zenity --progress --pulsate --auto-close --no-cancel \
+    --title="$T" --text="Connexion à « $SSID » au nom de « $NAME »…" 2>/dev/null
+  if ! nmcli -t -f GENERAL.STATE connection show "$TMP_CON" 2>/dev/null | grep -q activated; then
+    KO+="• $NAME (connexion impossible)\n"; continue
+  fi
+  if [ "$(nmcli networking connectivity check 2>/dev/null)" = full ]; then
+    OK+="• $NAME (déjà autorisé)\n"; continue
+  fi
+  xdg-open "http://neverssl.com" >/dev/null 2>&1 &
+  zenity --info --title="$T — $NAME" --width=460 --ok-label="J'ai accepté" --text="Une page s'ouvre dans le navigateur : <b>accepte les conditions</b> pour « $NAME ».
 
-Clique ensuite sur « J'ai accepté »." 2>/dev/null
+(Si elle n'apparaît pas, ouvre neverssl.com.)" 2>/dev/null
+  if [ "$(nmcli networking connectivity check 2>/dev/null)" = full ]; then OK+="• $NAME\n"; else KO+="• $NAME (non confirmé)\n"; fi
+done
 
-STATE=$(nmcli networking connectivity check 2>/dev/null)
 nmcli connection down "$TMP_CON" >/dev/null 2>&1
-nmcli connection delete "$TMP_CON" >/dev/null 2>&1
-[ -n "$CURRENT" ] && nmcli connection up id "$CURRENT" >/dev/null 2>&1 &
-
-if [ "$STATE" = "full" ]; then
-  zenity --info --title="$T" --width=460 --text="✅ C'est validé pour l'appareil <b>$MAC</b>.
-
-Le PC a repris sa propre adresse. Maintenant :
-1. rallume l'appareil s'il était éteint ;
-2. connecte-le au Wi-Fi <b>« $SSID »</b> (appli Xiaomi Home pour le robot).
-
-Il aura Internet sans page à accepter. Si le portail expire un jour, relance cet outil." 2>/dev/null
-else
-  zenity --warning --title="$T" --width=460 --text="Je n'ai pas pu confirmer l'accès à Internet (état : ${STATE:-inconnu}).
-
-Si tu as bien accepté la page, connecte quand même l'appareil au Wi-Fi « $SSID » : il est peut-être déjà autorisé. Sinon, relance l'outil." 2>/dev/null
+cleanup
+if [ -n "$CURRENT_CON" ]; then nmcli connection up id "$CURRENT_CON" >/dev/null 2>&1 &
+elif [ -n "$CURRENT" ]; then nmcli connection up id "$CURRENT" >/dev/null 2>&1 &
 fi
+
+MSG="Le PC a repris sa propre adresse.\n\n"
+[ -n "$OK" ] && MSG+="✅ <b>Autorisés</b> sur « $SSID » :\n$OK\nRallume-les : ils auront Internet sans page à accepter.\n\n"
+[ -n "$KO" ] && MSG+="⚠️ <b>Pas confirmés</b> :\n$KO\nS'ils n'ont pas Internet une fois rallumés, relance l'outil pour eux.\n"
+zenity --info --title="$T" --width=480 --text="$(printf "%b" "$MSG")" 2>/dev/null
