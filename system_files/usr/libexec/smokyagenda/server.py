@@ -2,7 +2,7 @@
 """Smoky Agenda — planifie tes journées : cours, révisions, salle, courses, repas, tâches.
 
 Serveur local (127.0.0.1 uniquement), même protection que les autres applis Smoky : jeton
-secret dans la page, en-tête Host vérifié, aucune commande libre.
+secret et en-tête Host vérifiés à chaque requête (smokyos/smokyapp.py), aucune commande libre.
 
 * Ce qui est fixe : ton emploi du temps (lien iCal de l'ENT / ADE), tes événements, les
   échéances Moodle (Smoky Moodle).
@@ -26,10 +26,12 @@ import unicodedata
 import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "smokyos"))
+from smokyapp import Appli, RequeteActions, servir  # noqa: E402
 
 PORT = int(os.environ.get("SMOKYAGENDA_PORT", "47816"))
 APP_DIR = Path(os.environ.get("SMOKYAGENDA_APP", "/usr/share/smokyagenda")).resolve()
@@ -63,12 +65,9 @@ Poulie verticale prise serrée
 Élévations latérales + superset allongé
 Poulie : élévation bras droit + élévations latérales
 Abdos : poulie, pendu + élévations de genoux au sol"""
-TOKEN = secrets.token_urlsafe(24)
-# le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
-TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-agenda.token"
-HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
-MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-        ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg"}
+CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
+       "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+APPLI = Appli("agenda", PORT, APP_DIR, CSP, alias=("/agenda", "/agenda/"))
 TYPES = {"examen": "Examen", "cours": "Cours", "revision": "Révision", "salle": "Salle", "courses": "Courses", "repas": "Repas",
          "tache": "Tâche", "perso": "Perso", "devoir": "À rendre"}
 DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
@@ -947,68 +946,15 @@ def act(a):
 
 
 # --- Serveur -------------------------------------------------------------------------------------
-class Handler(BaseHTTPRequestHandler):
-    server_version = "SmokyAgenda/1.0"
+class Handler(RequeteActions):
+    MAXI_ACTION = 2 * ICS_MAX            # assez grand pour un fichier .ics importé (encodé en JSON)
 
-    def log_message(self, *a):
-        pass
+    def etat(self, requete):
+        m = re.search(r"(?:^|&)week=(-?\d{1,3})(?:&|$)", requete)
+        return state(int(m.group(1)) if m else 0)
 
-    def send(self, code, body, ctype="application/json", extra=None):
-        if isinstance(body, (dict, list)):
-            body = json.dumps(body, ensure_ascii=False).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        for k, v in (extra or {}).items():
-            self.send_header(k, v)
-        self.end_headers()
-        self.wfile.write(body)
-
-    def ok_host(self):
-        return self.headers.get("Host", "") in HOST_OK
-
-    def ok_api(self):
-        return self.ok_host() and secrets.compare_digest(self.headers.get("X-Smoky-Token", ""), TOKEN)
-
-    def do_GET(self):
-        if not self.ok_host():
-            return self.send(403, {"error": "hôte refusé"})
-        path, _, query = self.path.partition("?")
-        path = unquote(path)
-        if path == "/api/state":
-            if not self.ok_api():
-                return self.send(403, {"error": "refusé"})
-            m = re.search(r"(?:^|&)week=(-?\d{1,3})(?:&|$)", query)
-            return self.send(200, state(int(m.group(1)) if m else 0))
-        if path in ("/", "/agenda", "/agenda/"):
-            path = "/index.html"
-        target = (APP_DIR / path.lstrip("/")).resolve()
-        if APP_DIR not in target.parents or not target.is_file():
-            return self.send(404, {"error": "introuvable"})
-        data = target.read_bytes()
-        if target.name == "index.html":
-            data = data.replace(b"__SMOKY_TOKEN__", b"")
-        csp = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
-               "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-        self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
-                  {"Content-Security-Policy": csp, "X-Frame-Options": "DENY"})
-
-    def do_POST(self):
-        if not self.ok_api() or self.path != "/api/action":
-            return self.send(403, {"error": "refusé"})
-        try:
-            # assez grand pour un fichier .ics importé (encodé en JSON)
-            a = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 2 * ICS_MAX)))
-        except ValueError:
-            return self.send(400, {"error": "requête illisible"})
-        try:
-            res = act(a) if isinstance(a, dict) else {"ok": False}
-        except Exception as e:  # une erreur imprévue s'affiche dans l'appli au lieu de couper la connexion
-            res = {"ok": False, "message": f"erreur : {e}"[:200]}
-        self.send(200, res)
+    def action(self, a):
+        return act(a)
 
 
 if __name__ == "__main__":
@@ -1017,10 +963,4 @@ if __name__ == "__main__":
         sys.exit(0)
     DATA.mkdir(parents=True, exist_ok=True)
     os.chmod(DATA, 0o700)
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
-    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.write(fd, TOKEN.encode())
-    os.close(fd)
-    srv.serve_forever()
+    servir(APPLI, Handler)

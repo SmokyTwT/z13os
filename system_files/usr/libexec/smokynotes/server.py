@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Smoky Notes — petit serveur local (127.0.0.1 uniquement).
 
-Sert l'interface web et enregistre les carnets dans ~/Notes/Smoky Notes/,
-dossier synchronisé avec Google Drive. Seule la page servie ici peut écrire :
-chaque requête d'API doit porter l'en-tête X-Smoky-Token (un site externe ne
-peut pas l'ajouter sans autorisation CORS, que ce serveur ne donne jamais) et
-l'en-tête Host doit être exactement 127.0.0.1:PORT (protection anti-rebinding).
+Sert l'interface web et enregistre les carnets dans ~/Notes/Smoky Notes/, dossier
+synchronisé avec Google Drive. Seule la page servie ici peut écrire : jeton secret et
+en-tête Host vérifiés à chaque requête (voir smokyos/smokyapp.py, commun aux applis Smoky).
 """
 import json
 import os
@@ -15,31 +13,27 @@ import shutil
 import sys
 import time
 import unicodedata
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "smokyos"))
+from smokyapp import MIME, Appli, Requete, servir  # noqa: E402
 
 PORT = int(os.environ.get("SMOKYNOTES_PORT", "47813"))
 APP_DIR = Path(os.environ.get("SMOKYNOTES_APP", "/usr/share/smokynotes")).resolve()
 NOTES_ROOT = Path(os.environ.get("SMOKYNOTES_NOTES", Path.home() / "Notes")).resolve()
 DATA_DIR = NOTES_ROOT / "Smoky Notes"
 TRASH_DIR = DATA_DIR / ".corbeille"
-TOKEN = secrets.token_urlsafe(24)
-# le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
-TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-notes.token"
-HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+CSP = ("default-src 'self'; img-src 'self' blob: data:; "
+       "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; media-src 'self' blob:; "
+       "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:; "
+       "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+APPLI = Appli("notes", PORT, APP_DIR, CSP)
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 ASSET_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}\.(pdf|png|jpg|jpeg|webp|webm)$")
 PDF_NAME_RE = re.compile(r"^[^/\\\x00]{1,120}\.pdf$")
 MAX_BODY = 300 * 1024 * 1024  # 300 Mo (gros PDF de cours)
-MIME = {
-    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-    ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-    ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg", ".webp": "image/webp", ".pdf": "application/pdf",
-    ".json": "application/json", ".woff2": "font/woff2", ".webm": "audio/webm",
-}
 
 
 def write_atomic(path: Path, data: bytes):
@@ -52,94 +46,34 @@ def write_atomic(path: Path, data: bytes):
     os.replace(tmp, path)
 
 
-class Handler(BaseHTTPRequestHandler):
-    server_version = "SmokyNotes/1.0"
+class Handler(Requete):
+    """Routes de Smoky Notes (carnets, fichiers joints, export PDF)."""
 
-    def log_message(self, fmt, *args):  # silencieux (journal systemd inutile)
-        pass
-
-    # --- réponses ----------------------------------------------------------
-    def send(self, code, body=b"", ctype="application/json", extra=None):
-        if isinstance(body, (dict, list)):
-            body = json.dumps(body).encode()
-        elif isinstance(body, str):
-            body = body.encode()
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        for k, v in (extra or {}).items():
-            self.send_header(k, v)
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(body)
-
-    def fail(self, code, msg):
-        self.send(code, {"error": msg})
+    do_HEAD = Requete.do_GET
 
     def body(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_BODY:
-            raise ValueError("trop gros")
-        return self.rfile.read(n)
+        return self.corps(MAX_BODY)
 
-    # --- sécurité ----------------------------------------------------------
-    def host_ok(self):
-        return self.headers.get("Host", "") in HOST_OK
-
-    def api_ok(self):
-        return self.host_ok() and secrets.compare_digest(
-            self.headers.get("X-Smoky-Token", ""), TOKEN)
-
-    # --- routage -----------------------------------------------------------
-    def do_GET(self):
-        if not self.host_ok():
-            return self.fail(403, "hôte refusé")
-        path = unquote(self.path.split("?", 1)[0])
-        if path.startswith("/api/"):
-            if not self.api_ok():
-                return self.fail(403, "jeton manquant")
-            return self.api_get(path[5:])
-        return self.static(path)
-
-    do_HEAD = do_GET
+    def route(self):
+        return unquote(self.path.split("?", 1)[0])[5:]
 
     def do_PUT(self):
         if not self.api_ok():
             return self.fail(403, "refusé")
         try:
-            return self.api_put(unquote(self.path.split("?", 1)[0])[5:])
+            return self.api_put(self.route())
         except ValueError as e:
             return self.fail(400, str(e))
 
     def do_DELETE(self):
         if not self.api_ok():
             return self.fail(403, "refusé")
-        return self.api_delete(unquote(self.path.split("?", 1)[0])[5:])
+        return self.api_delete(self.route())
 
     def do_POST(self):
         if not self.api_ok():
             return self.fail(403, "refusé")
-        return self.api_post(unquote(self.path.split("?", 1)[0])[5:])
-
-    # --- fichiers de l'appli -------------------------------------------------
-    def static(self, path):
-        if path in ("", "/"):
-            path = "/index.html"
-        target = (APP_DIR / path.lstrip("/")).resolve()
-        if APP_DIR not in target.parents or not target.is_file():
-            return self.fail(404, "introuvable")
-        data = target.read_bytes()
-        if target.name == "index.html":
-            data = data.replace(b"__SMOKY_TOKEN__", b"")
-        csp = ("default-src 'self'; img-src 'self' blob: data:; "
-               "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; media-src 'self' blob:; "
-               "script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' blob: data:; "
-               "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-        self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
-                  {"Content-Security-Policy": csp, "X-Frame-Options": "DENY",
-                   "Referrer-Policy": "no-referrer"})
+        return self.api_post(self.route())
 
     # --- API ---------------------------------------------------------------
     def nb_dir(self, nid):
@@ -147,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("identifiant invalide")
         return DATA_DIR / nid
 
-    def api_get(self, route):
+    def api_get(self, route, requete=""):
         parts = route.split("/")
         try:
             if route == "deadlines":           # échéances Moodle (smoky-moodle)
@@ -295,14 +229,8 @@ def main():
         seed_subjects()
     except OSError as e:
         print(f"Carnets des matières non créés : {e}", file=sys.stderr)
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
-    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.write(fd, TOKEN.encode())
-    os.close(fd)
     print(f"Smoky Notes : http://127.0.0.1:{PORT}/ — carnets dans {DATA_DIR}", file=sys.stderr)
-    srv.serve_forever()
+    servir(APPLI, Handler)
 
 
 if __name__ == "__main__":

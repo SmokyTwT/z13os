@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Smoky Mail — tes mails (IMAP/SMTP), triés automatiquement par Claude.
 
-Serveur local (127.0.0.1 uniquement), même protection que Smoky Notes : jeton secret
-dans la page, en-tête Host vérifié, aucune commande libre.
+Serveur local (127.0.0.1 uniquement), même protection que les autres applis Smoky : jeton
+secret et en-tête Host vérifiés à chaque requête (smokyos/smokyapp.py), aucune commande libre.
 
 * Plusieurs boîtes (Gmail, Outlook…) dans une seule liste. Mots de passe (Gmail…) et jetons
   de connexion Microsoft (Outlook) : trousseau GNOME (secret-tool), sinon fichier lisible
@@ -35,12 +35,13 @@ import sys
 import threading
 import time
 from email.message import EmailMessage
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import urllib.error
 import urllib.parse
 import urllib.request
-from urllib.parse import unquote
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "smokyos"))
+from smokyapp import Appli, RequeteActions, servir  # noqa: E402
 
 
 PORT = int(os.environ.get("SMOKYMAIL_PORT", "47815"))
@@ -49,12 +50,10 @@ DATA = Path(os.environ.get("SMOKYMAIL_DATA", Path.home() / ".local/share/smoky-m
 ACCOUNTS = DATA / "accounts.json"
 SETTINGS = DATA / "settings.json"
 LOCK = DATA / "sync.lock"
-TOKEN = secrets.token_urlsafe(24)
-# le code d'accès n'est plus écrit dans la page : le lanceur le lit ici (dossier privé de la session)
-TOKEN_FILE = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "smoky-mail.token"
-HOST_OK = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
-MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-        ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg"}
+# img-src sans http(s) : les images distantes des mails (souvent des pisteurs) sont bloquées
+CSP = ("default-src 'self'; img-src 'self' data: cid:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
+       "connect-src 'self'; frame-src 'self' about:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+APPLI = Appli("mail", PORT, APP_DIR, CSP, alias=("/mail", "/mail/"))
 
 KEEP = 400                 # mails gardés en mémoire locale par boîte (les plus récents)
 FETCH_NEW = 60             # nouveaux mails relevés au plus par passage et par boîte
@@ -825,64 +824,14 @@ def act(a):
 
 
 # --- Serveur -------------------------------------------------------------------------------------
-class Handler(BaseHTTPRequestHandler):
-    server_version = "SmokyMail/1.0"
+class Handler(RequeteActions):
+    MAXI_ACTION = 400_000
 
-    def log_message(self, *a):
-        pass
+    def etat(self, requete):
+        return state()
 
-    def send(self, code, body, ctype="application/json", extra=None):
-        if isinstance(body, (dict, list)):
-            body = json.dumps(body, ensure_ascii=False).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        for k, v in (extra or {}).items():
-            self.send_header(k, v)
-        self.end_headers()
-        self.wfile.write(body)
-
-    def ok_host(self):
-        return self.headers.get("Host", "") in HOST_OK
-
-    def ok_api(self):
-        return self.ok_host() and secrets.compare_digest(self.headers.get("X-Smoky-Token", ""), TOKEN)
-
-    def do_GET(self):
-        if not self.ok_host():
-            return self.send(403, {"error": "hôte refusé"})
-        path = unquote(self.path.split("?", 1)[0])
-        if path == "/api/state":
-            return self.send(200, state()) if self.ok_api() else self.send(403, {"error": "refusé"})
-        if path in ("/", "/mail", "/mail/"):
-            path = "/index.html"
-        target = (APP_DIR / path.lstrip("/")).resolve()
-        if APP_DIR not in target.parents or not target.is_file():
-            return self.send(404, {"error": "introuvable"})
-        data = target.read_bytes()
-        if target.name == "index.html":
-            data = data.replace(b"__SMOKY_TOKEN__", b"")
-        # img-src sans http(s) : les images distantes des mails (souvent des pisteurs) sont bloquées
-        csp = ("default-src 'self'; img-src 'self' data: cid:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
-               "connect-src 'self'; frame-src 'self' about:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-        self.send(200, data, MIME.get(target.suffix, "application/octet-stream"),
-                  {"Content-Security-Policy": csp, "X-Frame-Options": "DENY"})
-
-    def do_POST(self):
-        if not self.ok_api() or self.path != "/api/action":
-            return self.send(403, {"error": "refusé"})
-        try:
-            a = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 400000)))
-        except ValueError:
-            return self.send(400, {"error": "requête illisible"})
-        try:
-            res = act(a) if isinstance(a, dict) else {"ok": False}
-        except Exception as e:  # une erreur imprévue s'affiche dans l'appli au lieu de couper la connexion
-            res = {"ok": False, "message": f"erreur : {e}"[:200]}
-        self.send(200, res)
+    def action(self, a):
+        return act(a)
 
 
 if __name__ == "__main__":
@@ -894,10 +843,4 @@ if __name__ == "__main__":
         sys.exit(0 if r.get("ok") else 1)
     DATA.mkdir(parents=True, exist_ok=True)
     os.chmod(DATA, 0o700)
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    # fichier écrit seulement une fois le port obtenu (une 2e copie ne l'écrase pas)
-    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.write(fd, TOKEN.encode())
-    os.close(fd)
-    srv.serve_forever()
+    servir(APPLI, Handler)
