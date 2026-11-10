@@ -60,7 +60,8 @@ export -f gresource
 verifie "fond Smoky dans le thème de connexion" bash -c "gresource list $GR | grep -q smoky-login.jpg"
 sans_style=0
 for css in $(gresource list "$GR" 2>/dev/null | grep '\.css$'); do
-  gresource extract "$GR" "$css" 2>/dev/null | grep -q 'smoky-login.jpg' || sans_style=$((sans_style + 1))
+  # grep -c lit tout (pas de « tuyau fermé » compté comme un échec, contrairement à grep -q)
+  [ "$(gresource extract "$GR" "$css" 2>/dev/null | grep -c 'smoky-login.jpg')" -ge 1 ] || sans_style=$((sans_style + 1))
 done
 [ "$sans_style" -eq 0 ] && ok "style Smoky ajouté à chaque feuille du thème de connexion" || echec "style Smoky absent de $sans_style feuille(s) du thème de connexion"
 nb=$(gresource list "$GR" 2>/dev/null | wc -l)

@@ -13,6 +13,14 @@ ATTENTE="${SMOKY_ATTENTE_DEMARRAGE:-600}"        # secondes au plus pour atteind
 SERIE="$T/serie.log"
 
 mkdir -p "$T"
+# SMOKY_RELIRE=journal : rejoue seulement l'analyse (étape 3/3) sur un journal série enregistré
+if [ -n "${SMOKY_RELIRE:-}" ]; then
+  SERIE="$SMOKY_RELIRE"; duree="?"
+  if grep -qaE 'Kernel panic|emergency mode|Reached target emergency|dracut-emergency|Failed to mount /sysroot' "$SERIE"; then etat=echec
+  elif grep -qaE 'gdm\.service: (Failed|Main process exited)|Failed to start gdm\.service' "$SERIE"; then etat=gdm
+  elif grep -qaE 'Reached target graphical\.target' "$SERIE"; then etat=graphique
+  else etat=attente; fi
+else
 rm -f "$T/disque.raw" "$SERIE" "$T/vars.fd"
 
 echo "== 1/3 Installation de l'image sur un disque virtuel"
@@ -71,15 +79,23 @@ if [ "$etat" = graphique ]; then
   done
 fi
 
+fi   # fin du mode normal (installation + démarrage)
+
 echo "== 3/3 Résultat"
-propre() { tr -d '\r' < "$SERIE" | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g'; }
-propre | grep -aE 'Startup finished in' | tail -1 | sed -E 's/^.*Startup finished in/  durée du démarrage (dans la machine virtuelle) :/'
-echecs=$(propre | grep -aE 'Failed to start |\.service: Failed with result' | sed -E 's/^\[[ 0-9.]+\] //' | sort -u | head -15)
+# Journal nettoyé (retours chariot, couleurs) écrit une fois dans un fichier : toutes les
+# recherches se font ensuite sur ce fichier. Surtout pas « commande | grep -q » ici : grep
+# s'arrête à la première ligne trouvée, la commande d'avant reçoit « tuyau fermé », et avec
+# pipefail une recherche RÉUSSIE est alors comptée comme un échec (vécu : une image saine refusée).
+PROPRE="$T/serie.txt"
+tr -d '\r' < "$SERIE" | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' > "$PROPRE"
+duree_systeme=$(grep -aE 'Startup finished in' "$PROPRE" | tail -n 1 | sed -E 's/^.*Startup finished in //')
+[ -n "$duree_systeme" ] && echo "  durée du démarrage (dans la machine virtuelle) : $duree_systeme"
+echecs=$(grep -aE 'Failed to start |\.service: Failed with result' "$PROPRE" | sed -E 's/^\[[ 0-9.]+\] //' | sort -u | sed -n '1,15p')
 [ -n "$echecs" ] && { echo "  services en échec dans la machine virtuelle (souvent normal sans le matériel du Z13) :"; printf '%s\n' "$echecs" | sed 's/^/    /'; }
 
 case "$etat" in
   graphique)
-    if propre | grep -qaE 'Started gdm\.service'; then
+    if grep -qaE 'Started gdm\.service' "$PROPRE"; then
       echo "RÉSULTAT : l'image démarre jusqu'à l'écran de connexion (${duree} s)."
       exit 0
     fi
@@ -91,5 +107,5 @@ case "$etat" in
   *)      echo "RÉSULTAT : toujours pas d'écran de connexion après ${ATTENTE} s." ;;
 esac
 echo "--- 60 dernières lignes du démarrage ---"
-propre | tail -60
+tail -n 60 "$PROPRE"
 exit 1

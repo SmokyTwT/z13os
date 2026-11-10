@@ -222,7 +222,7 @@ if [[ -f "$GR" ]]; then
     echo '</gresource></gresources>'
   } > "$GW/theme.xml"
   "$OUTILS/glib-compile-resources" --sourcedir="$GW$PREFIX" --target="$GR" "$GW/theme.xml"
-  "$OUTILS/gresource" list "$GR" | grep -q smoky-login.jpg
+  "$OUTILS/gresource" list "$GR" | grep -c smoky-login.jpg >/dev/null    # -c : lit tout, pas de tuyau fermé
   rm -rf "$GW"
 else
   echo "AVERTISSEMENT : thème GNOME Shell introuvable, écran de connexion non personnalisé"
