@@ -190,7 +190,14 @@ glib-compile-schemas /usr/share/glib-2.0/schemas
 # découverte locale (mDNS : Google Home, Chromecast).
 # Smoky Notes et Smoky Home (port 8123) ne sont donc accessibles que depuis ce PC.
 firewall-offline-cmd --set-default-zone=public
-firewall-offline-cmd --zone=public --remove-service=ssh || true
+# Avec --zone, l'option est --remove-service-from-zone (« --remove-service » appartient à un
+# autre mode de la commande : l'ancienne ligne échouait sans bruit et ssh restait autorisé).
+if firewall-offline-cmd --zone=public --query-service=ssh; then
+  firewall-offline-cmd --zone=public --remove-service-from-zone=ssh
+fi
+if firewall-offline-cmd --zone=public --query-service=ssh; then
+  echo "ERREUR : ssh est encore autorisé dans le pare-feu"; exit 1
+fi
 
 # --- Écran de connexion Smoky (GDM) ----------------------------------------------
 # L'écran de connexion n'utilise pas les thèmes utilisateur : on ajoute le fond « smoky »
