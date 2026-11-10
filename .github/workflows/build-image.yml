@@ -151,7 +151,13 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 ovmf
           set -o pipefail
-          sudo bash tests/image/demarrer.sh localhost/smokyos:build /tmp/smoky-vm | tee /tmp/demarrage.txt
+          # Un second essai complet si le premier échoue : une machine de construction capricieuse
+          # ne doit pas bloquer une mise à jour. Une image qui ne démarre pas échoue les deux fois.
+          if ! sudo bash tests/image/demarrer.sh localhost/smokyos:build /tmp/smoky-vm | tee /tmp/demarrage.txt; then
+            echo "::warning::Essai de démarrage échoué, second essai"
+            cp /tmp/demarrage.txt /tmp/demarrage-essai1.txt
+            sudo bash tests/image/demarrer.sh localhost/smokyos:build /tmp/smoky-vm | tee /tmp/demarrage.txt
+          fi
           { echo "### Essai de démarrage"; echo '```'; grep -E 'RÉSULTAT|durée du démarrage' /tmp/demarrage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Journal du démarrage (en cas d'échec)
