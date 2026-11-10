@@ -153,7 +153,7 @@ icons.update({
             '<path d="M17 39 h30" ' + S + ' stroke-width="1.4" opacity=".6"/>', "#ff2a3a"),
     "player": ('<circle cx="32" cy="29" r="14" ' + S + ' stroke-width="2.8"/>'
                '<path d="M28.5 22 l10 7 l-10 7 z" ' + F + '/>', "#a06bff"),
-    "fonts": (f'<text x="32" y="38" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="22" fill="url(#ink)">Aa</text>', "#c9c9d2"),
+    "fonts": ('<text x="32" y="38" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="22" fill="url(#ink)">Aa</text>', "#c9c9d2"),
     "connections": ('<rect x="13" y="16" width="22" height="16" rx="2.5" ' + S + ' stroke-width="2.4"/>'
                     '<rect x="29" y="25" width="22" height="16" rx="2.5" ' + F + '/>', "#3b82ff"),
     "scanner": ('<rect x="15" y="27" width="34" height="14" rx="3" ' + F + '/>'

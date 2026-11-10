@@ -1,0 +1,4 @@
+# Jamais dans l'image : fichiers de travail de Python et de git
+.git
+**/__pycache__
+**/*.pyc

@@ -1,5 +1,5 @@
 
-/* ===== Smoky OS : écran de connexion (ajouté par build.sh dans le thème de GNOME Shell) ===== */
+/* ===== Smoky OS : écran de connexion (ajouté par build_files/smoky.sh dans le thème de GNOME Shell) ===== */
 #lockDialogGroup {
   background: #0b0b0c url("resource:///org/gnome/shell/theme/smoky-login.jpg");
   background-size: cover;

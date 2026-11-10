@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Construit Smoky OS à l'intérieur de l'image Fedora Silverblue (exécuté par le Containerfile)
+# Image finale — réglages de Smoky OS, appliqués par-dessus le socle une fois les fichiers
+# de system_files/ copiés (exécuté par le Containerfile).
+# Ici : aucun paquet installé, aucun téléchargement. Tout ce qui est lourd ou vient d'Internet
+# est dans le socle (build_files/socle/), pour que cette couche reste petite : c'est elle que
+# le PC télécharge à chaque mise à jour.
 set -euxo pipefail
 
 FEDORA_VER="$(rpm -E %fedora)"
@@ -7,49 +11,18 @@ DISTRO_NAME="${DISTRO_NAME:-Smoky OS}"
 MOODLE_URL="${MOODLE_URL:-}"
 CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --start-maximized --enable-features=TouchpadOverscrollHistoryNavigation,AcceleratedVideoDecodeLinuxGL --enable-wayland-ime"
 
-# --- Dépôts ------------------------------------------------------------------
-dnf -y install \
-  "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDORA_VER}.noarch.rpm" \
-  "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDORA_VER}.noarch.rpm"
+# --- Droits ------------------------------------------------------------------
+# Droits d'exécution : remis ici au cas où ils se perdraient en route (envoi par le site GitHub…)
+chmod 755 /usr/bin/smoky-* /usr/bin/z13-notes-setup \
+  /usr/libexec/z13os/*.sh /usr/libexec/smokyos/*.sh /usr/libexec/smokyos/*.py /usr/libexec/smokyos/smoky-app \
+  /usr/libexec/smokymail/*.py /usr/libexec/smokymail/*.sh \
+  /usr/libexec/smokyagenda/server.py /usr/libexec/smokynotes/server.py
 
-curl -fsSL -o /etc/yum.repos.d/asus-linux.repo \
-  "https://copr.fedorainfracloud.org/coprs/lukenukem/asus-linux/repo/fedora-${FEDORA_VER}/lukenukem-asus-linux-fedora-${FEDORA_VER}.repo"
-
-cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
-[google-chrome]
-name=google-chrome
-baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
-enabled=1
-gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
-EOF
-
-# --- Codecs complets + décodage vidéo matériel Intel ---------------------------
-dnf -y install --allowerasing ffmpeg
-dnf -y install intel-media-driver libva-utils
-
-# --- Support ASUS ROG + énergie ----------------------------------------------
-dnf -y install asusctl supergfxctl thermald
-# (pas d'interface ROG Control Center : Smoky Center fait la même chose sans tourner en arrière-plan)
-
-# --- Allègement : Firefox fait doublon avec Chrome, la visite guidée ne sert qu'une fois
-dnf -y remove firefox firefox-langpacks gnome-tour || true
-
-# --- Synchro des notes avec Google Drive -------------------------------------
-dnf -y install rclone zenity
-
-# --- Smoky Moodle (import des PDF de cours, échéances) : pdfinfo + trousseau GNOME
-dnf -y install poppler-utils libsecret
-# redémarrer sur Windows depuis Smoky Center (double démarrage)
-dnf -y install efibootmgr
+# --- Adresse Moodle (variable de dépôt GitHub MOODLE_URL) --------------------------
 mkdir -p /etc/smokyos
 echo "${MOODLE_URL:-https://moodle.uphf.fr/}" > /etc/smokyos/moodle-url
 
-# --- Google Chrome (s'installe dans /opt : on le déplace dans /usr pour l'image atomique)
-mkdir -p /var/opt
-dnf -y install google-chrome-stable
-mv /var/opt/google /usr/lib/google
-printf 'd /var/opt 0755 root root -\nL /var/opt/google - - - - /usr/lib/google\n' > /usr/lib/tmpfiles.d/z13os-chrome.conf
+# --- Google Chrome : réglé pour Wayland et le décodage vidéo par la puce Intel ------
 sed -i "s|^Exec=/usr/bin/google-chrome-stable|Exec=/usr/bin/google-chrome-stable ${CHROME_FLAGS}|" \
   /usr/share/applications/google-chrome.desktop
 
@@ -109,39 +82,22 @@ if [[ -n "$MOODLE_URL" ]]; then
 fi
 FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'smoky-center.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
-# --- Look Smoky : dock + flou statique (calculé une fois, quasi gratuit)
-# caffeine : empêche la veille d'un clic (cours en visio, lecture)
-for ext in dash-to-dock blur-my-shell appindicator caffeine; do
-  dnf -y install "gnome-shell-extension-$ext" || echo "AVERTISSEMENT : extension $ext indisponible"
-done
-
-# Icônes et curseurs WhiteSur, versions figées (relues avant intégration)
-WHITESUR_ICONS_REV=73d8040da51a9ed74e47c7366e7e9ff437601a5c    # tag 2026-09-10
-WHITESUR_CURSORS_REV=e190baf618ed95ee217d2fd45589bd309b37672b  # 2025-04-05
-dnf -y install gtk-update-icon-cache
-WS=$(mktemp -d)
-curl -fsSL "https://github.com/vinceliuice/WhiteSur-icon-theme/archive/${WHITESUR_ICONS_REV}.tar.gz" | tar -xz -C "$WS"
-bash "$WS/WhiteSur-icon-theme-${WHITESUR_ICONS_REV}/install.sh" -d /usr/share/icons
-curl -fsSL "https://github.com/vinceliuice/WhiteSur-cursors/archive/${WHITESUR_CURSORS_REV}.tar.gz" | tar -xz -C "$WS"
-cp -r "$WS/WhiteSur-cursors-${WHITESUR_CURSORS_REV}/dist" /usr/share/icons/WhiteSur-cursors
-rm -rf "$WS"
-# Seule la variante principale sert (Smoky-icons en hérite) ; les autres ne sont que des liens
-rm -rf /usr/share/icons/WhiteSur-dark /usr/share/icons/WhiteSur-light
-gtk-update-icon-cache -f /usr/share/icons/WhiteSur || true
+# Index des applis par type de lien ou de fichier. Les paquets le recalculent à leur
+# installation, mais ils sont installés dans le socle, avant que les raccourcis Smoky
+# n'existent : sans cette ligne, le lien « moodlemobile:// » (retour de la connexion Moodle
+# de l'université) ne retrouverait plus Smoky Moodle.
+update-desktop-database /usr/share/applications
+grep -q '^x-scheme-handler/moodlemobile=.*smoky-moodle-auth.desktop' /usr/share/applications/mimeinfo.cache
 
 # Thème d'icônes « Smoky-icons » : chaque appli livrée avec le système reçoit la
 # version Smoky de son vrai logo (argent, carré noir, trait néon à sa couleur),
 # générée par smoky-autoicons. Les applis installées plus tard (Flatpak : mpv,
 # Proton VPN…) sont traitées sur la machine, à la connexion et à chaque installation.
 # Dessinés à la main : TF1+, M6+, Moodle, WhatsApp et les applis Smoky (pas de logo d'origine installé).
-dnf -y install python3-pillow librsvg2-tools
 rm -f /usr/share/icons/Smoky-icons/apps/256/.keep
 python3 /usr/libexec/smokyos/smoky-autoicons.py --system /usr/share/icons/Smoky-icons/apps/256
 gtk-update-icon-cache -f /usr/share/icons/Smoky-icons || true
 gtk-update-icon-cache -f /usr/share/icons/hicolor || true
-
-# Thème « Smoky » du centre de contrôle (fichier CSS dans system_files)
-dnf -y install gnome-shell-extension-user-theme
 
 # --- Réglages GNOME par défaut (tactile / tablette + look) --------------------
 cat > /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override <<EOF
@@ -228,28 +184,6 @@ palette-id='smoky'
 EOF
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
-# --- Smoky Home : robot Xiaomi/Dreame (avec carte), lumières Tapo, Google Home ---
-# Moteur : Home Assistant en conteneur (etc/containers/systemd/users/smoky-home.container).
-# Intégration du robot : dreame-vacuum (licence MIT), version figée.
-DREAME_REV=f5b8472b8e2e4bb3dff7bc2a81a5fd594eca9585   # v2.0.2
-mkdir -p /usr/share/smoky-home/custom_components
-DV=$(mktemp -d)
-curl -fsSL "https://github.com/Tasshack/dreame-vacuum/archive/${DREAME_REV}.tar.gz" | tar -xz -C "$DV"
-cp -r "$DV/dreame-vacuum-${DREAME_REV}/custom_components/dreame_vacuum" /usr/share/smoky-home/custom_components/
-cp "$DV/dreame-vacuum-${DREAME_REV}/LICENSE" /usr/share/smoky-home/custom_components/dreame_vacuum/LICENSE
-rm -rf "$DV"
-# Intégration officielle Xiaomi Home (licence Xiaomi : usage non commercial avec Home Assistant),
-# version figée : robots Xiaomi que Dreame Vacuum ne connaît pas (X20 Max = xiaomi.vacuum.d109gl).
-XIAOMI_HOME_REV=75b3acb6325a3a8d295688b13904737d6738a6a5   # v0.5.0
-XH=$(mktemp -d)
-curl -fsSL "https://github.com/XiaoMi/ha_xiaomi_home/archive/${XIAOMI_HOME_REV}.tar.gz" | tar -xz -C "$XH"
-cp -r "$XH/ha_xiaomi_home-${XIAOMI_HOME_REV}/custom_components/xiaomi_home" /usr/share/smoky-home/custom_components/
-cp "$XH/ha_xiaomi_home-${XIAOMI_HOME_REV}/LICENSE.md" /usr/share/smoky-home/custom_components/xiaomi_home/LICENSE.md
-rm -rf "$XH"
-# Sa connexion au compte Xiaomi revient sur http://homeassistant.local:8123 (adresse imposée) :
-# system_files/etc/hosts fait pointer ce nom vers Smoky Home sur ce PC (jamais un autre appareil
-# du réseau). Fichier livré tel quel : pendant la construction, /etc/hosts n'est pas modifiable.
-
 # --- Pare-feu ------------------------------------------------------------------
 # Fedora ouvre par défaut les ports 1025-65535 (zone FedoraWorkstation). Sur des Wi-Fi
 # publics, on passe en zone « public » : rien n'est joignable depuis le réseau, sauf la
@@ -261,15 +195,16 @@ firewall-offline-cmd --zone=public --remove-service=ssh || true
 # --- Écran de connexion Smoky (GDM) ----------------------------------------------
 # L'écran de connexion n'utilise pas les thèmes utilisateur : on ajoute le fond « smoky »
 # et le style néon (usr/share/smokyos/login-smoky.css) dans le thème intégré de GNOME Shell.
+# gresource et glib-compile-resources viennent du socle (10-paquets.sh) : rien à installer ici.
+OUTILS=/usr/libexec/smokyos/outils
 GR=/usr/share/gnome-shell/gnome-shell-theme.gresource
 if [[ -f "$GR" ]]; then
-  dnf -y install glib2-devel          # glib-compile-resources, retiré juste après
   GW=$(mktemp -d)
   PREFIX=/org/gnome/shell/theme
-  for r in $(gresource list "$GR"); do
+  for r in $("$OUTILS/gresource" list "$GR"); do
     [[ "$r" == "$PREFIX"/* ]] || { echo "ressource inattendue : $r"; exit 1; }
     mkdir -p "$GW$(dirname "$r")"
-    gresource extract "$GR" "$r" > "$GW$r"
+    "$OUTILS/gresource" extract "$GR" "$r" > "$GW$r"
   done
   cp /usr/share/backgrounds/z13os/smokyos.jpg "$GW$PREFIX/smoky-login.jpg"
   for css in "$GW$PREFIX"/*.css; do cat /usr/share/smokyos/login-smoky.css >> "$css"; done
@@ -279,27 +214,17 @@ if [[ -f "$GR" ]]; then
     (cd "$GW$PREFIX" && find . -type f | sed 's|^\./||' | sort | sed 's|.*|<file>&</file>|')
     echo '</gresource></gresources>'
   } > "$GW/theme.xml"
-  glib-compile-resources --sourcedir="$GW$PREFIX" --target="$GR" "$GW/theme.xml"
-  gresource list "$GR" | grep -q smoky-login.jpg
+  "$OUTILS/glib-compile-resources" --sourcedir="$GW$PREFIX" --target="$GR" "$GW/theme.xml"
+  "$OUTILS/gresource" list "$GR" | grep -q smoky-login.jpg
   rm -rf "$GW"
-  dnf -y remove glib2-devel || true
 else
   echo "AVERTISSEMENT : thème GNOME Shell introuvable, écran de connexion non personnalisé"
 fi
 
-# --- Écran de démarrage Smoky (Plymouth) ------------------------------------------
-dnf -y install plymouth-plugin-script
-plymouth-set-default-theme smoky
-KVER=$(ls /usr/lib/modules | head -1)
-dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
-
 # --- Services ----------------------------------------------------------------
-chmod +x /usr/libexec/z13os/*.sh /usr/bin/z13-notes-setup /usr/bin/smoky-notes /usr/bin/smoky-home /usr/bin/smoky-portail /usr/bin/smoky-center /usr/bin/smoky-mail /usr/libexec/smokymail/*.py /usr/libexec/smokymail/*.sh \
-  /usr/bin/smoky-agenda /usr/libexec/smokyagenda/server.py \
-  /usr/libexec/smokynotes/server.py /usr/libexec/smokyos/*.py /usr/libexec/smokyos/*.sh
 systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer smoky-backup-check.timer
 systemctl enable supergfxd.service thermald.service fstrim.timer \
-  z13-powertune.service z13-firstboot.service smoky-focus-cleanup.service \
+  z13-firstboot.service smoky-focus-cleanup.service \
   rpm-ostreed-automatic.timer smoky-flatpak-update.timer
 
 # --- Autonomie ----------------------------------------------------------------------------------
@@ -319,8 +244,10 @@ grep -q '^AutomaticUpdatePolicy=' /etc/rpm-ostreed.conf || echo 'AutomaticUpdate
 
 # --- Identité ----------------------------------------------------------------
 sed -i "s|^PRETTY_NAME=.*|PRETTY_NAME=\"${DISTRO_NAME} (Fedora ${FEDORA_VER})\"|" /usr/lib/os-release
-echo "smokyos" > /etc/hostname
+# Nom de machine : non réglé par l'image. (L'ancien « echo smokyos > /etc/hostname » n'a jamais
+# eu d'effet : pendant la construction, /etc/hostname est prêté par l'outil de construction et
+# ce qu'on y écrit ne reste pas dans l'image. Le régler vraiment changerait le nom du PC à la
+# mise à jour : à décider à part.)
 
 # --- Ménage ------------------------------------------------------------------
-dnf clean all
-rm -rf /var/cache/* /var/log/* /tmp/* /var/opt
+rm -rf /var/cache/* /var/log/* /tmp/*

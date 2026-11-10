@@ -19,6 +19,6 @@ systemctl --user daemon-reload
 systemctl --user enable --now z13-notes-sync.timer
 
 echo
-echo "C'est fait ! Range tes cahiers Rnote dans le dossier « Notes » :"
-echo "ils seront copiés dans Google Drive > « Notes Z13 » toutes les 5 minutes."
+echo "C'est fait ! Tes carnets Smoky Notes et leurs PDF sont dans le dossier « Notes » :"
+echo "ils sont copiés dans Google Drive > « Notes Z13 » toutes les 10 minutes (30 sur batterie)."
 read -rp "Appuie sur Entrée pour fermer."

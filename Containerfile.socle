@@ -1,0 +1,15 @@
+# Smoky OS — SOCLE : Fedora Silverblue + paquets + fichiers de tiers + écran de démarrage.
+#
+# C'est la partie lourde de l'image (~1 Go). Elle est reconstruite seulement :
+#   - chaque lundi (mises à jour de sécurité de Fedora) ;
+#   - quand un de ses fichiers change (ce fichier, build_files/socle/, le thème Plymouth).
+# Le reste du temps, l'image finale (Containerfile) est posée dessus sans y toucher : le PC
+# ne retélécharge alors que les fichiers Smoky, soit quelques Mo.
+ARG FEDORA_VERSION=44
+FROM quay.io/fedora/fedora-silverblue:${FEDORA_VERSION}
+
+COPY build_files/socle/ /tmp/socle/
+RUN bash /tmp/socle/10-paquets.sh
+RUN bash /tmp/socle/20-tiers.sh
+COPY system_files/usr/share/plymouth/themes/smoky/ /usr/share/plymouth/themes/smoky/
+RUN bash /tmp/socle/30-demarrage.sh && rm -rf /tmp/socle && ostree container commit

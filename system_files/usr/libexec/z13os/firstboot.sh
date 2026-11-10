@@ -14,6 +14,12 @@ mkdir -p "$STATE"
 
 [[ "$(cat "$STATE/apps.version" 2>/dev/null)" == "$APPS_VERSION" ]] && exit 0
 
+# Il y a des applis à installer : on attend la connexion ici (2 min au plus). Sans réseau,
+# le service réessaie tout seul plus tard.
+if command -v nm-online >/dev/null; then
+  nm-online -q -t 120 || { echo "pas de réseau pour l'instant"; exit 1; }
+fi
+
 flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo || exit 1
 flatpak remote-modify --system --enable flathub
 failed=0

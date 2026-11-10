@@ -1,13 +1,15 @@
 [Unit]
 Description=Smoky OS - applis Flatpak et réglages du premier démarrage
-Wants=network-online.target
-After=network-online.target supergfxd.service
+# Presque toujours rien à faire : le service ne demande donc plus le réseau au démarrage et ne
+# le fait plus attendre (Type=exec). Le script attend lui-même la connexion, seulement s'il a
+# des applis à installer.
+After=supergfxd.service
 # au plus 12 essais par démarrage (toutes les 2 min), puis on réessaie au prochain
 StartLimitIntervalSec=1h
 StartLimitBurst=12
 
 [Service]
-Type=oneshot
+Type=exec
 ExecStart=/usr/libexec/z13os/firstboot.sh
 Restart=on-failure
 RestartSec=120
