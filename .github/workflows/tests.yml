@@ -1,0 +1,21 @@
+name: tests
+# Vérifications rapides (moins d'une minute, sans construire l'image) sur les branches de
+# travail. Sur main, build-image fait les mêmes avant de construire.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vérifications rapides du dépôt
+        run: |
+          python3 -m pip install --quiet --user pyflakes || true
+          bash tests/verifier.sh

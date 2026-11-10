@@ -1,4 +1,7 @@
 name: build-iso
+# ISO d'installation (clé USB), construite à partir de l'image publiée (latest).
+# Elle ne sert qu'à installer ou réinstaller : elle est refaite après la construction du lundi,
+# ou à la demande (Actions → build-iso → Run workflow). Les mises à jour du PC n'en dépendent pas.
 on:
   workflow_dispatch:
   workflow_run:
@@ -12,8 +15,10 @@ permissions:
 
 jobs:
   iso:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    # au niveau du job : une exécution ignorée (image annulée) n'annule plus l'ISO en cours
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'schedule')
+    # au niveau du job : une exécution ignorée n'annule plus l'ISO en cours
     concurrency:
       group: build-iso
       cancel-in-progress: true

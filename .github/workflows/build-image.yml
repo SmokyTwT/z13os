@@ -1,4 +1,9 @@
 name: build-image
+# Construit l'image Smoky OS, la VÉRIFIE, puis seulement la publie.
+#   - branche main  → ghcr.io/…/z13os:latest (celle que le PC télécharge) + étiquette du jour
+#   - autre branche → ghcr.io/…/z13os:test   (lancement à la main ; ne touche jamais à latest)
+# L'image est en deux parties : le socle (Fedora + paquets, lourd, refait le lundi ou quand ses
+# fichiers changent) et les fichiers Smoky posés dessus (légers, refaits à chaque fois).
 on:
   push:
     branches: [main]
@@ -6,20 +11,39 @@ on:
   schedule:
     - cron: '20 4 * * 1'   # chaque lundi : mises à jour de sécurité
   workflow_dispatch:
+    inputs:
+      socle:
+        description: "Socle (Fedora + paquets) : auto = refait seulement si nécessaire"
+        type: choice
+        options: [auto, refaire]
+        default: auto
+      garder:
+        description: "Avant de publier, garder l'image latest actuelle sous cette étiquette (ex. : v1). Vide = non."
+        type: string
+        default: ""
 
 concurrency:
-  group: build-image
+  group: build-image-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
   packages: write
 
+env:
+  AUTH: /tmp/ghcr-auth.json
+
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+
+      - name: Vérifications rapides du dépôt
+        run: |
+          python3 -m pip install --quiet --user pyflakes || true
+          bash tests/verifier.sh
 
       - name: Libérer de l'espace disque
         run: |
@@ -27,28 +51,125 @@ jobs:
           sudo docker image prune -af || true
           df -h /
 
-      - name: Construire l'image
+      - name: Canal de publication
+        env:
+          GARDER: ${{ inputs.garder }}
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            TAG=latest; SOCLE_TAG=socle
+          else
+            TAG=test; SOCLE_TAG=socle-test
+          fi
+          if [[ -n "$GARDER" && ! "$GARDER" =~ ^[a-z0-9][a-z0-9._-]{0,40}$ ]]; then
+            echo "::error::Étiquette « garder » invalide (lettres minuscules, chiffres, . _ -)"; exit 1
+          fi
+          case "$GARDER" in latest|test|socle|socle-test) echo "::error::« $GARDER » est une étiquette réservée"; exit 1 ;; esac
+          { echo "IMAGE=$IMAGE"; echo "TAG=$TAG"; echo "SOCLE_TAG=$SOCLE_TAG"; echo "GARDER=$GARDER"; } >> "$GITHUB_ENV"
+          echo "Publication prévue : $IMAGE:$TAG (socle : $SOCLE_TAG)"
+
+      - name: Connexion à ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login --authfile "$AUTH" ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Garder l'image actuelle sous une étiquette (si demandé)
+        if: env.GARDER != ''
+        run: |
+          sudo skopeo copy --authfile "$AUTH" "docker://$IMAGE:latest" "docker://$IMAGE:$GARDER"
+          echo "Image latest actuelle gardée sous $IMAGE:$GARDER" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Socle (réutilisé ou refait)
+        env:
+          DEMANDE: ${{ inputs.socle }}
+        run: |
+          # empreinte de tout ce qui entre dans le socle : si elle n'a pas changé, on le réutilise
+          HASH=$(git ls-files -s Containerfile.socle build_files/socle system_files/usr/share/plymouth | sha256sum | cut -c1-20)
+          SOURCE=""
+          if [[ "$GITHUB_EVENT_NAME" != schedule && "${DEMANDE:-auto}" != refaire ]]; then
+            for t in "$SOCLE_TAG" socle; do
+              h=$(sudo skopeo inspect --authfile "$AUTH" --format '{{ index .Labels "smokyos.socle" }}' "docker://$IMAGE:$t" 2>/dev/null || true)
+              echo "socle publié $t : empreinte « $h » (attendue : $HASH)"
+              if [[ "$h" == "$HASH" ]]; then SOURCE="$IMAGE:$t"; break; fi
+            done
+          fi
+          if [[ -n "$SOURCE" ]]; then
+            sudo podman pull --authfile "$AUTH" "$SOURCE"
+            sudo podman tag "$SOURCE" localhost/smoky-socle:build
+            echo "SOCLE_NEUF=non" >> "$GITHUB_ENV"
+            echo "Socle réutilisé ($SOURCE) : le PC ne retéléchargera que les fichiers Smoky." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            # jusqu'à 3 essais : un téléchargement raté (miroir, registre) ne doit pas tout faire échouer
+            for essai in 1 2 3; do
+              if sudo podman build --layers=true --pull=newer -f Containerfile.socle --label "smokyos.socle=$HASH" \
+                   -t localhost/smoky-socle:build .; then
+                echo "Socle refait (Fedora et paquets à jour)." | tee -a "$GITHUB_STEP_SUMMARY"
+                if [[ "$SOCLE_TAG" == socle-test ]]; then
+                  # canal de test : socle publié tout de suite, pour que les essais suivants le
+                  # réutilisent. (Sur main, il n'est publié qu'une fois l'image vérifiée.)
+                  sudo podman push --authfile "$AUTH" localhost/smoky-socle:build "docker://$IMAGE:$SOCLE_TAG"
+                  echo "SOCLE_NEUF=non" >> "$GITHUB_ENV"
+                else
+                  echo "SOCLE_NEUF=oui" >> "$GITHUB_ENV"
+                fi
+                exit 0
+              fi
+              echo "::warning::Socle : essai $essai échoué, nouvel essai dans 60 s"
+              sleep 60
+            done
+            exit 1
+          fi
+
+      - name: Image finale (fichiers Smoky sur le socle)
         env:
           MOODLE_URL: ${{ vars.MOODLE_URL }}
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          ARGS=()
+          ARGS=(--build-arg "SOCLE=localhost/smoky-socle:build")
           [[ -n "$MOODLE_URL" ]] && ARGS+=(--build-arg "MOODLE_URL=$MOODLE_URL")
-          # jusqu'à 3 essais : un téléchargement raté (miroir, registre) ne doit pas tout faire échouer
-          for essai in 1 2 3; do
-            if sudo podman build --pull=newer "${ARGS[@]}" \
-                 --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
-                 -t "$IMAGE:latest" -t "$IMAGE:$(date +%Y%m%d)" .; then
-              exit 0
-            fi
-            echo "::warning::Essai $essai échoué, nouvel essai dans 60 s"
-            sleep 60
-          done
-          exit 1
+          sudo podman build --layers=true --pull=never "${ARGS[@]}" \
+            --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            -t localhost/smokyos:build .
+
+      - name: Vérifier l'image avant de la publier
+        run: |
+          set -o pipefail
+          # /image : l'image elle-même, montée à part. Dans un conteneur qui tourne, /etc/hostname
+          # et /etc/hosts sont ceux du conteneur, pas ceux de l'image.
+          sudo podman run --rm --network=none -v "$PWD/tests:/tests:ro" \
+            --mount type=image,source=localhost/smokyos:build,destination=/image \
+            localhost/smokyos:build bash /tests/image/verifier.sh | tee /tmp/verification.txt
+          { echo "### Vérification de l'image"; echo '```'; grep -E 'ÉCHEC|note|RÉSULTAT' /tmp/verification.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comparer avec l'image publiée (branche de test uniquement)
+        if: github.ref != 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          sudo podman pull --authfile "$AUTH" "$IMAGE:latest"
+          A=$(sudo podman image mount "$IMAGE:latest")
+          B=$(sudo podman image mount localhost/smokyos:build)
+          sudo podman run --rm --network=none "$IMAGE:latest" rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | sort > /tmp/paquets-a.txt
+          sudo podman run --rm --network=none localhost/smokyos:build rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | sort > /tmp/paquets-b.txt
+          sudo python3 tests/image/comparer.py "$A" "$B" /tmp/paquets-a.txt /tmp/paquets-b.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          sudo podman image umount "$IMAGE:latest" localhost/smokyos:build || true
 
       - name: Publier sur ghcr.io
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
-          sudo podman push "$IMAGE:latest"
-          sudo podman push "$IMAGE:$(date +%Y%m%d)"
+          pousser() {  # image locale → étiquette distante, 3 essais
+            for essai in 1 2 3; do
+              sudo podman push --authfile "$AUTH" "$1" "docker://$2" && return 0
+              echo "::warning::Envoi de $2 : essai $essai échoué"; sleep 20
+            done
+            return 1
+          }
+          pousser localhost/smokyos:build "$IMAGE:$TAG"
+          if [[ "$TAG" == latest ]]; then pousser localhost/smokyos:build "$IMAGE:$(date +%Y%m%d)"; fi
+          # le socle n'est publié qu'une fois l'image qui en sort vérifiée
+          if [[ "$SOCLE_NEUF" == oui ]]; then pousser localhost/smoky-socle:build "$IMAGE:$SOCLE_TAG"; fi
+          {
+            echo "### Publié : \`$IMAGE:$TAG\`"
+            echo
+            echo "Couches de l'image (taille compressée). Tant que le socle est réutilisé, une mise à jour ne fait télécharger que les dernières :"
+            echo
+            echo '```'
+            sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:$TAG" | python3 tests/image/couches.py || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
