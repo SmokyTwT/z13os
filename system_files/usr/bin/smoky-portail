@@ -44,7 +44,7 @@ while :; do
     zenity --info --title="$T" --width=460 --ok-label="Commencer" --text="Cet outil valide la page « accepter » d'un Wi-Fi public <b>au nom d'un appareil</b> (robot, Google TV, ampoule…).
 
 Il te faut l'<b>adresse MAC</b> de l'appareil. Elle sera retenue pour la prochaine fois." 2>/dev/null || exit 0
-    mac=$(add_device) || exit 0
+    mac=$(add_device) || continue          # adresse refusée : on recommence
     SELECTED=("$mac"); break
   fi
   CHOICE=$(zenity --list --checklist --title="$T" --width=520 --height=420 --separator='|' \
@@ -88,7 +88,7 @@ if [ -n "$SEC" ] && [ "$SEC" != "--" ]; then
   PASS=$(zenity --password --title="$T — mot de passe du Wi-Fi « $SSID »" 2>/dev/null) || exit 0
 fi
 
-LIST=""; for m in "${SELECTED[@]}"; do LIST+="• $(name_of "$m") ($m)\n"; done
+LIST=""; for m in "${SELECTED[@]}"; do LIST+="• $(name_of "$m") ($m)"$'\n'; done
 zenity --question --title="$T" --width=460 --ok-label="C'est fait" --cancel-label="Annuler" --text="<b>Éteins</b> ces appareils le temps de l'opération (deux appareils ne peuvent pas avoir la même adresse) :
 
 $LIST
