@@ -1,5 +1,6 @@
 name: build-image
-# Construit l'image Smoky OS, la VÉRIFIE, puis seulement la publie.
+# Construit l'image Smoky OS, la VÉRIFIE (contenu, puis démarrage réel dans une machine
+# virtuelle), puis seulement la publie.
 #   - branche main  → ghcr.io/…/z13os:latest (celle que le PC télécharge) + étiquette du jour
 #   - autre branche → ghcr.io/…/z13os:test   (lancement à la main ; ne touche jamais à latest)
 # L'image est en deux parties : le socle (Fedora + paquets, lourd, refait le lundi ou quand ses
@@ -21,6 +22,11 @@ on:
         description: "Avant de publier, garder l'image latest actuelle sous cette étiquette (ex. : v1). Vide = non."
         type: string
         default: ""
+      demarrage:
+        description: "Essai de démarrage en machine virtuelle avant de publier"
+        type: choice
+        options: [faire, passer]
+        default: faire
 
 concurrency:
   group: build-image-${{ github.ref }}
@@ -139,6 +145,21 @@ jobs:
             localhost/smokyos:build bash /tests/image/verifier.sh | tee /tmp/verification.txt
           { echo "### Vérification de l'image"; echo '```'; grep -E 'ÉCHEC|note|RÉSULTAT' /tmp/verification.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Essai de démarrage dans une machine virtuelle
+        if: inputs.demarrage != 'passer'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 ovmf
+          set -o pipefail
+          sudo bash tests/image/demarrer.sh localhost/smokyos:build /tmp/smoky-vm | tee /tmp/demarrage.txt
+          { echo "### Essai de démarrage"; echo '```'; grep -E 'RÉSULTAT|durée du démarrage' /tmp/demarrage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Journal du démarrage (en cas d'échec)
+        if: failure()
+        run: |
+          [ -f /tmp/demarrage.txt ] && { echo "### Essai de démarrage"; echo '```'; grep -E 'RÉSULTAT' /tmp/demarrage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY" || true
+          sudo rm -f /tmp/smoky-vm/disque.raw
+
       - name: Comparer avec l'image publiée (branche de test uniquement)
         if: github.ref != 'refs/heads/main'
         continue-on-error: true
@@ -150,6 +171,20 @@ jobs:
           sudo podman run --rm --network=none localhost/smokyos:build rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | sort > /tmp/paquets-b.txt
           sudo python3 tests/image/comparer.py "$A" "$B" /tmp/paquets-a.txt /tmp/paquets-b.txt | tee -a "$GITHUB_STEP_SUMMARY"
           sudo podman image umount "$IMAGE:latest" localhost/smokyos:build || true
+          { echo "### Couches de l'image publiée (pour comparer)"; echo '```'
+            sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:latest" | python3 tests/image/couches.py || true
+            echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          # même essai de démarrage sur l'image publiée, pour comparer les durées
+          if [[ -f /tmp/demarrage.txt ]]; then
+            sudo bash tests/image/demarrer.sh "$IMAGE:latest" /tmp/smoky-vm-ref > /tmp/demarrage-ref.txt 2>&1 || true
+            {
+              echo "### Durée de démarrage (machine virtuelle)"
+              echo '```'
+              echo "image publiée : $(grep -E 'durée du démarrage|RÉSULTAT' /tmp/demarrage-ref.txt | sed -E 's/^ *durée du démarrage \(dans la machine virtuelle\) : //' | tr '\n' ' ')"
+              echo "nouvelle      : $(grep -E 'durée du démarrage|RÉSULTAT' /tmp/demarrage.txt | sed -E 's/^ *durée du démarrage \(dans la machine virtuelle\) : //' | tr '\n' ' ')"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Publier sur ghcr.io
         run: |
@@ -172,4 +207,4 @@ jobs:
             echo '```'
             sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:$TAG" | python3 tests/image/couches.py || true
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
