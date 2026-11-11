@@ -70,7 +70,7 @@ nb_css=$(gresource list "$GR" 2>/dev/null | grep -c '\.css$')
 
 titre "Services"
 for u in supergfxd.service thermald.service fstrim.timer z13-firstboot.service smoky-focus-cleanup.service \
-         rpm-ostreed-automatic.timer smoky-flatpak-update.timer; do
+         smoky-gpu.service rpm-ostreed-automatic.timer smoky-flatpak-update.timer; do
   verifie "$u activé" systemctl is-enabled "$u"
 done
 for u in smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer \
@@ -160,6 +160,28 @@ if command -v bootc >/dev/null 2>&1; then
   fi
 else
   attention "bootc absent de l'image : règles non vérifiées"
+fi
+
+titre "Carte graphique (Intel sur Smoky OS, Ultimate sur Windows)"
+verifie "réglages présents (/etc/smokyos/gpu.conf)" grep -q '^intel_auto=oui$' /etc/smokyos/gpu.conf
+verifie "smokygpu.py répond (lecture seule)" bash -c 'python3 -I /usr/libexec/smokyos/smokygpu.py etat | python3 -c "import json, sys; e = json.load(sys.stdin); assert {\"mux\", \"interface\", \"probleme\"} <= set(e)"'
+verifie "le redémarrage sur Windows passe par smokygpu.py" grep -q 'smokygpu.py windows' /usr/libexec/smokyos/smoky-bootonce.sh
+# le noyau de l'image sait-il régler l'aiguillage ? (asus-armoury : noyaux récents ; asus-wmi : anciens)
+recent=$(find /usr/lib/modules -name 'asus-armoury.ko*' 2>/dev/null | head -1)
+ancien=$(find /usr/lib/modules -name 'asus-wmi.ko*' 2>/dev/null | head -1)
+lit() { case "$1" in *.zst) zstd -dcq "$1" ;; *.xz) xz -dc "$1" ;; *.gz) gzip -dc "$1" ;; *) cat "$1" ;; esac; }
+if [ -n "$recent" ] && [ "$(lit "$recent" 2>/dev/null | grep -ac 'gpu_mux_mode')" -ge 1 ]; then
+  ok "noyau : réglage de l'aiguillage graphique présent (asus-armoury)"
+elif [ -n "$ancien" ] && [ "$(lit "$ancien" 2>/dev/null | grep -ac 'gpu_mux_mode')" -ge 1 ]; then
+  ok "noyau : réglage de l'aiguillage graphique présent (asus-wmi, ancienne forme)"
+else
+  attention "noyau : réglage de l'aiguillage graphique introuvable (asus-armoury : ${recent:-absent}) — le retour à Intel ne pourra rien faire"
+fi
+if SMOKY_RACINE=/ HOME=/tmp/verif-home python3 /tests/test_gpu.py >/tmp/verif-gpu.log 2>&1; then
+  ok "tests de la carte graphique : $(tail -3 /tmp/verif-gpu.log | grep -oE 'Ran [0-9]+ tests' || echo réussis)"
+else
+  echec "tests de la carte graphique"
+  tail -40 /tmp/verif-gpu.log | sed 's/^/          /'
 fi
 
 titre "Serveurs des applis (lancés pour de vrai dans l'image)"

@@ -1,0 +1,21 @@
+[Unit]
+Description=Smoky OS - puce Intel seulement (annule le mode Ultimate laissé par Windows)
+# Le mode Ultimate d'Armoury Crate est un aiguillage matériel gardé par le firmware : s'il est
+# resté en place, l'écran est relié à la carte NVIDIA. On le rend à la puce Intel et on
+# redémarre une fois, avant l'écran de connexion. Voir /usr/libexec/smokyos/smokygpu.py.
+# Sur un PC sans cet aiguillage (ou dans une machine virtuelle), le service ne fait rien.
+Before=supergfxd.service asusd.service display-manager.service
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+# le pilote des réglages ASUS se charge d'habitude tout seul ; on s'assure qu'il est là avant de lire
+ExecStartPre=-/usr/sbin/modprobe -q asus_armoury
+# -I : Python isolé (ne lit ni variables PYTHON*, ni dossier personnel)
+ExecStart=/usr/bin/python3 -I /usr/libexec/smokyos/smokygpu.py demarrage
+# cas normal : une fraction de seconde. Le délai ne sert que si le firmware ne répond pas.
+TimeoutStartSec=45
+SyslogIdentifier=smoky-gpu
+
+[Install]
+WantedBy=multi-user.target

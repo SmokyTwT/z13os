@@ -166,6 +166,15 @@ Si le portail expire, relance l'outil.
   Paramètres → Système → À propos → Nom de l'appareil.
 - **Redémarrer sur Windows** : le firmware ASUS refuse parfois qu'on lui indique le prochain
   système à démarrer. Smoky Center passe alors par le menu de démarrage (GRUB), une seule fois.
+- **Mode Ultimate de Windows** (Armoury Crate) : c'est un réglage du firmware, il reste donc en
+  place quand on revient sur Smoky OS, et l'écran serait relié à la carte NVIDIA. Smoky OS le
+  voit au démarrage, rend l'écran à la puce Intel et **redémarre une fois tout seul** (une
+  trentaine de secondes) ; ensuite tout démarre directement. En repartant par « Redémarrer sur
+  Windows » (Smoky Center), le mode Ultimate est remis : Windows le retrouve sans rien faire.
+  Si tu choisis Windows dans le menu de démarrage, Smoky OS n'a rien pu préparer : Windows
+  démarre en mode Standard. Réglages : `/etc/smokyos/gpu.conf` ; état :
+  `python3 /usr/libexec/smokyos/smokygpu.py etat`. Garde-fous : un seul redémarrage automatique
+  par démarrage, deux essais au plus, et rien du tout si le firmware répond de travers.
 
 ## Autonomie et durée de vie de la batterie
 - **Limite de charge à 80 %** (plus de cycles avant usure) ; bouton « Charger à 100 % pour cette

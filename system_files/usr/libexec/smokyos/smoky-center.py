@@ -15,6 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import smokygpu
 from smokyapp import Appli, RequeteActions, servir
 
 PORT = int(os.environ.get("SMOKYCENTER_PORT", "47814"))
@@ -360,6 +361,7 @@ def state():
         "system": pretty.group(1) if pretty else "Smoky OS", "image": image, "update_staged": staged,
         "update": dict(UPDATE),
         "gpu": gpu or "?", "profile": profile or "?",
+        "gpu_mux": smokygpu.resume(),
         "battery": {"capacity": read(f"{bat}/capacity", "?"), "status": read(f"{bat}/status", "?"),
                     "limit": read(f"{bat}/charge_control_end_threshold", "?")},
         "adaptive": jload(ADAPTIVE, ADAPTIVE_DEFAULTS),

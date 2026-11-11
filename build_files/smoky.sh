@@ -231,7 +231,7 @@ fi
 # --- Services ----------------------------------------------------------------
 systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer smoky-backup-check.timer
 systemctl enable supergfxd.service thermald.service fstrim.timer \
-  z13-firstboot.service smoky-focus-cleanup.service \
+  z13-firstboot.service smoky-focus-cleanup.service smoky-gpu.service \
   rpm-ostreed-automatic.timer smoky-flatpak-update.timer
 
 # --- Autonomie ----------------------------------------------------------------------------------

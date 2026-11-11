@@ -108,5 +108,12 @@ else
   echec "tests des serveurs"; printf '%s\n' "$sortie" | tail -40
 fi
 
+etape "Carte graphique (Intel sur Smoky OS, Ultimate sur Windows)"
+if sortie=$(python3 tests/test_gpu.py 2>&1); then
+  ok "$(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
+else
+  echec "tests de la carte graphique"; printf '%s\n' "$sortie" | tail -40
+fi
+
 printf '\n'
 if [ "$echecs" -eq 0 ]; then echo "RÉSULTAT : tout est bon."; else echo "RÉSULTAT : $echecs problème(s)."; exit 1; fi

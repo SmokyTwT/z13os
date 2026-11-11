@@ -40,6 +40,15 @@ if [[ ! -e "$MARK" ]] && command -v gsettings >/dev/null; then
   mkdir -p "$(dirname "$MARK")" && touch "$MARK"
 fi
 
+# Carte graphique : dit une fois ce que Smoky OS a fait si Windows avait laissé le mode Ultimate
+# (rien n'est lancé tant que smokygpu.py n'a rien noté de tel)
+if grep -qsE '"(dernier_basculement|probleme)"' /var/lib/smokyos/gpu.json; then
+  note=$(python3 -I /usr/libexec/smokyos/smokygpu.py note 2>/dev/null)
+  if [[ -n "$note" ]] && command -v notify-send >/dev/null; then
+    notify-send -a "Smoky OS" -i video-display "Carte graphique" "$note" || true
+  fi
+fi
+
 # Spotify devient une appli web Smoky : son icône remplace l'ancienne dans le dock (liste personnalisée)
 favs=$(dconf read /org/gnome/shell/favorite-apps 2>/dev/null)
 if [[ "$favs" == *com.spotify.Client.desktop* ]]; then

@@ -366,12 +366,41 @@ class TestCenter(Commun, Base):
     def test_etat(self):
         code, etat = self.srv.json("GET", "/api/state")
         self.assertEqual(code, 200)
-        for cle in ("system", "image", "update_staged", "update", "gpu", "profile", "battery", "adaptive", "home",
+        for cle in ("system", "image", "update_staged", "update", "gpu", "gpu_mux", "profile", "battery", "adaptive", "home",
                     "moodle", "vpn", "focus", "g", "jobs", "windows", "backup", "secureboot", "info", "storage"):
             self.assertIn(cle, etat)
+        self.assertEqual(set(etat["gpu_mux"]), {"mux", "interface", "nvidia_coupee", "intel_auto", "windows_ultimate",
+                                                "essais", "probleme", "dernier_basculement"})
+        self.assertIn(etat["gpu_mux"]["mux"], (None, 0, 1))
         self.assertEqual(set(etat["adaptive"]), {"refresh", "tablet_mode", "vpn_auto", "tablet_open_notes"})
         self.assertEqual(set(etat["battery"]), {"capacity", "status", "limit"})
         self.assertEqual(etat["focus"], {"end": 0, "minutes": 0})
+
+    def test_carte_graphique_mode_ultimate(self):
+        # faux firmware : écran relié à la NVIDIA (mode Ultimate laissé par Windows), essais épuisés
+        faux = Path(tempfile.mkdtemp(prefix="smoky-test-gpu-"))
+        self.addCleanup(shutil.rmtree, faux, True)
+        mux = faux / "sys/class/firmware-attributes/asus-armoury/attributes/gpu_mux_mode/current_value"
+        mux.parent.mkdir(parents=True)
+        mux.write_text("0\n")
+        memoire = faux / "gpu.json"
+        memoire.write_text(json.dumps({"windows_ultimate": True, "essais": 2, "probleme": "Deux essais ratés."}))
+        avant = (mux.stat().st_mtime_ns, memoire.stat().st_mtime_ns)
+        env = {"SMOKY_GPU_SYS": str(faux / "sys"), "SMOKY_GPU_ETAT": str(memoire), "SMOKY_GPU_CONF": str(faux / "gpu.conf")}
+        ancien = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            srv = Serveur("center")
+        finally:
+            for k, v in ancien.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self.addCleanup(srv.stop)
+        etat = srv.json("GET", "/api/state")[1]["gpu_mux"]
+        self.assertEqual(etat, {"mux": 0, "interface": "asus-armoury", "nvidia_coupee": None, "intel_auto": True,
+                                "windows_ultimate": True, "essais": 2, "probleme": "Deux essais ratés.",
+                                "dernier_basculement": None})
+        self.assertEqual((mux.read_text(), mux.stat().st_mtime_ns, memoire.stat().st_mtime_ns), ("0\n", *avant),
+                         "Smoky Center lit l'état, il ne modifie rien")
 
     def test_reglages_adaptatifs(self):
         self.assertEqual(self.srv.action(action="adaptive", refresh=False, tablet_mode=True, inconnu=True, vpn_auto="oui"),

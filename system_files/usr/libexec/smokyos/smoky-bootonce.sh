@@ -8,6 +8,13 @@ target="${1:-}"
 CFG=/boot/grub2/grub.cfg
 ENV=/boot/grub2/grubenv
 
+# Windows en mode Ultimate : on le lui remet juste avant de redémarrer dessus, s'il l'avait
+# (smokygpu.py ; ne fait rien pour « uefi », et un refus du firmware n'empêche pas de redémarrer)
+ultimate() {
+  [[ "$target" == windows ]] || return 0
+  /usr/bin/python3 -I /usr/libexec/smokyos/smokygpu.py windows || true
+}
+
 grub_once() {   # titre de l'entrée du menu GRUB
   [[ -f "$CFG" ]] || { echo "menu de démarrage introuvable"; exit 1; }
   if ! grep -q next_entry "$CFG"; then
@@ -26,6 +33,7 @@ fi' "$CFG"
   [[ -f "$ENV" ]] || grub2-editenv "$ENV" create
   grub2-editenv "$ENV" set "next_entry=$1"
   sync
+  ultimate
   systemctl reboot
 }
 
@@ -33,7 +41,7 @@ case "$target" in
   windows)
     id=$(efibootmgr | sed -nE 's/^Boot([0-9A-Fa-f]{4})\*?[[:space:]]+Windows Boot Manager.*/\1/p' | head -1)
     [[ -n "$id" ]] || { echo "Windows introuvable"; exit 1; }
-    if efibootmgr --bootnext "$id" >/dev/null 2>&1; then systemctl reboot; fi
+    if efibootmgr --bootnext "$id" >/dev/null 2>&1; then ultimate; systemctl reboot; fi
     # Repli par le menu GRUB, seulement si le lanceur de Windows est le vrai : un autre Linux
     # (CachyOS ici) avait mis son GRUB à la place de bootmgfw.efi, d'où un « grub rescue »
     esp=$(lsblk -nrpo NAME,PARTTYPE | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')

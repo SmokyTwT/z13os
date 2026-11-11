@@ -64,6 +64,16 @@ const gseg = (name, label, options) => (S.g[name] === undefined ? ''
   : `<div class="row"><span>${label}</span>${seg('g:' + name, options, S.g[name])}</div>`);
 const fmtDate = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+// Double démarrage : le mode Ultimate de Windows (écran relié à la carte NVIDIA) est un réglage du
+// firmware. Smoky OS le défait au démarrage et le remet en repartant sur Windows (smokygpu.py).
+function muxHint(m) {
+  if (!m || m.mux === null || m.mux === undefined) return '';
+  if (m.mux === 0) return `<p class="hint">⚠ L'écran est relié à la carte NVIDIA (mode Ultimate de Windows). ${esc(m.probleme || 'Redémarre Smoky OS pour revenir à la puce Intel.')}</p>`;
+  const windows = m.windows_ultimate ? 'Le mode Ultimate est remis quand tu passes par « Redémarrer sur Windows ».'
+    : 'Si Windows passe en mode Ultimate, Smoky OS redémarre une fois tout seul pour revenir à la puce Intel.';
+  return `<p class="hint">Avec Windows : sur Smoky OS, l'écran reste sur la puce Intel. ${windows}${m.probleme ? ' ' + esc(m.probleme) : ''}</p>`;
+}
+
 function render() {
   const s = S;
   $('#sys').textContent = `${s.system}${s.update_staged ? ' · mise à jour prête : redémarre pour l’appliquer' : ''}`;
@@ -82,6 +92,7 @@ function render() {
   <section class="card"><h2>🎮 Carte graphique <small>${esc(s.gpu)}</small></h2>
     <div class="row"><span>Mode</span>${seg('gpu', [['Integrated', 'Intel (autonomie)'], ['Hybrid', 'RTX activée']], s.gpu)}</div>
     <p class="hint">Changement appliqué après déconnexion. Intel suffit pour les cours et le streaming, et tient bien plus longtemps sur batterie.</p>
+    ${muxHint(s.gpu_mux)}
   </section>
   <section class="card"><h2>📱 Tablette</h2>
     <p class="hint">Aussi dans le menu en haut à droite (bouton « Tablette »).</p>

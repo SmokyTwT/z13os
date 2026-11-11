@@ -96,8 +96,15 @@ echecs=$(grep -aE 'Failed to start |\.service: Failed with result' "$PROPRE" | s
 case "$etat" in
   graphique)
     if grep -qaE 'Started gdm\.service' "$PROPRE"; then
-      echo "RÉSULTAT : l'image démarre jusqu'à l'écran de connexion (${duree} s)."
-      exit 0
+      # smoky-gpu.service passe avant l'écran de connexion : ici (pas de carte ASUS), il doit
+      # avoir tourné sans rien trouver à faire, et sans erreur
+      if grep -qaF "smokygpu : pas d'aiguillage" "$PROPRE" && ! grep -qaE 'smoky-gpu\.service: (Failed|Main process exited)' "$PROPRE"; then
+        echo "RÉSULTAT : l'image démarre jusqu'à l'écran de connexion (${duree} s)."
+        exit 0
+      fi
+      echo "RÉSULTAT : le système démarre (${duree} s), mais le service de la carte graphique (smoky-gpu) n'a pas tourné comme prévu."
+      grep -aE 'smoky-gpu|smokygpu' "$PROPRE" | tail -n 20
+      exit 1
     fi
     echo "RÉSULTAT : le système démarre (${duree} s) mais l'écran de connexion (GDM) n'apparaît pas dans le journal."
     ;;
