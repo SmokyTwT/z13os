@@ -28,7 +28,8 @@ def secondes(texte):
 def lire(fichier):
     """Fichier de mesures → dictionnaire (valeurs absentes = None / listes vides)."""
     m = {"total": None, "noyau": None, "initrd": None, "systeme": None, "graphique": None, "memoire": None,
-         "disponible": None, "processus": None, "services": [], "echecs": [], "longs": [], "gros": []}
+         "disponible": None, "processus": None, "services": [], "echecs": [], "longs": [], "gros": [],
+         "ecran_lance": None, "ecran_affiche": None, "arret": None, "retards": []}
     try:
         lignes = Path(fichier).read_text(errors="replace").splitlines()
     except OSError:
@@ -72,6 +73,21 @@ def lire(fichier):
         elif section == "nombre de processus":
             if ligne.strip().isdigit():
                 m["processus"] = int(ligne.strip())
+        elif section == "écran de connexion":
+            mot, _, valeur = ligne.partition(" ")
+            if mot in ("lancé", "affiché"):
+                try:
+                    m["ecran_lance" if mot == "lancé" else "ecran_affiche"] = float(valeur)
+                except ValueError:
+                    pass
+        elif section == "arrêt":
+            if ligne.startswith("durée "):
+                try:
+                    m["arret"] = float(ligne.split()[-1])
+                except ValueError:
+                    pass
+            elif ligne.startswith("retard : "):
+                m["retards"].append(ligne[len("retard : "):])
     return m
 
 
@@ -99,9 +115,10 @@ def comparer(dossier_a, dossier_b):
             sortie.append(f"{titre} : mesures indisponibles ({'publiée' if not a else 'nouvelle'})")
             continue
         sortie.append(f"{titre:<44}{'publiée':>10}{'nouvelle':>11}   écart")
-        for libelle, cle, unite in (("  total", "total", "s"), ("    dont noyau", "noyau", "s"), ("    dont image de démarrage", "initrd", "s"),
-                                    ("    dont système", "systeme", "s"), ("  mémoire utilisée", "memoire", "Mo"),
-                                    ("  processus", "processus", "")):
+        for libelle, cle, unite in (("  écran de connexion affiché à", "ecran_affiche", "s"), ("  écran de connexion lancé à", "ecran_lance", "s"),
+                                    ("  démarrage terminé (total)", "total", "s"), ("    dont noyau", "noyau", "s"),
+                                    ("    dont image de démarrage", "initrd", "s"), ("    dont système", "systeme", "s"),
+                                    ("  arrêt", "arret", "s"), ("  mémoire utilisée", "memoire", "Mo"), ("  processus", "processus", "")):
             sortie.append(f"{libelle:<44}{fmt(a[cle], unite):>10}{fmt(b[cle], unite):>11}   {ecart(a[cle], b[cle], unite)}")
         sa, sb = set(a["services"]), set(b["services"])
         sortie.append(f"{'  services qui tournent':<44}{len(sa):>10}{len(sb):>11}   {ecart(len(sa), len(sb), '')}")
@@ -111,6 +128,8 @@ def comparer(dossier_a, dossier_b):
             sortie.append("    en moins : " + " ".join(sorted(sa - sb)))
         if set(a["echecs"]) != set(b["echecs"]):
             sortie.append(f"  services en échec : {' '.join(a['echecs']) or 'aucun'} → {' '.join(b['echecs']) or 'aucun'}")
+        for retard in b["retards"]:
+            sortie.append(f"  arrêt retardé par : {retard}")
         if n == 2:
             avant = dict(a["longs"])
             sortie.append("  services les plus longs à démarrer (nouvelle image ; entre parenthèses : image publiée)")
@@ -142,6 +161,12 @@ Swap:           3904           0        3904
   212.5 gnome-shell
 == nombre de processus
 143
+== écran de connexion (secondes depuis le lancement du noyau)
+lancé 3.2
+affiché 6.9
+== arrêt
+durée 48
+retard : user@1000.service: State 'stop-sigterm' timed out. Killing.
 """
 
 
@@ -157,9 +182,12 @@ def verifier():
         assert (m["memoire"], m["disponible"], m["processus"]) == (812, 3093, 143), m
         assert m["services"] == ["gdm.service", "polkit.service"] and m["echecs"] == ["mcelog.service"]
         assert m["gros"] == [("gnome-shell", 212.5)]
+        assert (m["ecran_lance"], m["ecran_affiche"], m["arret"]) == (3.2, 6.9, 48.0), m
+        assert m["retards"] == ["user@1000.service: State 'stop-sigterm' timed out. Killing."], m["retards"]
         assert lire(Path(d) / "absent.txt") is None
         texte = comparer(d, d)
         assert "1er démarrage (après une mise à jour) : mesures indisponibles" in texte and "69.7 s" in texte, texte
+        assert "arrêt retardé par : user@1000.service" in texte and "6.9 s" in texte, texte
     print("mesures.py : lecture vérifiée")
 
 

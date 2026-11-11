@@ -197,6 +197,20 @@ jobs:
             python3 tests/image/mesures.py /tmp/smoky-vm-ref /tmp/smoky-vm | tee -a "$GITHUB_STEP_SUMMARY" || true
           fi
 
+      - name: Garder les journaux de l'essai de démarrage (14 jours)
+        if: always() && inputs.demarrage != 'passer'
+        continue-on-error: true        # un souci de stockage ne doit pas bloquer une mise à jour
+        uses: actions/upload-artifact@v4
+        with:
+          name: essai-de-demarrage
+          path: |
+            /tmp/smoky-vm/serie-*.txt
+            /tmp/smoky-vm/mesures-*.txt
+            /tmp/smoky-vm-ref/serie-*.txt
+            /tmp/smoky-vm-ref/mesures-*.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Publier sur ghcr.io
         run: |
           pousser() {  # image locale → étiquette distante, 3 essais

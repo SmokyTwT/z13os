@@ -49,14 +49,20 @@ sleep 20
 n=1; [ -e /var/lib/smoky-mesure ] && n=2
 echo "SMOKY-MESURE-DEBUT $n"
 echo "== durée"; systemd-analyze time 2>&1
-echo "== services les plus longs à démarrer"; systemd-analyze blame 2>&1 | head -25
-echo "== chaîne critique (ce qui retarde l'écran de connexion)"; systemd-analyze critical-chain graphical.target 2>&1 | head -25
+echo "== services les plus longs à démarrer"; systemd-analyze blame 2>&1 | grep -v '\.device$' | head -25
+echo "== chaîne critique (ce qui retarde la fin du démarrage)"; systemd-analyze critical-chain graphical.target 2>&1 | sed -n '4,22p'
+echo "== chaîne critique de l'écran de connexion"; systemd-analyze critical-chain gdm.service 2>&1 | sed -n '4,16p'
 echo "== services qui tournent"; systemctl list-units --type=service --state=running --no-legend --plain 2>&1 | awk '{print $1}' | sort | tr '\n' ' '; echo
 echo "== services en échec"; systemctl list-units --failed --no-legend --plain 2>&1 | awk '{print $1}' | tr '\n' ' '; echo
 echo "== mémoire (Mo)"; free -m 2>&1
 echo "== processus les plus gros (Mo)"; ps -eo rss,comm --sort=-rss | awk 'NR>1 && NR<=26 {printf "%7.1f %s\n", $1/1024, $2}'
 echo "== nombre de processus"; ps -e --no-headers | wc -l
 echo "SMOKY-MESURE-FIN $n"
+if [ "$n" = 1 ]; then
+  # un compte ordinaire, comme sur un vrai PC : au second démarrage, l'écran de connexion
+  # affiche la liste des comptes au lieu de l'assistant de première installation
+  useradd -m -u 1000 -c "Essai" essai 2>&1 && echo "essai:$(head -c 18 /dev/urandom | base64)" | chpasswd 2>&1
+fi
 touch /var/lib/smoky-mesure
 sleep 2
 systemctl poweroff
@@ -122,9 +128,24 @@ un_demarrage() {
 }
 
 # mesures N JOURNAL_PROPRE → écrit $T/mesures-N.txt (bloc relevé dans la machine virtuelle)
+# À ce bloc s'ajoutent des relevés tirés du journal série : quand l'écran de connexion est lancé
+# puis affiché (secondes depuis le lancement du noyau), durée de l'arrêt, et ce qui l'a retardé.
+instant() { grep -aE "$1" "$2" | sed -n '1p' | sed -E 's/^\[ *([0-9]+\.[0-9])[0-9]*\].*/\1/'; }
 mesures() {
+  local sortie="$T/mesures-$1.txt"
   grep -aE '^\[[ 0-9.]+\] smoky-mesure\[[0-9]+\]: ' "$2" | sed -E 's/^\[[ 0-9.]+\] smoky-mesure\[[0-9]+\]: ?//' \
-    | sed -n "/^SMOKY-MESURE-DEBUT $1/,/^SMOKY-MESURE-FIN $1/p" | grep -avE '^SMOKY-MESURE-' > "$T/mesures-$1.txt" || true
+    | sed -n "/^SMOKY-MESURE-DEBUT $1/,/^SMOKY-MESURE-FIN $1/p" | grep -avE '^SMOKY-MESURE-' > "$sortie" || true
+  [ -s "$sortie" ] || return 0
+  {
+    echo "== écran de connexion (secondes depuis le lancement du noyau)"
+    echo "lancé $(instant 'systemd\[1\]: Started gdm\.service' "$2")"
+    echo "affiché $(instant 'systemd\[[0-9]+\]: Started org\.gnome\.Shell@[a-z0-9]+\.service' "$2")"
+    echo "== arrêt"
+    echo "durée ${ARRET[$1]}"
+    # ce qui a refusé de s'arrêter à temps (attendu jusqu'au délai, puis tué)
+    sed -n '/SMOKY-MESURE-FIN/,$p' "$2" | grep -aE "State 'stop-[a-z]+' timed out|Failed with result 'timeout'|stop job is running" \
+      | sed -E 's/^\[[ 0-9.]+\] //; s/\x1b\[[0-9;:]*m//g' | sort -u | sed -n '1,8p' | sed 's/^/retard : /'
+  } >> "$sortie"
 }
 
 ETAT=([1]=attente [2]=absent); DUREE=([1]="?" [2]="?"); ARRET=([1]="?" [2]="?")
@@ -182,6 +203,11 @@ for n in 1 2; do
   duree_systeme=$(grep -aE 'Startup finished in' "$T/serie-$n.txt" | tail -n 1 | sed -E 's/^.*Startup finished in //')
   [ -n "$duree_systeme" ] && echo "  durée du démarrage n°$n (dans la machine virtuelle) : $duree_systeme"
   [ "${ARRET[n]}" != "?" ] && echo "  durée de l'arrêt n°$n : ${ARRET[n]} s"
+  if [ -s "$T/mesures-$n.txt" ]; then
+    lance=$(sed -n 's/^lancé //p' "$T/mesures-$n.txt"); affiche=$(sed -n 's/^affiché //p' "$T/mesures-$n.txt")
+    [ -n "$lance$affiche" ] && echo "  écran de connexion n°$n : lancé à ${lance:-?} s, affiché à ${affiche:-?} s (depuis le lancement du noyau)"
+    sed -n "s/^retard : /  arrêt n°$n retardé par : /p" "$T/mesures-$n.txt"
+  fi
 done
 PROPRE="$T/serie-1.txt"
 echecs=$(cat "$T"/serie-?.txt | grep -aE 'Failed to start |\.service: Failed with result' | sed -E 's/^\[[ 0-9.]+\] //' | sort -u | sed -n '1,15p')

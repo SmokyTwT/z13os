@@ -43,6 +43,25 @@ for d in /usr/lib/modules/*/; do
   printf '  noyau %s : image de démarrage %s Mo\n' "$(basename "$d")" "$(( $(stat -c %s "$d/initramfs.img" 2>/dev/null || echo 0) / 1000000 ))"
 done
 
+titre "Contenu de l'image de démarrage (Mo, avant compression) : ce qui pèse"
+# regroupé par dossier de microprogrammes (firmware) et par famille de pilotes
+for img in /usr/lib/modules/*/initramfs.img; do
+  [ -f "$img" ] || continue
+  if ! command -v lsinitrd >/dev/null; then echo "  lsinitrd absent"; break; fi
+  lsinitrd "$img" 2>/dev/null | awk '
+    $1 ~ /^-/ && $5 ~ /^[0-9]+$/ {
+      n = split($NF, p, "/"); cle = p[1] "/" p[2]
+      if ($NF ~ /^usr\/lib\/firmware\//) cle = "firmware/" (n > 4 ? p[4] : "(à la racine)")
+      else if ($NF ~ /\/kernel\/drivers\//) { for (i = 1; i <= n; i++) if (p[i] == "drivers") { cle = "pilotes/" p[i+1] (p[i+1] == "gpu" || p[i+1] == "net" ? "/" p[i+2] (p[i+2] == "drm" || p[i+2] == "ethernet" || p[i+2] == "wireless" ? "/" p[i+3] : "") : ""); break } }
+      else if ($NF ~ /\/kernel\//) { for (i = 1; i <= n; i++) if (p[i] == "kernel") { cle = "noyau/" p[i+1]; break } }
+      t[cle] += $5; total += $5
+    }
+    END { for (c in t) printf "%8.1f  %s\n", t[c] / 1048576, c; printf "%8.1f  TOTAL\n", total / 1048576 }' | sort -rn | sed -n '1,45p' | sed 's/^/  /'
+  echo "  modules dracut : $(lsinitrd -m "$img" 2>/dev/null | grep -vE '^(Image|Version|dracut modules|=+|$)' | tr '\n' ' ')"
+  break
+done
+for f in /usr/lib/dracut/dracut.conf.d/*.conf /etc/dracut.conf.d/*.conf; do [ -f "$f" ] && { echo "  $f :"; grep -vE '^\s*(#|$)' "$f" | sed 's/^/    /'; }; done
+
 titre "Mémoire compressée (zram) et réglages du noyau"
 for f in /usr/lib/systemd/zram-generator.conf /etc/systemd/zram-generator.conf; do [ -f "$f" ] && { echo "  $f :"; sed 's/^/    /' "$f"; }; done
 echo "  fichiers de réglages : $(ls /usr/lib/sysctl.d /etc/sysctl.d 2>/dev/null | tr '\n' ' ')"

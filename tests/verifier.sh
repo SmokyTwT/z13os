@@ -108,6 +108,62 @@ else
   echec "tests des serveurs"; printf '%s\n' "$sortie" | tail -40
 fi
 
+etape "Travaux de démarrage faits une fois par image"
+# faux système : ligne de commande du noyau, lien vers le déploiement, mémoire dans /var
+u=system_files/usr/libexec/smokyos/une-fois-par-image.sh
+r=$(mktemp -d); ko=0
+c1=$(printf 'a%.0s' {1..64}); c2=$(printf 'b%.0s' {1..64})
+mkdir -p "$r/proc" "$r/sysroot/ostree/boot.1/default/xyz" "$r/sysroot/ostree/deploy/default/deploy"
+echo "BOOT_IMAGE=(hd0,gpt2)/vmlinuz root=UUID=1 rw ostree=/ostree/boot.1/default/xyz/0 quiet" > "$r/proc/cmdline"
+ln -s "../../../deploy/default/deploy/$c1.0" "$r/sysroot/ostree/boot.1/default/xyz/0"
+essai() { local attendu="$1" quoi="$2"; shift 2; SMOKY_UNEFOIS_RACINE="$r" bash "$u" "$@" >/dev/null 2>&1; local code=$?
+  [ "$code" = "$attendu" ] || { echec "une-fois-par-image : $quoi (code $code au lieu de $attendu)"; ko=1; }; }
+essai 0 "jamais fait : à faire" appstream
+essai 0 "note que c'est fait" appstream fait
+essai 1 "même image : déjà fait" appstream
+essai 0 "autre travail : à faire" mandb
+ln -sfn "../../../deploy/default/deploy/$c2.0" "$r/sysroot/ostree/boot.1/default/xyz/0"
+essai 0 "nouvelle image : à refaire" appstream
+essai 0 "note pour la nouvelle image" appstream fait
+essai 1 "nouvelle image : déjà fait" appstream
+ln -sfn "../../../deploy/default/deploy/$c2.1" "$r/sysroot/ostree/boot.1/default/xyz/0"
+essai 0 "même contenu, autre déploiement : à refaire" appstream
+ln -sfn "../ailleurs" "$r/sysroot/ostree/boot.1/default/xyz/0"
+essai 0 "lien inattendu : dans le doute, à faire" appstream
+essai 0 "…et rien n'est noté" appstream fait
+[ "$(cat "$r/var/lib/smokyos/fait-appstream")" = "$c2.0" ] || { echec "une-fois-par-image : la mémoire a été écrasée par une identité douteuse"; ko=1; }
+echo "root=UUID=1 rw quiet" > "$r/proc/cmdline"
+essai 0 "pas de système atomique : à faire" appstream
+essai 0 "nom invalide : à faire, sans rien écrire" "../../etc/passwd" fait
+[ "$(find "$r/var" -type f | wc -l)" = 1 ] || { echec "une-fois-par-image : fichier inattendu dans /var"; ko=1; }
+rm -rf "$r"
+[ "$ko" -eq 0 ] && ok "une-fois-par-image.sh : 13 cas (à faire, déjà fait, nouvelle image, cas douteux)"
+for d in system_files/usr/lib/systemd/system/*.service.d/50-smokyos.conf; do
+  grep -q '^ExecCondition=/usr/libexec/smokyos/une-fois-par-image.sh [a-z]*$' "$d" && grep -q '^ExecStartPost=/usr/libexec/smokyos/une-fois-par-image.sh [a-z]* fait$' "$d" \
+    || echec "complément incomplet : $d"
+done
+
+etape "Diagnostic (smoky-diagnostic)"
+# de fausses commandes « bavardes » : le rapport ne doit rien laisser passer de personnel
+faux=$(mktemp -d)
+cat > "$faux/journalctl" <<'EOF'
+#!/bin/sh
+echo "erreur dans /var/home/camille/Documents/secret.pdf et /home/camille/x"
+echo "envoi vers camille.martin@exemple.fr depuis 192.168.1.42 (aa:bb:cc:dd:ee:ff)"
+echo "GET https://moodle.exemple.fr/ws?wstoken=abcdef0123456789&x=1 password=hunter2"
+EOF
+chmod +x "$faux/journalctl"
+rapport=$(HOME=/var/home/camille PATH="$faux:$PATH" bash system_files/usr/bin/smoky-diagnostic 2>&1)
+rm -rf "$faux"
+if printf '%s\n' "$rapport" | grep -qE 'camille|martin@|secret\.pdf|192\.168|aa:bb:cc|abcdef0123456789|hunter2'; then
+  echec "smoky-diagnostic laisse passer une information personnelle"
+  printf '%s\n' "$rapport" | grep -nE 'camille|martin@|secret\.pdf|192\.168|aa:bb:cc|abcdef0123456789|hunter2' | head -5
+elif printf '%s\n' "$rapport" | grep -q 'wstoken=masqué' && printf '%s\n' "$rapport" | grep -q '^== Carte graphique'; then
+  ok "rapport produit, informations personnelles masquées"
+else
+  echec "smoky-diagnostic : rapport incomplet"; printf '%s\n' "$rapport" | tail -15
+fi
+
 etape "Outils de mesure du démarrage"
 if python3 tests/image/mesures.py --verifier >/dev/null 2>&1; then ok "lecture des mesures"; else echec "tests/image/mesures.py --verifier"; fi
 

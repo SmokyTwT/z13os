@@ -59,9 +59,15 @@ fois, dans `system_files/usr/libexec/smokyos/smokyapp.py`, et leur lancement dan
   pas, une mise à jour ne fait retélécharger que les fichiers Smoky (quelques Mo).
 - **Jamais sans contrôle** : avant d'être publiée, chaque image est vérifiée (une centaine de
   points : démarrage, écran de connexion, services, applis, extensions, serveurs lancés pour
-  de vrai), puis installée et démarrée dans une machine virtuelle jusqu'à l'écran de
-  connexion. Si une étape échoue, rien n'est publié et ton PC garde sa version. Ce que ces
-  contrôles ne voient pas : le matériel du Z13 (tactile, stylet, carte ASUS) et l'apparence.
+  de vrai), puis installée dans une machine virtuelle et démarrée **deux fois de suite**
+  jusqu'à l'écran de connexion (le démarrage qui suit une mise à jour, puis celui de tous les
+  jours, avec un arrêt propre entre les deux). Si une étape échoue, rien n'est publié et ton
+  PC garde sa version. Ce que ces contrôles ne voient pas : le matériel du Z13 (tactile,
+  stylet, carte ASUS) et l'apparence.
+- **Mesuré à chaque build** : durée du démarrage, services les plus longs, mémoire utilisée
+  et services qui tournent sont relevés dans la machine virtuelle. Sur une branche de test,
+  le résumé du build les compare à ceux de l'image publiée : une modification qui ralentit le
+  démarrage ou ajoute un service se voit avant d'arriver sur le PC.
 
 ### Revenir en arrière
 - **Pour une fois** : au démarrage, le menu (3 secondes) propose les deux dernières versions ;
@@ -74,6 +80,13 @@ fois, dans `system_files/usr/libexec/smokyos/smokyapp.py`, et leur lancement dan
 - **Pour reprendre les mises à jour normales** : `sudo bootc switch ghcr.io/smokytwt/z13os:latest`.
 
 Une mise à jour ne touche ni à Windows, ni aux partitions, ni à ton dossier personnel.
+
+### Demander de l'aide : `smoky-diagnostic`
+Dans un terminal, `smoky-diagnostic` affiche l'état du PC en une page : version, carte
+graphique, durée du démarrage, mémoire, batterie, disque, erreurs récentes. Il ne modifie
+rien et ne demande aucun mot de passe. Les chemins de ton dossier personnel, les adresses
+(e-mail, IP, MAC) et ce qui ressemble à un code d'accès sont masqués ; relis quand même le
+rapport avant de le partager. Pour l'avoir dans un fichier : `smoky-diagnostic > ~/diagnostic.txt`.
 
 ## Modifier Smoky OS
 1. Modifie les fichiers, puis lance `bash tests/verifier.sh` (moins d'une minute).

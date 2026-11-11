@@ -184,6 +184,19 @@ else
   tail -40 /tmp/verif-gpu.log | sed 's/^/          /'
 fi
 
+titre "Travaux de démarrage faits une fois par image"
+for u in fedora-atomic-desktop-appstream-cache-refresh fedora-atomic-desktop-mandb-update; do
+  if [ -f "/usr/lib/systemd/system/$u.service" ]; then
+    verifie "$u : lancé une fois par image, plus à chaque démarrage" bash -c "systemctl cat $u.service 2>/dev/null | grep -q '^ExecCondition=/usr/libexec/smokyos/une-fois-par-image.sh'"
+  else
+    attention "$u.service n'existe plus dans Fedora : le complément Smoky ne sert plus (à retirer)"
+  fi
+done
+verifie "une-fois-par-image.sh : dans le doute, « à faire »" bash -c '/usr/libexec/smokyos/une-fois-par-image.sh appstream; [ $? -eq 0 ]'
+
+titre "Diagnostic"
+verifie "smoky-diagnostic produit son rapport" bash -c 'r=$(/usr/bin/smoky-diagnostic 2>&1); for t in "== Système" "== Carte graphique" "== Démarrage" "== Mémoire" "== Énergie" "== Disque"; do printf "%s\n" "$r" | grep -qF "$t" || exit 1; done'
+
 titre "Serveurs des applis (lancés pour de vrai dans l'image)"
 if SMOKY_RACINE=/ HOME=/tmp/verif-home python3 /tests/test_serveurs.py >/tmp/verif-serveurs.log 2>&1; then
   ok "tests des serveurs : $(tail -3 /tmp/verif-serveurs.log | grep -oE 'Ran [0-9]+ tests' || echo réussis)"
