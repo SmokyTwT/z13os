@@ -31,6 +31,10 @@ on:
         description: "Branche de test : unités systemd à afficher en entier dans l'inventaire (ex. : a.service b.timer)"
         type: string
         default: ""
+      reference:
+        description: "Branche de test : étiquette de l'image à laquelle comparer (latest = celle du PC)"
+        type: string
+        default: latest
 
 concurrency:
   group: build-image-${{ github.ref }}
@@ -181,23 +185,25 @@ jobs:
         continue-on-error: true
         env:
           UNITES: ${{ inputs.unites }}
+          REF: ${{ inputs.reference || 'latest' }}
         run: |
+          echo "Image de comparaison : $IMAGE:$REF" | tee -a "$GITHUB_STEP_SUMMARY"
           # inventaire de la nouvelle image (journal du build) : services activés, ce qui pèse
           sudo podman run --rm --network=none -e "SMOKY_INVENTAIRE_UNITES=$UNITES" -v "$PWD/tests:/tests:ro" \
             localhost/smokyos:build bash /tests/image/inventaire.sh || true
-          sudo podman pull --authfile "$AUTH" "$IMAGE:latest"
-          A=$(sudo podman image mount "$IMAGE:latest")
+          sudo podman pull --authfile "$AUTH" "$IMAGE:$REF"
+          A=$(sudo podman image mount "$IMAGE:$REF")
           B=$(sudo podman image mount localhost/smokyos:build)
-          sudo podman run --rm --network=none "$IMAGE:latest" rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | sort > /tmp/paquets-a.txt
+          sudo podman run --rm --network=none "$IMAGE:$REF" rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | sort > /tmp/paquets-a.txt
           sudo podman run --rm --network=none localhost/smokyos:build rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' | sort > /tmp/paquets-b.txt
           sudo python3 tests/image/comparer.py "$A" "$B" /tmp/paquets-a.txt /tmp/paquets-b.txt | tee -a "$GITHUB_STEP_SUMMARY"
-          sudo podman image umount "$IMAGE:latest" localhost/smokyos:build || true
+          sudo podman image umount "$IMAGE:$REF" localhost/smokyos:build || true
           { echo "### Couches de l'image publiée (pour comparer)"; echo '```'
-            sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:latest" | python3 tests/image/couches.py || true
+            sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:$REF" | python3 tests/image/couches.py || true
             echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
           # pilotes de l'image de démarrage : ce qui a disparu ou est apparu par rapport à l'image publiée
           for n in a b; do
-            if [[ $n == a ]]; then i="$IMAGE:latest"; else i=localhost/smokyos:build; fi
+            if [[ $n == a ]]; then i="$IMAGE:$REF"; else i=localhost/smokyos:build; fi
             sudo podman run --rm --network=none "$i" bash -c 'lsinitrd /usr/lib/modules/*/initramfs.img 2>/dev/null' \
               | grep -oE '[^/ ]+\.ko(\.[a-z0-9]+)?$' | sed -E 's/\.ko.*$//' | sort -u > "/tmp/pilotes-$n.txt" || true
           done
@@ -210,7 +216,7 @@ jobs:
           # même essai de démarrage sur l'image publiée, sur la même machine : durées, mémoire et
           # services comparés côte à côte (tests/image/mesures.py)
           if [[ -f /tmp/demarrage.txt ]]; then
-            sudo SMOKY_REFERENCE=1 bash tests/image/demarrer.sh "$IMAGE:latest" /tmp/smoky-vm-ref > /tmp/demarrage-ref.txt 2>&1 || true
+            sudo SMOKY_REFERENCE=1 bash tests/image/demarrer.sh "$IMAGE:$REF" /tmp/smoky-vm-ref > /tmp/demarrage-ref.txt 2>&1 || true
             grep -E "RÉSULTAT|durée du démarrage|durée de l'arrêt" /tmp/demarrage-ref.txt | sed 's/^/image publiée : /' || true
             python3 tests/image/mesures.py /tmp/smoky-vm-ref /tmp/smoky-vm | tee -a "$GITHUB_STEP_SUMMARY" || true
           fi
