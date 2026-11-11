@@ -195,6 +195,18 @@ jobs:
           { echo "### Couches de l'image publiée (pour comparer)"; echo '```'
             sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:latest" | python3 tests/image/couches.py || true
             echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          # pilotes de l'image de démarrage : ce qui a disparu ou est apparu par rapport à l'image publiée
+          for n in a b; do
+            if [[ $n == a ]]; then i="$IMAGE:latest"; else i=localhost/smokyos:build; fi
+            sudo podman run --rm --network=none "$i" bash -c 'lsinitrd /usr/lib/modules/*/initramfs.img 2>/dev/null' \
+              | grep -oE '[^/ ]+\.ko(\.[a-z0-9]+)?$' | sed -E 's/\.ko.*$//' | sort -u > "/tmp/pilotes-$n.txt" || true
+          done
+          {
+            echo "**Pilotes de l'image de démarrage** : $(wc -l < /tmp/pilotes-a.txt) dans l'image publiée, $(wc -l < /tmp/pilotes-b.txt) dans la nouvelle."
+            echo "Retirés : $(comm -23 /tmp/pilotes-a.txt /tmp/pilotes-b.txt | tr '\n' ' ' | cut -c1-1500)"
+            echo "Ajoutés : $(comm -13 /tmp/pilotes-a.txt /tmp/pilotes-b.txt | tr '\n' ' ' | cut -c1-1500)"
+            echo
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           # même essai de démarrage sur l'image publiée, sur la même machine : durées, mémoire et
           # services comparés côte à côte (tests/image/mesures.py)
           if [[ -f /tmp/demarrage.txt ]]; then

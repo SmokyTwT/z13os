@@ -46,7 +46,17 @@ for vmlinuz in /usr/lib/modules/*/vmlinuz; do
   d=$(dirname "$vmlinuz"); k=$(basename "$d")
   taille=$(stat -c %s "$d/initramfs.img" 2>/dev/null || echo 0)
   if [ "$taille" -gt 20000000 ]; then ok "image de démarrage du noyau $k ($((taille / 1000000)) Mo)"; else echec "image de démarrage du noyau $k absente ou trop petite ($taille octets)"; fi
+  [ "$taille" -lt 160000000 ] || attention "image de démarrage du noyau $k : $((taille / 1000000)) Mo, plus que prévu (regarde l'inventaire : qu'est-ce qui a grossi ?)"
   contenu=$(lsinitrd "$d/initramfs.img" 2>/dev/null)
+  # l'écran Intel et le disque du Z13 (les autres pilotes utiles font partie du noyau lui-même
+  # ou sont comparés à l'image publiée dans le résumé du build)
+  manque=""
+  for pilote in i915 xe nvme; do
+    grep -qE "/$pilote\.ko" <<<"$contenu" || manque+="$pilote "
+  done
+  [ -z "$manque" ] && ok "noyau $k : écran Intel et disque NVMe dans l'image de démarrage" || echec "noyau $k : pilotes absents de l'image de démarrage : $manque"
+  # pilotes graphiques NVIDIA/AMD : volontairement hors de l'image de démarrage (30-demarrage.sh)
+  if grep -qE '/(nouveau|amdgpu|radeon)\.ko' <<<"$contenu"; then attention "noyau $k : pilotes NVIDIA/AMD revenus dans l'image de démarrage (elle grossit de 136 Mo)"; else ok "noyau $k : pas de pilote NVIDIA/AMD dans l'image de démarrage"; fi
   grep -q 'ostree-prepare-root' <<<"$contenu" && ok "noyau $k : le système atomique (ostree) est dans l'image de démarrage" || echec "noyau $k : ostree absent de l'image de démarrage"
   grep -q 'plymouth/themes/smoky/' <<<"$contenu" && ok "noyau $k : écran de démarrage Smoky présent" || echec "noyau $k : écran de démarrage Smoky absent"
 done
