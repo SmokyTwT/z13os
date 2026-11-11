@@ -184,6 +184,14 @@ else
   tail -40 /tmp/verif-gpu.log | sed 's/^/          /'
 fi
 
+titre "Mémoire compressée (zram)"
+verifie "réglages zram présents" grep -q 'KERNEL=="zram0".*vm.swappiness' /usr/lib/udev/rules.d/71-smokyos-zram.rules
+verifie "zram activé par Fedora (sinon ces réglages ne servent à rien)" grep -q '^zram-size' /usr/lib/systemd/zram-generator.conf
+if udevadm verify --help >/dev/null 2>&1; then
+  verifie "règle udev valide" udevadm verify /usr/lib/udev/rules.d/71-smokyos-zram.rules
+fi
+verifie "aucun autre réglage ne fixe vm.swappiness" bash -c '! grep -rqsE "^\s*vm\.(swappiness|page-cluster)" /usr/lib/sysctl.d /etc/sysctl.d /etc/sysctl.conf'
+
 titre "Travaux de démarrage faits une fois par image"
 for u in fedora-atomic-desktop-appstream-cache-refresh fedora-atomic-desktop-mandb-update; do
   if [ -f "/usr/lib/systemd/system/$u.service" ]; then

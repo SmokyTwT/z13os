@@ -194,7 +194,7 @@ def redemarrer():
     # Le service passe avant l'écran de connexion : on le retient jusqu'à l'arrêt du système
     # (qui met fin à cette attente : ce n'est pas une erreur).
     signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
-    time.sleep(float(os.environ.get("SMOKY_GPU_ATTENTE", "30")))
+    time.sleep(float(os.environ.get("SMOKY_GPU_ATTENTE", "20")))
     return True
 
 

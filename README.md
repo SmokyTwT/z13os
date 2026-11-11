@@ -222,3 +222,10 @@ Si le portail expire, relance l'outil.
   réseau, pas d'accès au dossier personnel, seul /etc est modifiable).
 - **Allégé** : pas de Firefox (Chrome suffit), pas de visite guidée, pas de variantes d'icônes
   inutiles ; Smoky Home ne tourne que quand l'appli est ouverte.
+- **Rien d'inutile au démarrage** : Fedora refait le catalogue des logiciels et l'index des
+  pages de manuel à chaque allumage ; Smoky OS ne les refait qu'une fois par image (après une
+  mise à jour). Pour voir ce qui prend du temps sur ton PC : `smoky-diagnostic`.
+- **Mémoire pleine** : Fedora compresse en mémoire ce qui sert le moins (zram) au lieu de
+  l'écrire sur le disque. Smoky OS règle le noyau en conséquence (`vm.swappiness=180`,
+  `vm.page-cluster=0`, fichier `/usr/lib/udev/rules.d/71-smokyos-zram.rules`) : sans effet
+  tant qu'il reste de la mémoire, moins d'à-coups quand elle est pleine.

@@ -57,7 +57,7 @@ for img in /usr/lib/modules/*/initramfs.img; do
       t[cle] += $5; total += $5
     }
     END { for (c in t) printf "%8.1f  %s\n", t[c] / 1048576, c; printf "%8.1f  TOTAL\n", total / 1048576 }' | sort -rn | sed -n '1,45p' | sed 's/^/  /'
-  echo "  modules dracut : $(lsinitrd -m "$img" 2>/dev/null | grep -vE '^(Image|Version|dracut modules|=+|$)' | tr '\n' ' ')"
+  echo "  modules dracut : $(lsinitrd -m "$img" 2>/dev/null | sed -n '/^dracut modules:/,/^=====/p' | grep -vE '^(dracut modules:|=+)' | tr '\n' ' ')"
   break
 done
 for f in /usr/lib/dracut/dracut.conf.d/*.conf /etc/dracut.conf.d/*.conf; do [ -f "$f" ] && { echo "  $f :"; grep -vE '^\s*(#|$)' "$f" | sed 's/^/    /'; }; done

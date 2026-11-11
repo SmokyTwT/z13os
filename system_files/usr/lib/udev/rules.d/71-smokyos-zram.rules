@@ -1,0 +1,12 @@
+# Smoky OS — mémoire compressée (zram)
+# Quand la mémoire est pleine, Fedora range ce qui sert le moins dans une zone compressée EN
+# MÉMOIRE (zram), pas sur le disque. Les réglages d'origine du noyau datent de l'échange sur
+# disque dur : on les adapte, seulement quand cette zone existe.
+#  - vm.swappiness=180 : compresser de la mémoire coûte bien moins cher que relire des fichiers
+#    sur le disque ; le noyau garde donc plus longtemps les fichiers en cache (la documentation
+#    du noyau conseille une valeur au-dessus de 100 pour un échange en mémoire) ;
+#  - vm.page-cluster=0 : relire une page à la fois au lieu de huit (lire « en avance » n'a de
+#    sens que sur un disque).
+# Sans effet tant que la mémoire n'est pas pleine. Pour revenir aux valeurs du noyau :
+#   sudo sysctl vm.swappiness=60 vm.page-cluster=3
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="zram0", SYSCTL{vm.swappiness}="180", SYSCTL{vm.page-cluster}="0"

@@ -13,8 +13,9 @@ Type=oneshot
 ExecStartPre=-/usr/sbin/modprobe -q asus_armoury
 # -I : Python isolé (ne lit ni variables PYTHON*, ni dossier personnel)
 ExecStart=/usr/bin/python3 -I /usr/libexec/smokyos/smokygpu.py demarrage
-# cas normal : une fraction de seconde. Le délai ne sert que si le firmware ne répond pas.
-TimeoutStartSec=45
+# cas normal : une fraction de seconde. Le délai ne sert que si le firmware ne répond pas
+# (l'écran de connexion attend ce service : il ne doit jamais le retenir longtemps).
+TimeoutStartSec=30
 SyslogIdentifier=smoky-gpu
 
 [Install]

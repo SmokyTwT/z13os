@@ -29,7 +29,7 @@ mkdir -p "$T"
 # font ensuite sur ce fichier. Surtout pas « commande | grep -q » ici : grep s'arrête à la
 # première ligne trouvée, la commande d'avant reçoit « tuyau fermé », et avec pipefail une
 # recherche RÉUSSIE est alors comptée comme un échec (vécu : une image saine refusée).
-nettoyer() { tr -d '\r' < "$1" | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' > "$2"; }
+nettoyer() { tr -d '\r' < "$1" | sed -E 's/\x1b\[[0-9;:?]*[A-Za-z]//g' > "$2"; }
 
 # etat_du_journal JOURNAL → echec | gdm | graphique | attente
 etat_du_journal() {
@@ -49,7 +49,7 @@ sleep 20
 n=1; [ -e /var/lib/smoky-mesure ] && n=2
 echo "SMOKY-MESURE-DEBUT $n"
 echo "== durée"; systemd-analyze time 2>&1
-echo "== services les plus longs à démarrer"; systemd-analyze blame 2>&1 | grep -v '\.device$' | head -25
+echo "== services les plus longs à démarrer"; systemd-analyze blame 2>&1 | grep -v '\.device$' | sed -n '1,25p'
 echo "== chaîne critique (ce qui retarde la fin du démarrage)"; systemd-analyze critical-chain graphical.target 2>&1 | sed -n '4,22p'
 echo "== chaîne critique de l'écran de connexion"; systemd-analyze critical-chain gdm.service 2>&1 | sed -n '4,16p'
 echo "== services qui tournent"; systemctl list-units --type=service --state=running --no-legend --plain 2>&1 | awk '{print $1}' | sort | tr '\n' ' '; echo
@@ -57,6 +57,7 @@ echo "== services en échec"; systemctl list-units --failed --no-legend --plain 
 echo "== mémoire (Mo)"; free -m 2>&1
 echo "== processus les plus gros (Mo)"; ps -eo rss,comm --sort=-rss | awk 'NR>1 && NR<=26 {printf "%7.1f %s\n", $1/1024, $2}'
 echo "== nombre de processus"; ps -e --no-headers | wc -l
+echo "== mémoire compressée"; sysctl vm.swappiness vm.page-cluster 2>&1 | tr '\n' ' '; echo; swapon --show=NAME,SIZE --noheadings 2>&1 | tr '\n' ' '; echo
 echo "SMOKY-MESURE-FIN $n"
 if [ "$n" = 1 ]; then
   # un compte ordinaire, comme sur un vrai PC : au second démarrage, l'écran de connexion
@@ -211,12 +212,25 @@ for n in 1 2; do
 done
 PROPRE="$T/serie-1.txt"
 echecs=$(cat "$T"/serie-?.txt | grep -aE 'Failed to start |\.service: Failed with result' | sed -E 's/^\[[ 0-9.]+\] //' | sort -u | sed -n '1,15p')
-[ -n "$echecs" ] && { echo "  services en échec dans la machine virtuelle (souvent normal sans le matériel du Z13) :"; printf '%s\n' "$echecs" | sed 's/^/    /'; }
+if [ -n "$echecs" ]; then
+  echo "  services en échec dans la machine virtuelle (souvent normal sans le matériel du Z13) :"
+  printf '%s\n' "$echecs" | sed -E 's/\x1b\[[0-9;:]*m//g; s/^/    /'
+  # pour chacun, ce que le journal disait juste avant l'échec (hors assistant de première installation)
+  for unite in $(printf '%s\n' "$echecs" | grep -oE '[A-Za-z0-9@:_.-]+\.service' | grep -v 'gnome-initial-setup' | sort -u); do
+    echo "    -- $unite, juste avant l'échec :"
+    cat "$T"/serie-?.txt | grep -aF -B6 -e "$unite: Failed" -e "Failed to start $unite" | sed -n '1,9p' | cut -c1-220 | sed 's/^/       /'
+  done
+fi
 if [ -s "$T/mesures-2.txt" ]; then
   echo "--- Mesures du second démarrage (machine virtuelle : 2 cœurs, 4 Go) ---"
   sed 's/^/  /' "$T/mesures-2.txt"
 elif [ -z "${SMOKY_RELIRE:-}" ]; then
   echo "  note : mesures du second démarrage indisponibles"
+fi
+
+# réglages de la mémoire compressée : simple constat (non bloquant)
+if [ -s "$T/mesures-2.txt" ] && [ -z "${SMOKY_REFERENCE:-}" ] && ! grep -qa 'vm.swappiness = 180' "$T/mesures-2.txt"; then
+  echo "  attention : réglages de la mémoire compressée (zram) non appliqués dans la machine virtuelle"
 fi
 
 # smoky-gpu.service passe avant l'écran de connexion : ici (pas de carte ASUS), il doit avoir
