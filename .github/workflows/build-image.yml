@@ -27,6 +27,10 @@ on:
         type: choice
         options: [faire, passer]
         default: faire
+      unites:
+        description: "Branche de test : unités systemd à afficher en entier dans l'inventaire (ex. : a.service b.timer)"
+        type: string
+        default: ""
 
 concurrency:
   group: build-image-${{ github.ref }}
@@ -158,7 +162,7 @@ jobs:
             cp /tmp/demarrage.txt /tmp/demarrage-essai1.txt
             sudo bash tests/image/demarrer.sh localhost/smokyos:build /tmp/smoky-vm | tee /tmp/demarrage.txt
           fi
-          { echo "### Essai de démarrage"; echo '```'; grep -E 'RÉSULTAT|durée du démarrage' /tmp/demarrage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### Essai de démarrage"; echo '```'; grep -E "RÉSULTAT|durée du démarrage|durée de l'arrêt" /tmp/demarrage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Journal du démarrage (en cas d'échec)
         if: failure()
@@ -169,7 +173,12 @@ jobs:
       - name: Comparer avec l'image publiée (branche de test uniquement)
         if: github.ref != 'refs/heads/main'
         continue-on-error: true
+        env:
+          UNITES: ${{ inputs.unites }}
         run: |
+          # inventaire de la nouvelle image (journal du build) : services activés, ce qui pèse
+          sudo podman run --rm --network=none -e "SMOKY_INVENTAIRE_UNITES=$UNITES" -v "$PWD/tests:/tests:ro" \
+            localhost/smokyos:build bash /tests/image/inventaire.sh || true
           sudo podman pull --authfile "$AUTH" "$IMAGE:latest"
           A=$(sudo podman image mount "$IMAGE:latest")
           B=$(sudo podman image mount localhost/smokyos:build)
@@ -180,16 +189,12 @@ jobs:
           { echo "### Couches de l'image publiée (pour comparer)"; echo '```'
             sudo skopeo inspect --authfile "$AUTH" --raw "docker://$IMAGE:latest" | python3 tests/image/couches.py || true
             echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
-          # même essai de démarrage sur l'image publiée, pour comparer les durées
+          # même essai de démarrage sur l'image publiée, sur la même machine : durées, mémoire et
+          # services comparés côte à côte (tests/image/mesures.py)
           if [[ -f /tmp/demarrage.txt ]]; then
-            sudo bash tests/image/demarrer.sh "$IMAGE:latest" /tmp/smoky-vm-ref > /tmp/demarrage-ref.txt 2>&1 || true
-            {
-              echo "### Durée de démarrage (machine virtuelle)"
-              echo '```'
-              echo "image publiée : $(grep -E 'durée du démarrage|RÉSULTAT' /tmp/demarrage-ref.txt | sed -E 's/^ *durée du démarrage \(dans la machine virtuelle\) : //' | tr '\n' ' ')"
-              echo "nouvelle      : $(grep -E 'durée du démarrage|RÉSULTAT' /tmp/demarrage.txt | sed -E 's/^ *durée du démarrage \(dans la machine virtuelle\) : //' | tr '\n' ' ')"
-              echo '```'
-            } | tee -a "$GITHUB_STEP_SUMMARY"
+            sudo SMOKY_REFERENCE=1 bash tests/image/demarrer.sh "$IMAGE:latest" /tmp/smoky-vm-ref > /tmp/demarrage-ref.txt 2>&1 || true
+            grep -E "RÉSULTAT|durée du démarrage|durée de l'arrêt" /tmp/demarrage-ref.txt | sed 's/^/image publiée : /' || true
+            python3 tests/image/mesures.py /tmp/smoky-vm-ref /tmp/smoky-vm | tee -a "$GITHUB_STEP_SUMMARY" || true
           fi
 
       - name: Publier sur ghcr.io

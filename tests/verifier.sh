@@ -108,6 +108,9 @@ else
   echec "tests des serveurs"; printf '%s\n' "$sortie" | tail -40
 fi
 
+etape "Outils de mesure du démarrage"
+if python3 tests/image/mesures.py --verifier >/dev/null 2>&1; then ok "lecture des mesures"; else echec "tests/image/mesures.py --verifier"; fi
+
 etape "Carte graphique (Intel sur Smoky OS, Ultimate sur Windows)"
 if sortie=$(python3 tests/test_gpu.py 2>&1); then
   ok "$(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
