@@ -152,8 +152,14 @@ jobs:
       - name: Essai de démarrage dans une machine virtuelle
         if: inputs.demarrage != 'passer'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 ovmf
+          # jusqu'à 4 essais : un serveur de paquets injoignable un instant (vécu : panne de
+          # résolution de noms sur la machine de construction) ne doit pas bloquer une mise à jour
+          for essai in 1 2 3 4; do
+            if sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 ovmf; then break; fi
+            if [[ $essai == 4 ]]; then echo "::error::Impossible d'installer QEMU (machine virtuelle de test)"; exit 1; fi
+            echo "::warning::Installation de QEMU : essai $essai échoué, nouvel essai dans 30 s"
+            sleep 30
+          done
           set -o pipefail
           # Un second essai complet si le premier échoue : une machine de construction capricieuse
           # ne doit pas bloquer une mise à jour. Une image qui ne démarre pas échoue les deux fois.
