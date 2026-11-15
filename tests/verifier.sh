@@ -164,9 +164,18 @@ etape "Diagnostic (smoky-diagnostic)"
 faux=$(mktemp -d)
 cat > "$faux/journalctl" <<'EOF'
 #!/bin/sh
-echo "erreur dans /var/home/camille/Documents/secret.pdf et /home/camille/x"
-echo "envoi vers camille.martin@exemple.fr depuis 192.168.1.42 (aa:bb:cc:dd:ee:ff)"
-echo "GET https://moodle.exemple.fr/ws?wstoken=abcdef0123456789&x=1 password=hunter2"
+# « -o json » : une entrée par ligne, comme le vrai journalctl (dont une venue d'un conteneur)
+case " $* " in
+  *" -o json "*)
+    echo '{"MESSAGE": "erreur dans /var/home/camille/Documents/secret.pdf et /home/camille/x"}'
+    echo '{"MESSAGE": "envoi vers camille.martin@exemple.fr depuis 192.168.1.42 (aa:bb:cc:dd:ee:ff)"}'
+    echo '{"MESSAGE": "GET https://moodle.exemple.fr/ws?wstoken=abcdef0123456789&x=1 password=hunter2"}'
+    echo '{"MESSAGE": "s6-rc: info: message ordinaire du conteneur", "CONTAINER_NAME": "smoky-home"}' ;;
+  *)
+    echo "erreur dans /var/home/camille/Documents/secret.pdf et /home/camille/x"
+    echo "envoi vers camille.martin@exemple.fr depuis 192.168.1.42 (aa:bb:cc:dd:ee:ff)"
+    echo "GET https://moodle.exemple.fr/ws?wstoken=abcdef0123456789&x=1 password=hunter2" ;;
+esac
 EOF
 chmod +x "$faux/journalctl"
 rapport=$(HOME=/var/home/camille PATH="$faux:$PATH" bash system_files/usr/bin/smoky-diagnostic 2>&1)
@@ -174,6 +183,8 @@ rm -rf "$faux"
 if printf '%s\n' "$rapport" | grep -qE 'camille|martin@|secret\.pdf|192\.168|aa:bb:cc|abcdef0123456789|hunter2'; then
   echec "smoky-diagnostic laisse passer une information personnelle"
   printf '%s\n' "$rapport" | grep -nE 'camille|martin@|secret\.pdf|192\.168|aa:bb:cc|abcdef0123456789|hunter2' | head -5
+elif printf '%s\n' "$rapport" | grep -q 's6-rc: info'; then
+  echec "smoky-diagnostic : les messages ordinaires des conteneurs restent dans les erreurs"
 elif printf '%s\n' "$rapport" | grep -q 'wstoken=masqué' && printf '%s\n' "$rapport" | grep -q '^== Carte graphique'; then
   ok "rapport produit, informations personnelles masquées"
 else

@@ -569,7 +569,8 @@ class TestDansLeNavigateur(unittest.TestCase):
         # retour en arrière puis en avant (page remise par le navigateur) : elle fonctionne toujours
         nav.aller("about:blank")
         nav.attendre("location.href === 'about:blank'")
-        nav.evaluer("history.back()")
+        # lancé juste après la réponse : sinon le changement de page coupe la réponse elle-même
+        nav.evaluer("setTimeout(() => history.back(), 0), true")
         nav.attendre("document.querySelectorAll('.taches li').length > 0", quoi="page reprise après retour en arrière")
         self.assertEqual(self.srv.json("POST", "/api/taches", {"titre": "ajoutée pendant ce temps"})[0], 201)
         nav.evaluer("location.hash = '#/systeme/energie'")
