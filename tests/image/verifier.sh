@@ -130,7 +130,7 @@ nb=$(ls /usr/share/icons/Smoky-icons/apps/256/*.png 2>/dev/null | wc -l)
 [ "$nb" -ge 10 ] && ok "icônes Smoky générées ($nb)" || echec "icônes Smoky générées : $nb (10 attendues au moins)"
 verifie "réglages GNOME par défaut de Smoky OS présents" grep -q "^icon-theme='Smoky-icons'" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override
 verifie "réglages GNOME compilés après ceux de Smoky OS" bash -c '[ -s /usr/share/glib-2.0/schemas/gschemas.compiled ] && ! [ /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override -nt /usr/share/glib-2.0/schemas/gschemas.compiled ]'
-verifie "dock : applis Smoky dans les favoris par défaut" grep -q "favorite-apps=\['smoky-notes.desktop'" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override
+verifie "dock : applis Smoky dans les favoris par défaut (Smoky en tête)" grep -q "favorite-apps=\['smoky.desktop', 'smoky-notes.desktop'" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override
 avert=$(glib-compile-schemas --strict --dry-run /usr/share/glib-2.0/schemas 2>&1 | grep -i 'z13os' || true)
 [ -z "$avert" ] && ok "tous les réglages par défaut de Smoky OS existent encore dans GNOME" || { attention "réglages par défaut ignorés par GNOME :"; printf '%s\n' "$avert" | sed 's/^/          /'; }
 
