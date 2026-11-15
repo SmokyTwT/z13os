@@ -89,7 +89,7 @@ class HomeToggle extends QuickMenuToggle {
             this._section.removeAll();
             if (err === 'token') {
                 this.subtitle = 'À configurer';
-                this._info('Configurer dans Smoky Center…', () => this._spawn(['/usr/bin/smoky-center']));
+                this._info('Configurer dans Smoky…', () => this._spawn(['/usr/bin/smoky', '--aller', '/systeme/maison']));
                 return;
             }
             if (!states) {

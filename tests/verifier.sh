@@ -108,6 +108,22 @@ else
   echec "tests des serveurs"; printf '%s\n' "$sortie" | tail -40
 fi
 
+etape "Appli Smoky (serveur, lanceur, page)"
+if sortie=$(python3 tests/test_smoky.py 2>&1); then
+  ok "$(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
+else
+  echec "tests de l'appli Smoky"; printf '%s\n' "$sortie" | tail -40
+fi
+if sortie=$(python3 tests/test_smoky_page.py 2>&1); then
+  if printf '%s\n' "$sortie" | grep -q 'skipped=16\|OK (skipped'; then
+    note "page dans un navigateur : pas de Chrome ici, non vérifiée"
+  else
+    ok "page dans un vrai navigateur : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran //')"
+  fi
+else
+  echec "page de l'appli Smoky dans le navigateur"; printf '%s\n' "$sortie" | grep -v 'ERROR:' | tail -40
+fi
+
 etape "Travaux de démarrage faits une fois par image"
 # faux système : ligne de commande du noyau, lien vers le déploiement, mémoire dans /var
 u=system_files/usr/libexec/smokyos/une-fois-par-image.sh

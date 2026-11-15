@@ -1,0 +1,6 @@
+Comfortaa (Johan Aakerlund, 2011) — licence SIL Open Font License 1.1 (comfortaa-LICENCE.txt).
+Source : https://github.com/google/fonts/tree/main/ofl/comfortaa  (Comfortaa[wght].ttf,
+sha256 0fc3f45dc48b614db9c39181502544b37217ecbf8bee2fb35886992bc96c5bd3)
+Réduite aux caractères du français (pyftsubset, format woff2) : comfortaa.woff2. L'axe de
+graisse (300 à 700) est conservé. Sert aux grands titres de l'appli Smoky ; le reste du texte
+utilise la police du système.

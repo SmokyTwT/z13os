@@ -13,10 +13,16 @@ CHROME_FLAGS="--ozone-platform-hint=auto --force-dark-mode --start-maximized --e
 
 # --- Droits ------------------------------------------------------------------
 # Droits d'exécution : remis ici au cas où ils se perdraient en route (envoi par le site GitHub…)
-chmod 755 /usr/bin/smoky-* /usr/bin/z13-notes-setup \
+chmod 755 /usr/bin/smoky /usr/bin/smoky-* /usr/bin/z13-notes-setup /usr/lib/smoky/lancer.py \
   /usr/libexec/z13os/*.sh /usr/libexec/smokyos/*.sh /usr/libexec/smokyos/*.py /usr/libexec/smokyos/smoky-app \
   /usr/libexec/smokymail/*.py /usr/libexec/smokymail/*.sh \
   /usr/libexec/smokyagenda/server.py /usr/libexec/smokynotes/server.py
+
+# --- Appli Smoky : modules Python précompilés --------------------------------------
+# /usr est en lecture seule sur le PC : sans cela, Python recompilerait l'appli à chaque
+# ouverture. « checked-hash » : la validité se vérifie au contenu, pas à la date des
+# fichiers (les dates sont remises à zéro quand l'image est installée).
+python3 -m compileall -q --invalidation-mode checked-hash /usr/lib/smoky/smoky
 
 # --- Adresse Moodle (variable de dépôt GitHub MOODLE_URL) --------------------------
 mkdir -p /etc/smokyos
@@ -75,12 +81,12 @@ make_webapp drive   "Google Drive" "https://drive.google.com"         google-dri
 make_webapp spotify "Spotify"      "https://open.spotify.com"         smokyos-spotify "AudioVideo;Audio;Music;Player;"
 make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;" solo
-FAVS="'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'z13-spotify.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'smoky-agenda.desktop'"
+FAVS="'smoky.desktop', 'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'z13-spotify.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'smoky-agenda.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'smoky-center.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
+FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
 
 # Index des applis par type de lien ou de fichier. Les paquets le recalculent à leur
 # installation, mais ils sont installés dans le socle, avant que les raccourcis Smoky

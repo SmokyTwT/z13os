@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Smoky
+Comment=Aujourd'hui, notes, agenda, mail, cours, maison et réglages du PC
+Exec=/usr/bin/smoky
+Icon=smoky-appli
+Terminal=false
+Categories=Utility;
+StartupWMClass=chrome-localhost__smoky-Default
+Keywords=smoky;aujourd'hui;tâches;réglages;système;batterie;écran;mise à jour;vpn;moodle;

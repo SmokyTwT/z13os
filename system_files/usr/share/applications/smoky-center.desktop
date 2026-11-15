@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Smoky Center
+Name=Smoky Center (ancien)
 Comment=Réglages Smoky OS : énergie, carte graphique, tablette, Moodle, concentration, maison, VPN
 Exec=/usr/bin/smoky-center
 Icon=smoky-center

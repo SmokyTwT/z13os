@@ -353,7 +353,7 @@ def note():
         cle = f"basculement:{etat['dernier_basculement']}"
         texte = "Windows était en mode Ultimate : Smoky OS a redémarré une fois pour repasser sur la puce Intel."
         if veut_ultimate(conf, etat):
-            texte += " Le mode Ultimate sera remis quand tu passeras par « Redémarrer sur Windows » (Smoky Center)."
+            texte += " Le mode Ultimate sera remis quand tu passeras par « Redémarrer sur Windows » (Smoky, page Système)."
     else:
         return 0
     if cle == vu:

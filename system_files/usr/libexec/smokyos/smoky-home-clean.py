@@ -41,7 +41,7 @@ def main():
     if DONE.exists() and DONE.read_text().strip() == date.today().isoformat():
         return 0                                       # déjà fait aujourd'hui
     if not TOKEN.exists():
-        notify("Ménage pendant les cours", "Relie d'abord Smoky Home dans Smoky Center → Maison.")
+        notify("Ménage pendant les cours", "Relie d'abord Smoky Home : appli Smoky, page Système, section Maison.")
         return 1
     token = TOKEN.read_text().strip()
     if not up():                                       # moteur arrêté : on le démarre (3 min au plus)

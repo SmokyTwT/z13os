@@ -205,6 +205,29 @@ verifie "une-fois-par-image.sh : dans le doute, « à faire »" bash -c '/usr/li
 titre "Diagnostic"
 verifie "smoky-diagnostic produit son rapport" bash -c 'r=$(/usr/bin/smoky-diagnostic 2>&1); for t in "== Système" "== Carte graphique" "== Démarrage" "== Mémoire" "== Énergie" "== Disque"; do printf "%s\n" "$r" | grep -qF "$t" || exit 1; done'
 
+titre "Appli Smoky (nouvelle appli unique)"
+verifie "lanceur exécutable" test -x /usr/bin/smoky
+verifie "serveur présent" test -f /usr/lib/smoky/lancer.py
+verifie "page présente" test -f /usr/share/smoky/index.html
+verifie "raccourci dans la grille des applis" grep -q '^Exec=/usr/bin/smoky$' /usr/share/applications/smoky.desktop
+verifie "icône de l'appli" test -f /usr/share/icons/hicolor/scalable/apps/smoky-appli.svg
+verifie "Smoky dans le dock par défaut" bash -c "grep -rqs \"'smoky.desktop'\" /usr/share/glib-2.0/schemas/"
+verifie "modules Python précompilés (ouverture plus rapide)" bash -c 'n=$(ls /usr/lib/smoky/smoky/*.py | wc -l); p=$(ls /usr/lib/smoky/smoky/__pycache__/*.pyc 2>/dev/null | wc -l); [ "$p" -ge "$n" ]'
+verifie "le serveur démarre avec le Python de l'image" python3 -I /usr/lib/smoky/lancer.py --help
+if SMOKY_RACINE=/ HOME=/tmp/verif-home python3 /tests/test_smoky.py >/tmp/verif-smoky.log 2>&1; then
+  ok "tests de l'appli : $(tail -3 /tmp/verif-smoky.log | grep -oE 'Ran [0-9]+ tests' || echo réussis)"
+else
+  echec "tests de l'appli Smoky"
+  tail -40 /tmp/verif-smoky.log | sed 's/^/          /'
+fi
+# la page, dans le Chrome de l'image (sans fenêtre)
+if SMOKY_RACINE=/ HOME=/tmp/verif-home SMOKY_CHROME=/usr/lib/google/chrome/chrome python3 /tests/test_smoky_page.py >/tmp/verif-smoky-page.log 2>&1; then
+  ok "page de l'appli dans le Chrome de l'image : $(tail -3 /tmp/verif-smoky-page.log | grep -oE 'Ran [0-9]+ tests' || echo réussie)"
+else
+  echec "page de l'appli Smoky dans le Chrome de l'image"
+  grep -v 'ERROR:' /tmp/verif-smoky-page.log | tail -40 | sed 's/^/          /'
+fi
+
 titre "Serveurs des applis (lancés pour de vrai dans l'image)"
 if SMOKY_RACINE=/ HOME=/tmp/verif-home python3 /tests/test_serveurs.py >/tmp/verif-serveurs.log 2>&1; then
   ok "tests des serveurs : $(tail -3 /tmp/verif-serveurs.log | grep -oE 'Ran [0-9]+ tests' || echo réussis)"

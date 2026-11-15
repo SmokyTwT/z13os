@@ -52,9 +52,9 @@ def check():
     st = status()
     if not st["late"] or (STAMP.exists() and STAMP.read_text().strip() == date.today().isoformat()):
         return 0
-    body = ("Aucune sauvegarde n'a encore été faite : ouvre Smoky Center → Sauvegardes."
+    body = ("Aucune sauvegarde n'a encore été faite : ouvre Smoky, page Système, section Stockage et sauvegardes."
             if st["days"] is None else
-            f"La dernière sauvegarde date de {st['days']} jours : branche-toi à Internet et lance-la depuis Smoky Center.")
+            f"La dernière sauvegarde date de {st['days']} jours : branche-toi à Internet et lance-la depuis Smoky (page Système).")
     subprocess.run(["notify-send", "-a", "Smoky OS", "-i", "deja-dup", "Sauvegarde à faire", body], check=False)
     STAMP.parent.mkdir(parents=True, exist_ok=True)
     STAMP.write_text(date.today().isoformat())

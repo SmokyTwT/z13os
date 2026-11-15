@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Smoky : l'appli unique de Smoky OS (aujourd'hui, notes, agenda, mail, cours, maison, système).
+#   smoky [--aller /systeme/maison] [options de Chrome…]
+# Démarre le serveur local si besoin, ouvre la fenêtre, puis arrête le serveur quand la dernière
+# fenêtre se ferme (rien ne tourne pour rien : batterie). Filet de sécurité : le serveur s'arrête
+# aussi de lui-même quand plus aucune fenêtre de l'appli n'existe depuis 90 s.
+#
+# Ne pas changer l'adresse ni le dossier de profil à la légère :
+#  - Chrome nomme la fenêtre d'après l'hôte et le chemin (« chrome-localhost__smoky-Default ») ;
+#    c'est le StartupWMClass de smoky.desktop, sinon l'icône du dock se dédouble ;
+#  - le dossier de profil garde les autorisations de l'appli (micro pour les notes…).
+PORT="${SMOKY_PORT:-47820}"                                       # ces deux variables ne servent
+NAVIGATEUR="${SMOKY_NAVIGATEUR:-/usr/bin/google-chrome-stable}"   # qu'aux essais (tests/test_smoky.py)
+SERVEUR="$(dirname "$(readlink -f "$0")")/../lib/smoky/lancer.py"
+ACCES="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/smoky/serveur.json"
+PROFIL="$HOME/.config/smoky-chrome"
+
+# --aller CHEMIN : page à ouvrir (lettres, chiffres, « / » et « - » seulement ; le reste est ignoré)
+ALLER=
+if [ "${1:-}" = "--aller" ]; then
+  [[ "${2:-}" =~ ^/[a-z0-9/-]{1,60}$ ]] && ALLER="&a=$2"
+  shift
+  [ $# -gt 0 ] && shift
+fi
+
+ouvert() { (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; }
+jeton() { sed -n 's/.*"jeton": *"\([A-Za-z0-9_-]*\)".*/\1/p' "$ACCES" 2>/dev/null; }
+
+SRV=
+if ! ouvert; then
+  rm -f "$ACCES"     # le serveur lancé ici écrit un nouveau code d'accès
+  # Les erreurs éventuelles du serveur vont dans le journal : journalctl -t smoky
+  JOURNAL=()
+  [ -S /run/systemd/journal/stdout ] && command -v systemd-cat >/dev/null \
+    && JOURNAL=(systemd-cat -t smoky --stderr-priority=warning)
+  nohup "${JOURNAL[@]}" /usr/bin/python3 -I "$SERVEUR" --port "$PORT" --arret-auto 90 --profil "$PROFIL" \
+    >/dev/null 2>&1 &
+  SRV=$!
+  for _ in $(seq 80); do
+    [ -s "$ACCES" ] && ouvert && break
+    kill -0 "$SRV" 2>/dev/null || break     # le serveur n'a pas tenu : inutile d'attendre
+    sleep 0.1
+  done
+fi
+JETON=$(jeton)
+if [ -z "$JETON" ]; then
+  notify-send -a Smoky -i dialog-error "Smoky ne démarre pas" \
+    "Dans un terminal : journalctl -t smoky -n 20, ou smoky-diagnostic." 2>/dev/null
+  [ -n "$SRV" ] && kill "$SRV" 2>/dev/null
+  exit 1
+fi
+
+"$NAVIGATEUR" --ozone-platform-hint=auto --force-dark-mode --enable-wayland-ime --start-maximized \
+  --app="http://localhost:$PORT/smoky#k=$JETON$ALLER" --class=smoky \
+  --no-first-run --no-default-browser-check --user-data-dir="$PROFIL" "$@"
+
+# Chrome reste dans la commande ci-dessus tant que l'appli est ouverte. Le serveur lancé ici
+# s'arrête quand plus aucune fenêtre de l'appli n'existe.
+if [ -n "$SRV" ] && ! pgrep -f -- "--user-data-dir=$PROFIL" >/dev/null; then
+  kill "$SRV" 2>/dev/null
+fi

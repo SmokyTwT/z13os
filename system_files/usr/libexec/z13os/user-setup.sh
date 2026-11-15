@@ -49,6 +49,20 @@ if grep -qsE '"(dernier_basculement|probleme)"' /var/lib/smokyos/gpu.json; then
   fi
 fi
 
+# Appli Smoky (une seule appli pour tout) : placée une fois en tête du dock, à la place de
+# Smoky Center dont elle reprend les réglages. Si tu l'enlèves ensuite du dock, elle n'y revient pas.
+MARK="$HOME/.config/smoky/setup-appli-smoky"
+if [[ ! -e "$MARK" ]] && command -v gsettings >/dev/null; then
+  cur=$(dconf read /org/gnome/shell/favorite-apps 2>/dev/null)
+  # liste déjà personnalisée (sinon la valeur par défaut de Smoky OS l'inclut déjà)
+  if [[ -n "$cur" && "$cur" != *"'smoky.desktop'"* ]]; then
+    cur="${cur//, \'smoky-center.desktop\'/}"; cur="${cur//\'smoky-center.desktop\', /}"; cur="${cur//\'smoky-center.desktop\'/}"
+    if [[ "$cur" == "@as []" || "$cur" == "[]" ]]; then new="['smoky.desktop']"; else new="['smoky.desktop', ${cur#[}"; fi
+    gsettings set org.gnome.shell favorite-apps "$new"
+  fi
+  mkdir -p "$(dirname "$MARK")" && touch "$MARK"
+fi
+
 # Spotify devient une appli web Smoky : son icône remplace l'ancienne dans le dock (liste personnalisée)
 favs=$(dconf read /org/gnome/shell/favorite-apps 2>/dev/null)
 if [[ "$favs" == *com.spotify.Client.desktop* ]]; then
