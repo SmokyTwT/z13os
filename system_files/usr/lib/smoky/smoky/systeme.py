@@ -254,7 +254,9 @@ class Systeme:
                     temperature = f"{int(t) // 1000} °C"
                     break
         nom = re.search(r'^PRETTY_NAME="?([^"\n]*)', lire("/etc/os-release"), re.M)
-        return {"systeme": nom.group(1) if nom else "Smoky OS", "noyau": os.uname().release.split("-")[0],
+        version = lire("/usr/share/smokyos/version")              # « 40255b3 du 15/11/2026 »
+        systeme = (nom.group(1) if nom else "Smoky OS") + (f", version {version}" if version and version != "locale" else "")
+        return {"systeme": systeme, "noyau": os.uname().release.split("-")[0],
                 "memoire": taille(int(memoire.group(1)) * 1024) if memoire else "?",
                 "allume": f"{int(allume // 3600)} h {int(allume % 3600 // 60):02d}", "temperature": temperature}
 

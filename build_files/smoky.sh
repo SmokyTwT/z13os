@@ -24,6 +24,10 @@ chmod 755 /usr/bin/smoky /usr/bin/smoky-* /usr/bin/z13-notes-setup /usr/lib/smok
 # fichiers (les dates sont remises à zéro quand l'image est installée).
 python3 -m compileall -q --invalidation-mode checked-hash /usr/lib/smoky/smoky
 
+# --- Version Smoky : celle de Fedora (44.AAAAMMJJ) ne change qu'avec le socle -------------
+mkdir -p /usr/share/smokyos
+printf '%s\n' "${SMOKY_VERSION:-locale}" > /usr/share/smokyos/version
+
 # --- Adresse Moodle (variable de dépôt GitHub MOODLE_URL) --------------------------
 mkdir -p /etc/smokyos
 echo "${MOODLE_URL:-https://moodle.uphf.fr/}" > /etc/smokyos/moodle-url
@@ -174,6 +178,10 @@ ambient-enabled=true
 
 [org.gnome.desktop.session]
 idle-delay=uint32 300
+
+[org.gnome.desktop.search-providers]
+# GNOME Logiciels resterait ensuite en mémoire (250 Mo) ; il s'ouvre toujours normalement
+disabled=['org.gnome.Software.desktop']
 
 [org.gnome.desktop.notifications]
 show-in-lock-screen=false

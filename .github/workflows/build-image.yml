@@ -132,7 +132,7 @@ jobs:
         env:
           MOODLE_URL: ${{ vars.MOODLE_URL }}
         run: |
-          ARGS=(--build-arg "SOCLE=localhost/smoky-socle:build")
+          ARGS=(--build-arg "SOCLE=localhost/smoky-socle:build" --build-arg "SMOKY_VERSION=$(git rev-parse --short=7 HEAD) du $(date -u +%d/%m/%Y)")
           [[ -n "$MOODLE_URL" ]] && ARGS+=(--build-arg "MOODLE_URL=$MOODLE_URL")
           sudo podman build --layers=true --pull=never "${ARGS[@]}" \
             --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \

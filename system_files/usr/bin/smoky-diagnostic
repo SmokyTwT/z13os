@@ -28,18 +28,34 @@ try:
 except ValueError:
     print("image : état illisible")' 2>/dev/null || echo "image : rpm-ostree ne répond pas"
   fi
+  echo "version Smoky : $(lis /usr/share/smokyos/version || echo inconnue)   (le numéro « 44.AAAAMMJJ » ci-dessus est celui de Fedora)"
   a mokutil && echo "démarrage sécurisé : $(mokutil --sb-state 2>&1 | head -n 1)"
 
   titre "Carte graphique"
   if [ -f /usr/libexec/smokyos/smokygpu.py ]; then
     python3 -I /usr/libexec/smokyos/smokygpu.py etat 2>&1 | tr -d '\n' | sed 's/  */ /g'; echo
   fi
-  for f in /sys/class/firmware-attributes/*/attributes/gpu_mux_mode/current_value /sys/devices/platform/asus-nb-wmi/gpu_mux_mode; do
-    [ -r "$f" ] && echo "aiguillage (1 = puce Intel, 0 = NVIDIA/Ultimate) : $(lis "$f")   [$f]"
+  # l'ancienne interface (asus-nb-wmi) n'est lue qu'en l'absence de la nouvelle : la lire
+  # quand même fait écrire un avertissement par le noyau
+  for nom in gpu_mux_mode dgpu_disable; do
+    f=$(ls /sys/class/firmware-attributes/*/attributes/$nom/current_value 2>/dev/null | head -n 1)
+    [ -r "$f" ] || f=/sys/devices/platform/asus-nb-wmi/$nom
+    [ -r "$f" ] || continue
+    case $nom in
+      gpu_mux_mode) echo "aiguillage (1 = puce Intel, 0 = NVIDIA/Ultimate) : $(lis "$f")   [$f]" ;;
+      dgpu_disable) echo "NVIDIA coupée par le firmware (1 = oui) : $(lis "$f")" ;;
+    esac
   done
-  for f in /sys/class/firmware-attributes/*/attributes/dgpu_disable/current_value /sys/devices/platform/asus-nb-wmi/dgpu_disable; do
-    [ -r "$f" ] && echo "NVIDIA coupée par le firmware (1 = oui) : $(lis "$f")"
-  done
+  # carte NVIDIA : présente sur le bus PCI, et endormie ou non (une carte éveillée vide la batterie)
+  nv=""
+  for p in /sys/bus/pci/devices/*; do [ "$(lis "$p/vendor")" = 0x10de ] && case "$(lis "$p/class")" in 0x03*) nv=$p ;; esac; done
+  if [ -n "$nv" ]; then
+    drv=$(readlink -f "$nv/driver" 2>/dev/null); drv=${drv##*/}
+    echo "carte NVIDIA : présente (${nv##*/}), pilote ${drv:-aucun}, état $(lis "$nv/power/runtime_status") / $(lis "$nv/power_state")"
+  else
+    echo "carte NVIDIA : retirée du bus (éteinte)"
+  fi
+  a supergfxctl && echo "alimentation vue par supergfxd : $(supergfxctl -S 2>&1 | head -n 1)"
   ls /sys/class/firmware-attributes/ >/dev/null 2>&1 && echo "réglages du firmware visibles : $(ls /sys/class/firmware-attributes/ 2>/dev/null | tr '\n' ' ')"
   a supergfxctl && echo "mode choisi dans Smoky OS : $(supergfxctl -g 2>&1 | head -n 1)"
   for c in /sys/class/drm/card[0-9]; do
@@ -80,7 +96,9 @@ except ValueError:
   echo "limite de charge : $(lis /sys/class/power_supply/BAT0/charge_control_end_threshold) %"
 
   titre "Disque"
-  df -h --output=target,size,used,avail,pcent / /var /boot /boot/efi 2>/dev/null | awk '!vu[$0]++'
+  # « / » est l'image du système, en lecture seule (composefs) : toujours pleine, c'est normal
+  df -h --output=target,size,used,avail,pcent / /var /boot /boot/efi 2>/dev/null | awk '!vu[$0]++' \
+    | awk '$1 == "/" && $5 == "100%" {print $0 "   (image du système en lecture seule : normal)"; next} {print}'
   a journalctl && journalctl --disk-usage 2>/dev/null | head -n 1
 
   titre "Minuteries (prochaines)"
@@ -92,7 +110,18 @@ except ValueError:
   journalctl -k -b --no-pager -o cat 2>/dev/null | grep -iE 'firmware' | grep -viE 'efi|acpi|dmi:|secureboot' | sed 's/^/  /' | sort -u | head -n 25
 
   titre "Erreurs du journal depuis le démarrage (15 dernières)"
-  journalctl -b -p 3 --no-pager -o cat 2>/dev/null | sort | uniq -c | sort -rn | head -n 15
+  # sans ce que les conteneurs (Smoky Home) écrivent : leurs messages ordinaires sortent en « erreur »
+  journalctl -b -p 3 --no-pager -o json 2>/dev/null | python3 -c '
+import json, sys
+for ligne in sys.stdin:
+    try:
+        e = json.loads(ligne)
+    except ValueError:
+        continue
+    m = e.get("MESSAGE")
+    if "CONTAINER_NAME" in e or not isinstance(m, str):
+        continue
+    print(m)' 2>/dev/null | sort | uniq -c | sort -rn | head -n 15
 }
 
 # masque ce qui est personnel avant d'afficher

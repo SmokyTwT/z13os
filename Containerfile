@@ -12,9 +12,11 @@ FROM ${SOCLE}
 # Adresse Moodle (variable de dépôt GitHub MOODLE_URL) et nom affiché de la distrib
 ARG MOODLE_URL="https://moodle.uphf.fr/"
 ARG DISTRO_NAME="Smoky OS"
+# Version Smoky (révision du dépôt et date), donnée par GitHub Actions ; « locale » sinon
+ARG SMOKY_VERSION="locale"
 
 COPY system_files/ /
 COPY build_files/smoky.sh /tmp/smoky.sh
 
-RUN MOODLE_URL="${MOODLE_URL}" DISTRO_NAME="${DISTRO_NAME}" bash /tmp/smoky.sh && \
+RUN MOODLE_URL="${MOODLE_URL}" DISTRO_NAME="${DISTRO_NAME}" SMOKY_VERSION="${SMOKY_VERSION}" bash /tmp/smoky.sh && \
     ostree container commit
