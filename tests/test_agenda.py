@@ -507,6 +507,32 @@ class TestAgenda(AvecServeur):
         self.assertIsNone(fenetre.attendre("change", delai=0.5), "une demande refusée n'annonce rien")
 
 
+class TestMiseANiveau(unittest.TestCase):
+    def test_memoire_de_l_etape_1(self):
+        """La mémoire laissée par la version d'avant (étape 1 : réglages et tâches) passe à l'agenda sans rien perdre."""
+        import sqlite3
+        from smoky.base import MIGRATIONS
+
+        def preparer(srv):
+            (srv.base / "donnees").mkdir()
+            db = sqlite3.connect(srv.base / "donnees/smoky.db")
+            db.executescript(f"BEGIN;\n{MIGRATIONS[0]}\nPRAGMA user_version=1;\nCOMMIT;")
+            db.execute("INSERT INTO taches (titre, faite, echeance, creee) VALUES ('Réviser MNA', 0, '2026-11-20', 1)")
+            db.execute("INSERT INTO reglages (cle, valeur) VALUES ('autre', '{\"garde\": true}')")
+            db.commit()
+            db.close()
+        srv = Serveur(env={"SMOKY_MAINTENANT": MAINTENANT}, preparer=preparer)
+        self.addCleanup(srv.stop)
+        self.assertEqual([(t["titre"], t["echeance"], t["minutes"]) for t in srv.json("GET", "/api/aujourdhui")[1]["taches"]],
+                         [("Réviser MNA", "2026-11-20", None)])
+        self.assertEqual(srv.json("POST", "/api/agenda", {"action": "importer", "contenu": semaine_type()})[0], 200)
+        self.assertEqual(len([e for e in srv.json("GET", "/api/agenda")[1]["elements"] if e["genre"] == "cours"]), 10)
+        lecture = sqlite3.connect(srv.base / "donnees/smoky.db")
+        self.addCleanup(lecture.close)
+        self.assertEqual(lecture.execute("PRAGMA user_version").fetchone()[0], len(MIGRATIONS))
+        self.assertEqual(lecture.execute("SELECT valeur FROM reglages WHERE cle = 'autre'").fetchone()[0], '{"garde": true}')
+
+
 class TestEmploiDuTempsSources(AvecServeur):
     def test_lien_ical(self):
         site = SiteEdt()
