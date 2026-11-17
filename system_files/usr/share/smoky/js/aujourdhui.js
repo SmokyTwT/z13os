@@ -24,9 +24,16 @@ export async function monter(conteneur, contexte) {
   formulaire.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!titre.value.trim()) { titre.focus(); return; }
-    const ok = await tenter(async () => { taches.push(await api.envoyer("/api/taches", { titre: titre.value, echeance: date.value || null })); changements++; });
+    const ok = await tenter(async () => { garder(await api.envoyer("/api/taches", { titre: titre.value, echeance: date.value || null })); changements++; });
     if (ok) { titre.value = ""; date.value = ""; trier(); dessinerTaches(); titre.focus(); }
   });
+
+  // Range une tâche renvoyée par le serveur. Une relecture (prévenue par le serveur) a pu
+  // l'apporter avant la réponse : on remplace alors celle qui porte le même numéro, sans doublon.
+  function garder(recue) {
+    const i = taches.findIndex((x) => x.id === recue.id);
+    if (i >= 0) taches[i] = recue; else taches.push(recue);
+  }
 
   function trier() {
     const cle = (t) => [t.faite ? 1 : 0, t.echeance ? 0 : 1, t.echeance || "", t.id];
@@ -38,7 +45,7 @@ export async function monter(conteneur, contexte) {
     return h("li", { class: t.faite ? "faite" : "" },
       h("button", { type: "button", class: "coche", role: "checkbox", "aria-checked": String(t.faite), "aria-label": t.faite ? `Remettre « ${t.titre} » à faire` : `Marquer « ${t.titre} » comme fait`,
         surclick: async () => {
-          const ok = await tenter(async () => { Object.assign(t, await api.envoyer(`/api/taches/${t.id}`, { faite: !t.faite })); changements++; });
+          const ok = await tenter(async () => { garder(await api.envoyer(`/api/taches/${t.id}`, { faite: !t.faite })); changements++; });
           if (ok) { trier(); dessinerTaches(); }
         } }, icone("coche")),
       h("span", { class: "titre", texte: t.titre }),
@@ -46,7 +53,7 @@ export async function monter(conteneur, contexte) {
       h("button", { type: "button", class: "oter", "aria-label": `Supprimer « ${t.titre} »`, title: "Supprimer",
         surclick: async () => {
           const ok = await tenter(async () => { await api.supprimer(`/api/taches/${t.id}`); changements++; }, { succes: "Tâche supprimée." });
-          if (ok) { taches = taches.filter((x) => x !== t); dessinerTaches(); }
+          if (ok) { taches = taches.filter((x) => x.id !== t.id); dessinerTaches(); }
         } }, icone("croix")));
   }
 

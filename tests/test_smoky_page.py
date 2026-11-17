@@ -358,7 +358,8 @@ class TestDansLeNavigateur(unittest.TestCase):
         nav.attendre("[...document.querySelectorAll('.taches li .titre')].some((t) => t.textContent === \"Réviser l'électromagnétisme\")")
         self.assertEqual([(t["titre"], t["echeance"], t["faite"]) for t in self.taches()], [("Réviser l'électromagnétisme", "2031-05-20", False)],
                          "la tâche est bien enregistrée par le serveur")
-        self.assertEqual(nav.evaluer("document.querySelector('form.ajout input[type=text]').value"), "", "le champ est vidé pour la suivante")
+        # la tâche peut s'afficher (relecture prévenue par le serveur) juste avant la réponse à l'ajout
+        nav.attendre("document.querySelector('form.ajout input[type=text]').value === ''", quoi="le champ est vidé pour la suivante")
         self.assertEqual(nav.evaluer("document.activeElement === document.querySelector('form.ajout input[type=text]')"), True)
         self.assertEqual(nav.evaluer("document.querySelector('.taches li .quand').textContent"), "20 mai 2031", "l'année est écrite quand ce n'est pas celle en cours")
         # deuxième tâche, par le bouton ; en retard
@@ -387,6 +388,34 @@ class TestDansLeNavigateur(unittest.TestCase):
         nav.cliquer("Supprimer « Rendre le TP de BDR »")
         nav.attendre("document.querySelectorAll('.taches li .titre').length === 1")
         self.assertEqual([t["titre"] for t in self.taches()], ["Réviser l'électromagnétisme"])
+        self.sans_souci()
+
+    def test_une_tache_ne_s_affiche_qu_une_fois(self):
+        """Machine lente : la relecture prévenue par le serveur arrive avant la réponse à l'ajout
+        (ordre vu sur le build du 16/11). La tâche ne doit pas apparaître deux fois."""
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelector('form.ajout input[type=text]') !== null")
+        time.sleep(0.5)                                  # le canal des annonces du serveur s'ouvre
+        # les réponses aux ajouts, cochages et suppressions arrivent 0,8 s en retard ; les annonces du serveur, tout de suite
+        nav.evaluer("""(() => { const vrai = window.fetch.bind(window);
+            window.fetch = async (adresse, options = {}) => {
+              const r = await vrai(adresse, options);
+              if (options.method && options.method !== "GET") await new Promise((s) => setTimeout(s, 800));
+              return r; }; })()""")
+        compte = "[...document.querySelectorAll('.taches li .titre')].filter((t) => t.textContent === 'Une seule fois').length"
+        nav.ecrire("form.ajout input[type=text]", "Une seule fois")
+        nav.cliquer("Ajouter")
+        nav.attendre(f"{compte} === 1 && document.querySelector('form.ajout input[type=text]').value === 'Une seule fois'",
+                     quoi="la relecture affiche la tâche avant la réponse à l'ajout (la situation à risque se produit bien)")
+        nav.attendre("document.querySelector('form.ajout input[type=text]').value === ''")
+        time.sleep(1)                                    # laisse passer d'éventuelles relectures en retard
+        self.assertEqual(nav.evaluer(compte), 1, "la tâche s'affiche une seule fois")
+        nav.cliquer("Supprimer « Une seule fois »")
+        nav.attendre(f"{compte} === 0", quoi="la tâche supprimée disparaît")
+        time.sleep(1.2)
+        self.assertEqual(nav.evaluer(compte), 0, "et ne revient pas")
+        self.assertEqual(self.taches(), [])
         self.sans_souci()
 
     def test_un_titre_reste_du_texte(self):
@@ -420,7 +449,7 @@ class TestDansLeNavigateur(unittest.TestCase):
         nav.capture("systeme-energie")
         self.srv.vider()
         nav.cliquer("Performance", dans="document.querySelector('[aria-label=\"Profil d\\'énergie\"]')")
-        self.assertIn(["powerprofilesctl", "set", "performance"], self.srv.attendre_commandes(1))
+        self.assertTrue(attendre(lambda: ["powerprofilesctl", "set", "performance"] in self.srv.commandes(), 5))
         self.srv.vider()
         nav.cliquer("60 %")
         attendre(lambda: ["asusctl", "-c", "60"] in self.srv.commandes(), 5)

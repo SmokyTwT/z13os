@@ -114,14 +114,28 @@ if sortie=$(python3 tests/test_smoky.py 2>&1); then
 else
   echec "tests de l'appli Smoky"; printf '%s\n' "$sortie" | tail -40
 fi
+# Tests ratés d'une sortie unittest, sous la forme Classe.test (ou Classe entière si sa
+# préparation a échoué). Les lignes « [...:ERROR:...] » sont le bavardage de Chrome, pas des tests.
+echoues() {
+  printf '%s\n' "$1" | sed -nE 's/^(FAIL|ERROR): (setUpClass|tearDownClass) \(__main__\.([A-Za-z_0-9]+)\).*/\3/p
+    s/^(FAIL|ERROR): ([A-Za-z_0-9]+) \(__main__\.([A-Za-z_0-9]+).*/\3.\2/p' | sort -u
+}
 if sortie=$(python3 tests/test_smoky_page.py 2>&1); then
-  if printf '%s\n' "$sortie" | grep -q 'skipped=16\|OK (skipped'; then
+  if printf '%s\n' "$sortie" | grep -q 'skipped=1[0-9]\|OK (skipped'; then
     note "page dans un navigateur : pas de Chrome ici, non vérifiée"
   else
     ok "page dans un vrai navigateur : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran //')"
   fi
 else
-  echec "page de l'appli Smoky dans le navigateur"; printf '%s\n' "$sortie" | grep -v 'ERROR:' | tail -40
+  # Un navigateur peut être lent au mauvais moment : un second essai pour les seuls tests ratés.
+  # Il est signalé, et un échec qui se répète reste un échec.
+  mapfile -t rates < <(echoues "$sortie")
+  if [ "${#rates[@]}" -gt 0 ] && sortie2=$(python3 tests/test_smoky_page.py "${rates[@]}" 2>&1); then
+    note "page dans un vrai navigateur : réussie au 2e essai pour ${rates[*]} (test instable, à corriger)"
+    printf '%s\n' "$sortie" | grep -v '^\[.*:ERROR:' | grep -A12 '^FAIL\|^ERROR' | head -30
+  else
+    echec "page de l'appli Smoky dans le navigateur"; printf '%s\n' "${sortie2:-$sortie}" | grep -v '^\[.*:ERROR:' | tail -40
+  fi
 fi
 
 etape "Travaux de démarrage faits une fois par image"

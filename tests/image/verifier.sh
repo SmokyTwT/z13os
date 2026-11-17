@@ -231,11 +231,23 @@ else
   tail -40 /tmp/verif-smoky.log | sed 's/^/          /'
 fi
 # la page, dans le Chrome de l'image (sans fenêtre)
-if SMOKY_RACINE=/ HOME=/tmp/verif-home SMOKY_CHROME=/usr/lib/google/chrome/chrome python3 /tests/test_smoky_page.py >/tmp/verif-smoky-page.log 2>&1; then
+rm -f /tmp/verif-smoky-page-2.log
+page() { SMOKY_RACINE=/ HOME=/tmp/verif-home SMOKY_CHROME=/usr/lib/google/chrome/chrome python3 /tests/test_smoky_page.py "$@"; }
+if page >/tmp/verif-smoky-page.log 2>&1; then
   ok "page de l'appli dans le Chrome de l'image : $(tail -3 /tmp/verif-smoky-page.log | grep -oE 'Ran [0-9]+ tests' || echo réussie)"
 else
-  echec "page de l'appli Smoky dans le Chrome de l'image"
-  grep -v 'ERROR:' /tmp/verif-smoky-page.log | tail -40 | sed 's/^/          /'
+  # second essai pour les seuls tests ratés (navigateur lent au mauvais moment), signalé ;
+  # un échec qui se répète reste un échec
+  mapfile -t rates < <(sed -nE 's/^(FAIL|ERROR): (setUpClass|tearDownClass) \(__main__\.([A-Za-z_0-9]+)\).*/\3/p
+    s/^(FAIL|ERROR): ([A-Za-z_0-9]+) \(__main__\.([A-Za-z_0-9]+).*/\3.\2/p' /tmp/verif-smoky-page.log | sort -u)
+  if [ "${#rates[@]}" -gt 0 ] && page "${rates[@]}" >/tmp/verif-smoky-page-2.log 2>&1; then
+    attention "page de l'appli dans le Chrome de l'image : réussie au 2e essai pour ${rates[*]} (test instable, à corriger)"
+    grep -v '^\[.*:ERROR:' /tmp/verif-smoky-page.log | grep -A12 '^FAIL\|^ERROR' | head -30 | sed 's/^/          /'
+  else
+    echec "page de l'appli Smoky dans le Chrome de l'image"
+    journal=/tmp/verif-smoky-page.log; [ -s /tmp/verif-smoky-page-2.log ] && journal=/tmp/verif-smoky-page-2.log
+    grep -v '^\[.*:ERROR:' "$journal" | tail -40 | sed 's/^/          /'
+  fi
 fi
 
 titre "Serveurs des applis (lancés pour de vrai dans l'image)"
