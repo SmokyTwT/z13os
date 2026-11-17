@@ -7,4 +7,13 @@ Icon=smoky-appli
 Terminal=false
 Categories=Utility;
 StartupWMClass=chrome-localhost__smoky-Default
-Keywords=smoky;aujourd'hui;tâches;réglages;système;batterie;écran;mise à jour;vpn;moodle;
+Keywords=smoky;aujourd'hui;tâches;agenda;emploi du temps;planning;révision;examen;salle;réglages;système;batterie;écran;mise à jour;vpn;moodle;
+Actions=agenda;systeme;
+
+[Desktop Action agenda]
+Name=Agenda
+Exec=/usr/bin/smoky --aller /agenda
+
+[Desktop Action systeme]
+Name=Réglages du PC
+Exec=/usr/bin/smoky --aller /systeme

@@ -34,6 +34,8 @@ const TRACES = {
   coche: "M5 12.500l4.500 4.500L19 7.500",
   croix: "M6.500 6.500l11 11M17.500 6.500l-11 11",
   dehors: "M9 6.500h8.500V15M17.500 6.500 7 17",
+  gauche: "M14.500 6 8.500 12l6 6",
+  droite: "M9.500 6l6 6-6 6",
 };
 
 export function icone(nom) {
@@ -62,12 +64,19 @@ export function interrupteur({ coche, nom, surChange, inactif }) {
   return b;
 }
 
-// options : [[valeur, libellé], …]
+// options : [[valeur, libellé], …] ; le choix est montré tout de suite (la page qui relit l'état
+// réel du PC le corrige ensuite si la commande a échoué)
 export function segment({ options, valeur, nom, surChange, inactif }) {
   const groupe = h("div", { class: "segment", role: "group", "aria-label": nom });
   for (const [v, libelle] of options) {
-    groupe.append(h("button", { type: "button", "aria-pressed": String(v === valeur), disabled: inactif,
-      surclick: () => { if (v !== valeur) surChange(v, groupe); } }, libelle));
+    const b = h("button", { type: "button", "aria-pressed": String(v === valeur), disabled: inactif,
+      surclick: () => {
+        if (v === valeur) return;
+        valeur = v;
+        for (const autre of groupe.children) autre.setAttribute("aria-pressed", String(autre === b));
+        surChange(v, groupe);
+      } }, libelle);
+    groupe.append(b);
   }
   return groupe;
 }

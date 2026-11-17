@@ -114,6 +114,11 @@ if sortie=$(python3 tests/test_smoky.py 2>&1); then
 else
   echec "tests de l'appli Smoky"; printf '%s\n' "$sortie" | tail -40
 fi
+if sortie=$(python3 tests/test_agenda.py 2>&1); then
+  ok "agenda : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
+else
+  echec "tests de l'agenda"; printf '%s\n' "$sortie" | tail -40
+fi
 # Tests ratés d'une sortie unittest, sous la forme Classe.test (ou Classe entière si sa
 # préparation a échoué). Les lignes « [...:ERROR:...] » sont le bavardage de Chrome, pas des tests.
 echoues() {

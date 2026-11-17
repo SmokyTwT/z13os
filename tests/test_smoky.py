@@ -153,7 +153,9 @@ class Dossier:
                "SMOKY_BIN": str(self.faux), "SMOKY_LIBEXEC": str(LIBEXEC), "SMOKY_BATTERIE": str(self.batterie),
                "SMOKY_TEST_JOURNAL": str(self.journal), "SMOKY_TEST_FAUX": str(self.faux),
                "GSETTINGS_BACKEND": "memory",          # les réglages GNOME restent dans la mémoire du serveur
-               "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1"}
+               "SMOKY_MATIERES": str(RACINE / "usr/share/smokyos/matieres.json"),
+               "SMOKY_MENAGE": str(LIBEXEC / "smoky-home-clean.py"),
+               "TZ": "Europe/Paris", "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1"}
         env.update({k: str(v) for k, v in plus.items()})
         return env
 
@@ -515,7 +517,7 @@ class TestSecurite(AvecServeur):
             self.assertEqual(self.srv.req("POST", "/api/systeme", corps)[0], 400, corps)
         self.assertEqual(self.srv.req("POST", "/api/taches", "{}", entetes={"Content-Length": "abc"})[0], 400)
         self.assertEqual(self.srv.req("POST", "/api/taches", "{}", entetes={"Content-Length": "-5"})[0], 413)
-        self.assertEqual(self.srv.req("POST", "/api/taches", "{}", entetes={"Content-Length": "2000001"})[0], 413)
+        self.assertEqual(self.srv.req("POST", "/api/taches", "{}", entetes={"Content-Length": "6000001"})[0], 413)
         self.assertEqual(self.srv.req("GET", "/api/inconnu")[0], 404)
         self.assertEqual(self.srv.req("PUT", "/api/taches", {})[0], 405)
         self.assertEqual(self.srv.req("DELETE", "/api/systeme")[0], 405)
@@ -529,7 +531,7 @@ class TestSecurite(AvecServeur):
         self.assertEqual(h["cache-control"], "no-store")
         self.assertEqual(h["x-content-type-options"], "nosniff")
         self.assertNotIn("access-control-allow-origin", h)
-        self.assertEqual(set(json.loads(corps)), {"taches", "systeme", "version"})
+        self.assertEqual(set(json.loads(corps)), {"taches", "journee", "maintenant", "systeme", "version"})
 
     def test_code_d_acces_et_dossiers(self):
         self.assertEqual(stat.S_IMODE(self.srv.acces.stat().st_mode), 0o600, "le code d'accès n'est lisible que par toi")
@@ -582,12 +584,12 @@ class TestTaches(AvecServeur):
 
     def test_creer_relire_modifier_supprimer(self):
         t = self.creer(titre="  Réviser   l'électromagnétisme \n", echeance="2026-11-13")
-        self.assertEqual(t, {"id": t["id"], "titre": "Réviser l'électromagnétisme", "faite": False, "echeance": "2026-11-13"})
+        self.assertEqual(t, {"id": t["id"], "titre": "Réviser l'électromagnétisme", "faite": False, "echeance": "2026-11-13", "minutes": None})
         self.assertEqual(self.liste(), [t])
         code, t2 = self.srv.json("POST", f"/api/taches/{t['id']}", {"faite": True})
         self.assertEqual((code, t2["faite"]), (200, True))
         code, t3 = self.srv.json("POST", f"/api/taches/{t['id']}", {"titre": "Réviser MNA", "echeance": None})
-        self.assertEqual(t3, {"id": t["id"], "titre": "Réviser MNA", "faite": True, "echeance": None})
+        self.assertEqual(t3, {"id": t["id"], "titre": "Réviser MNA", "faite": True, "echeance": None, "minutes": None})
         self.assertEqual(self.liste(), [t3])
         self.assertEqual(self.srv.json("POST", f"/api/taches/{t['id']}", {"faite": False})[1]["faite"], False)
         self.assertEqual(self.srv.json("DELETE", f"/api/taches/{t['id']}"), (200, {}))
@@ -1177,12 +1179,13 @@ class TestSysteme(AvecServeur):
         self.assertEqual(srv.commandes(), [])
 
     def test_ouvrir_les_anciennes_applis(self):
-        for quoi, programme in (("notes", "smoky-notes"), ("agenda", "smoky-agenda"), ("mail", "smoky-mail"), ("maison", "smoky-home")):
+        for quoi, programme in (("notes", "smoky-notes"), ("mail", "smoky-mail"), ("maison", "smoky-home")):
             self.srv.vider()
             self.assertEqual(self.srv.json("POST", "/api/ouvrir", {"quoi": quoi}), (200, {}))
             self.assertEqual(self.commandes_apres(1), [[programme]])
         self.srv.vider()
-        for quoi in ("center", "../../bin/sh", "", None, 3, ["notes"], {"a": 1}, "notes ", "smoky-notes", "/usr/bin/smoky-notes"):
+        # l'agenda est refait dans Smoky : l'ancien ne s'ouvre plus depuis l'appli
+        for quoi in ("agenda", "center", "../../bin/sh", "", None, 3, ["notes"], {"a": 1}, "notes ", "smoky-notes", "/usr/bin/smoky-notes"):
             with self.subTest(quoi=quoi):
                 self.assertEqual(self.srv.json("POST", "/api/ouvrir", {"quoi": quoi}), (400, {"erreur": "Appli inconnue."}))
         self.aucune_commande()
@@ -1744,13 +1747,22 @@ class TestPage(unittest.TestCase):
             self.assertTrue(cible.startswith("/") and (PAGE / cible.lstrip("/")).is_file(), f"smoky.css : {cible} absent")
 
     def test_la_page_et_le_serveur_parlent_des_memes_actions(self):
-        cote_page = set()
+        # actions de /api/systeme (toutes les pages) et de /api/agenda (page Agenda) : listes fermées
+        # des deux côtés ; la page Agenda lance aussi la concentration, une action du système
+        agenda_js = (PAGE / "js/agenda.js").read_text()
+        vers_systeme = set(re.findall(r'"/api/systeme",\s*\{\s*action:\s*"([a-z_]+)"', agenda_js))
+        cote_page_agenda = set(re.findall(r'action:\s*"([a-z_]+)"', agenda_js)) - vers_systeme
+        cote_page = set(vers_systeme)
         for p in self.js:
-            cote_page |= set(re.findall(r'action:\s*"([a-z_]+)"', p.read_text()))
-        cote_serveur = set(re.findall(r"def _a_([a-z_]+)\(", (PAQUET / "systeme.py").read_text()))
-        self.assertEqual(cote_page - cote_serveur, set(), "la page demande une action que le serveur ne connaît pas")
-        self.assertEqual(cote_serveur - cote_page, set(), "le serveur accepte une action que la page n'utilise pas")
-        self.assertGreaterEqual(len(cote_serveur), 20)
+            if p.name != "agenda.js":
+                cote_page |= set(re.findall(r'action:\s*"([a-z_]+)"', p.read_text()))
+        for page_, fichier in ((cote_page, "systeme.py"), (cote_page_agenda, "agenda.py")):
+            with self.subTest(serveur=fichier):
+                cote_serveur = set(re.findall(r"def _a_([a-z_]+)\(", (PAQUET / fichier).read_text()))
+                self.assertEqual(page_ - cote_serveur, set(), "la page demande une action que le serveur ne connaît pas")
+                self.assertEqual(cote_serveur - page_, set(), "le serveur accepte une action que la page n'utilise pas")
+                self.assertGreaterEqual(len(cote_serveur), 10)
+        self.assertIn("concentration_debut", vers_systeme)
         # réglages GNOME : même liste des deux côtés
         sys.path.insert(0, str(PAQUET.parent))
         try:
@@ -1762,11 +1774,11 @@ class TestPage(unittest.TestCase):
         self.assertEqual(set(GNOME) - cites, set(), "réglage GNOME accepté par le serveur mais absent de la page")
 
     def test_les_adresses_de_l_api_existent(self):
-        routes = ("/api/aujourdhui", "/api/taches", "/api/systeme", "/api/ouvrir", "/api/flux")
+        routes = ("/api/aujourdhui", "/api/taches", "/api/systeme", "/api/agenda", "/api/ouvrir", "/api/flux")
         for p in self.js:
             for adresse in re.findall(r'''["'`](/api/[a-z]+)''', p.read_text()):
                 self.assertIn(adresse, routes, f"{p.name} appelle {adresse}")
-        for route in routes[:3]:
+        for route in routes[:4]:
             self.assertNotEqual(self.srv.req("GET", route)[0], 404, route)
 
     def test_police_et_licence(self):

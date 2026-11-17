@@ -38,7 +38,7 @@ TYPES = {
 }
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; "
        "connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-CORPS_MAXI = 2_000_000
+CORPS_MAXI = 6_000_000      # un emploi du temps .ics importé fait 5 Mo au plus
 
 
 class Erreur(Exception):

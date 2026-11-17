@@ -1,7 +1,7 @@
 /* Smoky — l'apparence de l'appli. Thème de Smoky OS : noir de fumée, argent, lueur blanche.
    Une seule chose lumineuse par écran (le grand titre) ; tout le reste est mat.
-   Sommaire : 1 couleurs et mesures · 2 base · 3 rail · 4 page et titres · 5 commandes
-              6 rangées · 7 Aujourd'hui · 8 Système · 9 annonces et dialogues · 10 mouvement */
+   Sommaire : 1 couleurs et mesures, 2 base, 3 rail, 4 page et titres, 5 commandes, 6 rangées,
+              7 Aujourd'hui, 8 Système, 9 Agenda, 10 annonces et dialogues, 11 mouvement */
 
 /* 1 — couleurs et mesures ------------------------------------------------------------------ */
 @font-face {
@@ -35,7 +35,7 @@ body {
   -webkit-tap-highlight-color: transparent; overflow: hidden;
 }
 h1, h2, h3, p { margin: 0; }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--lueur); outline-offset: 3px; border-radius: 10px; }
@@ -105,6 +105,7 @@ h2 { font: 500 24px/1.2 var(--titre); letter-spacing: -.01em; text-transform: lo
 .bouton.braise { color: var(--braise); border-color: rgba(255, 143, 133, .35); }
 .bouton:disabled, .segment button:disabled, .interrupteur:disabled { opacity: .45; cursor: default; }
 .boutons { display: flex; flex-wrap: wrap; gap: 10px; }
+a.bouton { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* Interrupteur : une piste de 32 px dessinée au milieu d'une zone de 44 px, plus facile à toucher du doigt */
 .interrupteur { flex: none; position: relative; width: 58px; height: 44px; padding: 0; border: 0; background: none; }
@@ -136,7 +137,11 @@ h2 { font: 500 24px/1.2 var(--titre); letter-spacing: -.01em; text-transform: lo
 /* Un champ où l'on écrit montre toujours qu'il est actif. Le champ de date garde ce repère quand on
    passe d'un morceau à l'autre (jour, mois, année, calendrier), d'où :focus-within. */
 .champ:focus, .champ:focus-within { outline: 2px solid var(--lueur); outline-offset: 1px; }
-input[type="date"].champ { width: auto; color-scheme: dark; }
+input[type="date"].champ, input[type="time"].champ { width: auto; color-scheme: dark; }
+.champ.court { width: 96px; }
+textarea.champ { padding: 12px 14px; line-height: 1.5; resize: vertical; min-height: 120px; }
+select.champ { appearance: none; padding-right: 36px; background-image: linear-gradient(45deg, transparent 50%, var(--argent) 50%), linear-gradient(-45deg, transparent 50%, var(--argent) 50%);
+  background-position: right 19px center, right 14px center; background-size: 5px 5px; background-repeat: no-repeat; }
 
 /* 6 — rangées (un réglage par ligne) ---------------------------------------------------------- */
 .groupe { border-top: 1px solid var(--trait); }
@@ -186,6 +191,14 @@ input[type="date"].champ { width: auto; color-scheme: dark; }
 .cote .liste > button:hover { color: var(--lueur); background: rgba(255, 255, 255, .04); }
 .cote .liste > button { color: var(--argent); }
 .cote .liste svg { width: 20px; height: 20px; flex: none; }
+.cote .liste > a { color: var(--lueur); text-decoration: none; }
+.cote .liste > a:hover { background: rgba(255, 255, 255, .04); }
+.cote .liste.journee > a { justify-content: flex-start; gap: 16px; }
+.journee .heure { flex: none; width: 52px; color: var(--argent); font-size: 13px; }
+.journee .quoi { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.cote .liste.journee > a.passe, .journee > a.passe .heure { color: var(--cendre); }
+.journee > a.en-cours .heure { color: var(--lueur); font-weight: 650; }
+.cote .liste.journee > p { display: block; min-height: 0; padding: 10px 2px; }
 
 /* 8 — Système --------------------------------------------------------------------------------- */
 .systeme { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px 56px; align-items: start; }
@@ -200,7 +213,124 @@ input[type="date"].champ { width: auto; color-scheme: dark; }
 .section h3 { font: 600 13px/1.3 var(--police); color: var(--cendre); margin: 30px 0 8px; }
 .grand-chiffre { font: 300 44px/1 var(--titre); letter-spacing: -.02em; color: var(--lueur); }
 
-/* 9 — annonces et dialogues ---------------------------------------------------------------------- */
+/* 9 — Agenda -------------------------------------------------------------------------------------
+   La semaine en grille, en noir et blanc : ce qui ne bouge pas est plein (cours, rendez-vous),
+   le planning n'est qu'un contour, l'examen seul porte un trait lumineux, l'échéance Moodle est
+   braise. Une heure = --heure (posé par la page). */
+.corps.large { max-width: 1480px; }
+.nav-semaine { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; }
+.bouton.rond { width: 44px; padding: 0; display: grid; place-items: center; }
+.bouton.rond svg { width: 20px; height: 20px; }
+.agenda .actions { margin-bottom: 22px; }
+.invitation { background: var(--fumee); border-radius: 22px; padding: 22px 24px; margin-bottom: 26px; max-width: 760px; display: grid; gap: 12px; }
+.alerte-ligne { color: var(--braise); margin-bottom: 16px; }
+.alerte-ligne a { color: inherit; }
+
+.examens, .a-caser { margin-bottom: 28px; }
+.examens ul, .a-caser ul { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--trait); }
+.examens li, .a-caser li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 28px; min-height: 64px; padding: 10px 2px;
+  border-bottom: 1px solid var(--trait);
+}
+.examens .quoi { flex: 1 1 280px; display: grid; min-width: 0; }
+.examens .nom, .a-caser .nom { font-weight: 600; overflow-wrap: anywhere; }
+.examens .dans { font: 300 22px/1 var(--titre); color: var(--lueur); min-width: 128px; }
+.examens .revise { display: grid; gap: 6px; justify-items: start; font-size: 13px; }
+.a-caser .nom { flex: 1 1 240px; }
+
+.semaine { --heure: 52px; user-select: none; }
+.tete-jours, .journees, .corps-grille { display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); }
+.un-jour .corps-grille, .un-jour .journees { grid-template-columns: 44px minmax(0, 1fr); }
+.un-jour .tete-jours { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.tete-jours { position: sticky; top: 0; z-index: 3; background: var(--suie); padding: 6px 0 8px; border-bottom: 1px solid var(--trait); }
+.jour-tete {
+  display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 4px 0; border: 0; border-radius: 14px;
+  background: none; color: var(--argent);
+}
+.jour-tete .nom-jour { font-size: 12px; color: var(--cendre); }
+.jour-tete .num-jour { font: 300 20px/30px var(--titre); min-width: 32px; height: 32px; border-radius: 999px; text-align: center; }
+.jour-tete[aria-current="date"] .num-jour { background: var(--lueur); color: #0d0d0f; font-weight: 500; }
+button.jour-tete:hover { background: rgba(255, 255, 255, .05); }
+button.jour-tete[aria-pressed="true"] { background: rgba(255, 255, 255, .09); color: var(--lueur); }
+.journees { border-bottom: 1px solid var(--trait); padding: 4px 0; }
+.journees > span { align-self: center; }
+.journees .jour-col { display: grid; gap: 3px; padding: 0 3px; align-content: start; }
+.journees .element { position: static; min-height: 26px; }
+
+.corps-grille { position: relative; }
+.heures { position: relative; }
+.heures span { position: absolute; right: 8px; transform: translateY(-50%); font-size: 11px; color: var(--cendre); }
+.heures span:first-child { transform: none; }
+.colonne {
+  position: relative; border-left: 1px solid var(--trait);
+  background-image: repeating-linear-gradient(to bottom, var(--trait) 0 1px, transparent 1px var(--heure));
+}
+.colonne.aujourdhui { background-color: rgba(255, 255, 255, .025); }
+.maintenant { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid var(--lueur); z-index: 2; pointer-events: none; }
+.maintenant::before { content: ""; position: absolute; left: -4px; top: -4.5px; width: 7px; height: 7px; border-radius: 50%; background: var(--lueur); }
+
+.element {
+  position: absolute; display: flex; flex-direction: column; gap: 1px; overflow: hidden; text-align: left;
+  padding: 4px 7px; border: 1px solid transparent; border-radius: 9px; font-size: 12.5px; line-height: 1.25;
+  background: #232328; color: var(--lueur); z-index: 1;
+}
+.element .t { font-weight: 600; overflow-wrap: anywhere; }
+.element .h { color: var(--argent); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.element.court { flex-direction: row; align-items: center; gap: 6px; padding-top: 1px; padding-bottom: 1px; }
+.element.court .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.element.court .h { display: none; }
+.element:hover { filter: brightness(1.25); z-index: 2; }
+.element.perso { background: #2e2e35; }
+.element.examen { background: #1b1b1f; border: 1.5px solid var(--lueur); }
+.element.devoir { background: rgba(255, 143, 133, .1); border-color: rgba(255, 143, 133, .45); color: #ffd9d5; }
+.element.devoir .h { color: rgba(255, 217, 213, .75); }
+.element.planifie { background: rgba(255, 255, 255, .02); border-color: var(--trait-fort); color: var(--argent); }
+.element.planifie .t { font-weight: 550; }
+.element.planifie .h { color: var(--cendre); }
+.element.repas, .element.courses { border-style: dashed; border-color: rgba(255, 255, 255, .14); color: var(--cendre); }
+.element.fait { opacity: .45; }
+.element.fait .t { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .4); }
+
+.legende { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 14px 0 30px; font-size: 12.5px; color: var(--cendre); }
+.legende span { display: inline-flex; align-items: center; gap: 7px; }
+.pastille { width: 14px; height: 10px; border-radius: 3px; border: 1px solid transparent; background: #232328; }
+.pastille.perso { background: #2e2e35; }
+.pastille.examen { background: #1b1b1f; border: 1.5px solid var(--lueur); }
+.pastille.devoir { background: rgba(255, 143, 133, .14); border-color: rgba(255, 143, 133, .55); }
+.pastille.revision { background: none; border-color: var(--trait-fort); }
+.pastille.fait { opacity: .45; border-color: var(--trait-fort); }
+
+dialog.detail .genre { color: var(--cendre); font-size: 13px; margin: 0 0 4px; }
+.titre-libre { font: 600 21px/1.3 var(--police); text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+dialog.detail .quand { color: var(--lueur); margin: 8px 0 0; }
+dialog.detail .lieu { margin: 2px 0 0; }
+dialog.detail .notes { white-space: pre-line; color: var(--argent); }
+dialog.detail .discret.petit { margin: 14px 0 0; }
+dialog.detail > .boutons { margin-top: 22px; }
+dialog.detail .salle { margin-top: 16px; display: grid; gap: 8px; }
+dialog.detail .salle p { margin: 0 0 4px; }
+.salle .exercice { display: grid; grid-template-columns: minmax(0, 1fr) 76px auto 70px auto; align-items: center; gap: 8px; }
+.salle .exercice .nom { overflow-wrap: anywhere; font-size: 14px; }
+.salle .exercice .champ.court { width: 100%; padding: 0 8px; }
+.salle .boutons { justify-content: flex-start; margin-top: 6px; }
+dialog.ajout-agenda { width: min(580px, calc(100vw - 40px)); }
+dialog.ajout-agenda .segment { display: flex; flex-wrap: wrap; border-radius: 24px; margin-top: 16px; }
+dialog.ajout-agenda .champs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 12px; margin: 18px 0 22px; }
+dialog.ajout-agenda label { display: grid; gap: 6px; align-content: start; }
+dialog.ajout-agenda label span { font-size: 13px; color: var(--argent); }
+dialog.ajout-agenda label:first-child, dialog.ajout-agenda label:last-child:nth-child(5), dialog.ajout-agenda .champs > p { grid-column: 1 / -1; }
+dialog.ajout-agenda .champs > p { margin: 0; }
+dialog.ajout-agenda input[type="date"].champ, dialog.ajout-agenda input[type="time"].champ { width: 100%; }
+
+.reglages-agenda .section + .section { margin-top: 44px; }
+.reglages-agenda .section > .intro { margin-top: 0; }
+.reglages-agenda input[type="url"].champ { width: min(440px, 62vw); }
+.reglages-agenda .rangee:has(textarea) { align-items: flex-start; }
+.reglages-agenda .rangee:has(textarea) .commande { flex: 1 1 420px; }
+.reglages-agenda textarea.champ { min-height: 260px; }
+.reglages-agenda .rangee input[type="text"].champ { width: min(440px, 62vw); }
+
+/* 10 — annonces et dialogues --------------------------------------------------------------------- */
 #annonces { position: fixed; left: calc(var(--rail) + 24px); right: 24px; bottom: 22px; display: grid; justify-items: center; gap: 8px; pointer-events: none; z-index: 20; }
 .annonce {
   pointer-events: auto; max-width: min(640px, 100%); padding: 13px 18px; border-radius: 16px; font-weight: 550;
@@ -216,7 +346,7 @@ dialog p { color: var(--argent); margin: 10px 0 22px; }
 dialog .boutons { justify-content: flex-end; }
 .ecran-plein { height: 100%; display: grid; place-content: center; justify-items: start; gap: 14px; padding: var(--marge); max-width: 60ch; }
 
-/* 10 — mouvement et petits écrans ---------------------------------------------------------------- */
+/* 11 — mouvement et petits écrans ---------------------------------------------------------------- */
 @media (prefers-reduced-motion: no-preference) {
   body:not(.calme) .entete h1 { animation: souffle .7s cubic-bezier(.2, .7, .2, 1) both; }
   body:not(.calme) .annonce { animation: monte .22s ease-out both; }
@@ -234,4 +364,6 @@ dialog .boutons { justify-content: flex-end; }
 @media (max-width: 620px) {
   :root { --rail: 72px; }
   #rail a { font-size: 11px; }
+  dialog.ajout-agenda .champs { grid-template-columns: minmax(0, 1fr); }
+  .salle .exercice { grid-template-columns: minmax(0, 1fr) 64px auto 56px auto; }
 }

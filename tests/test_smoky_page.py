@@ -30,6 +30,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_smoky import Serveur, attendre  # noqa: E402  (mêmes serveur jetable et fausses commandes)
+from test_agenda import MAINTENANT, examens_ics, semaine_type  # noqa: E402  (mêmes emplois du temps d'essai)
 
 CAPTURES = os.environ.get("SMOKY_CAPTURES")
 
@@ -548,15 +549,18 @@ class TestDansLeNavigateur(unittest.TestCase):
     def test_anciennes_applis(self):
         self.ouvrir()
         nav = self.nav
-        nav.attendre("document.querySelectorAll('#rail a.ancienne').length === 4")
+        nav.attendre("document.querySelectorAll('#rail a.ancienne').length === 3")
+        self.assertFalse(nav.evaluer("document.querySelector('#rail a[data-page=agenda]').classList.contains('ancienne')"),
+                         "l'agenda est refait dans Smoky")
         self.srv.vider()
         nav.cliquer("Notes", dans="document.querySelector('#rail')")
         self.assertEqual(self.srv.attendre_commandes(1), [["smoky-notes"]])
         self.assertEqual(nav.evaluer("location.hash"), "#/aujourdhui", "on reste sur la page ; l'ancienne appli s'ouvre à part")
         nav.attendre("[...document.querySelectorAll('#annonces .annonce')].some((a) => a.textContent === \"Notes s'ouvre dans sa fenêtre.\")")
         self.srv.vider()
-        nav.cliquer("Ouvrir Agenda")
-        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-agenda"]])
+        nav.cliquer("Ouvrir Mail")
+        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-mail"]])
+        self.assertNotIn("Ouvrir Agenda", nav.texte())
         self.sans_souci()
 
     def test_sans_code_d_acces(self):
@@ -656,6 +660,293 @@ class TestDansLeNavigateur(unittest.TestCase):
         self.assertIn("Nouvelle tâche", [v[1] for v in vus] + [nav.evaluer("document.querySelector('form.ajout input').getAttribute('aria-label')")])
         sans_repere = [v for v in vus if v[0] != "BODY" and not v[2]]
         self.assertEqual(sans_repere, [], "au clavier, l'élément actif doit toujours être repérable")
+        self.sans_souci()
+
+
+@unittest.skipUnless(CHROME, "aucun Chrome ou Chromium trouvé (variable SMOKY_CHROME pour en désigner un)")
+class TestAgendaDansLeNavigateur(unittest.TestCase):
+    """La page Agenda, à une heure figée : mardi 17 novembre 2026, 9 h (comme tests/test_agenda.py)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = Serveur(env={"SMOKY_MAINTENANT": MAINTENANT})
+        try:
+            cls.nav = Navigateur(CHROME, cls.srv.base)
+        except Exception:
+            cls.srv.stop()
+            raise
+        cls.adresse = f"http://localhost:{cls.srv.port}/smoky"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.nav.fermer()
+        cls.srv.stop()
+
+    def setUp(self):
+        # agenda vide à chaque essai : mémoire effacée, serveur relancé
+        self.srv.arreter()
+        shutil.rmtree(self.srv.environnement["SMOKY_DONNEES"], ignore_errors=True)
+        self.srv.demarrer()
+        self.nav.dimensions = (1280, 800)
+        self.nav.nouvel_onglet()
+        self.srv.vider()
+
+    def ouvrir(self, suite="&a=/agenda"):
+        self.nav.aller(f"{self.adresse}#k={self.srv.jeton}{suite}")
+        self.nav.attendre("document.querySelector('#page h1') !== null", quoi="la page s'affiche")
+
+    def agir(self, action, **valeurs):
+        code, r = self.srv.json("POST", "/api/agenda", {"action": action, **valeurs})
+        self.assertEqual(code, 200, r)
+        return r
+
+    def etat(self):
+        return self.srv.json("GET", "/api/agenda")[1]
+
+    def annonce(self, texte):
+        self.nav.attendre(f"[...document.querySelectorAll('#annonces .annonce')].some((a) => a.textContent === {json.dumps(texte)})",
+                          quoi=f"annonce « {texte} »")
+
+    def toucher(self, selecteur, y):
+        """Vrai clic (souris du protocole de débogage) à y pixels du haut de l'élément, ce point
+        amené d'abord au milieu de l'écran (loin de la rangée des jours, qui reste en haut)."""
+        x, y = self.nav.evaluer(f"""(() => {{ const e = document.querySelector({json.dumps(selecteur)});
+            const page = document.querySelector('#page');
+            page.scrollTop += e.getBoundingClientRect().top + {y} - innerHeight / 2;
+            const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + {y}]; }})()""")
+        for genre in ("mousePressed", "mouseReleased"):
+            self.nav.ordre("Input.dispatchMouseEvent", page=True, type=genre, x=x, y=y, button="left", clickCount=1)
+
+    def sans_souci(self, tolerer=()):
+        self.assertEqual(self.nav.soucis(tolerer), [], "erreurs relevées dans le navigateur")
+        texte = self.nav.texte()
+        for mot in ("null", "undefined", "NaN", "[object"):
+            self.assertNotIn(mot, texte, "une valeur absente s'affiche en toutes lettres")
+
+    # ---------------------------------------------------------------------------------------------
+    def test_importer_depuis_la_page(self):
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelector('.invitation') !== null", quoi="invitation à importer l'emploi du temps")
+        fichier = self.srv.base / "ADECal.ics"
+        fichier.write_text(semaine_type())
+        objet = nav.ordre("Runtime.evaluate", page=True, expression="document.querySelector('.invitation input[type=file]')")["result"]["objectId"]
+        nav.ordre("DOM.setFileInputFiles", page=True, files=[str(fichier)], objectId=objet)
+        self.annonce("Emploi du temps importé : 10 cours.")
+        nav.attendre("document.querySelectorAll('.element.cours').length === 10")
+        self.assertFalse(nav.evaluer("!!document.querySelector('.invitation')"), "l'invitation disparaît")
+        nav.capture("agenda")
+        self.sans_souci()
+
+    def test_semaine_et_detail(self):
+        self.agir("importer", contenu=semaine_type())
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.element.cours').length === 10", quoi="les 10 cours de la semaine")
+        self.assertEqual(nav.evaluer("document.querySelector('#page h1').textContent"), "agenda")
+        self.assertEqual(nav.evaluer("document.querySelector('.entete .sous').textContent"), "semaine du 16 au 22 novembre")
+        self.assertEqual(nav.evaluer("document.querySelector('.jour-tete[aria-current=date]').dataset.jour"), "2026-11-17")
+        self.assertTrue(nav.evaluer("!!document.querySelector('.colonne.aujourdhui .maintenant')"), "ligne de l'heure actuelle")
+        # placement : le cours de 14 h à 16 h, deux fois plus haut qu'une heure, 6 heures sous celui de 8 h
+        haut = nav.evaluer("""[...document.querySelectorAll('.colonne.aujourdhui .element')].map((e) => [e.offsetTop, e.offsetHeight])""")
+        self.assertEqual(len(haut), 2)
+        heure = (haut[1][0] - haut[0][0]) / 6
+        self.assertGreater(heure, 40)
+        self.assertAlmostEqual(haut[1][1], 2 * heure, delta=4)
+        self.assertLessEqual(nav.evaluer("document.documentElement.scrollWidth"), 1280)
+        nav.cliquer("Cours, BDR TD, mardi 17 novembre, 14 h à 16 h, B201")
+        nav.attendre("document.querySelector('dialog.detail[open]') !== null")
+        texte = nav.evaluer("document.querySelector('dialog.detail').innerText")
+        for morceau in ("BDR TD", "mardi 17 novembre, de 14 h à 16 h", "B201", "Vient de ton emploi du temps."):
+            self.assertIn(morceau, texte)
+        self.assertNotIn("null", texte)
+        self.assertNotIn("Retirer", texte, "un cours de l'emploi du temps ne se retire pas")
+        nav.cliquer("Fermer", dans="document.querySelector('dialog.detail')")
+        nav.attendre("document.querySelector('dialog.detail') === null")
+        nav.cliquer("Semaine suivante")
+        nav.attendre("document.querySelector('.entete .sous').textContent === 'semaine du 23 au 29 novembre'")
+        self.assertEqual(nav.evaluer("document.querySelectorAll('.element').length"), 0)
+        nav.cliquer("Semaine suivante")
+        nav.attendre("document.querySelector('.entete .sous').textContent === 'semaine du 30 novembre au 6 décembre'")
+        nav.cliquer("Cette semaine")
+        nav.attendre("document.querySelectorAll('.element.cours').length === 10")
+        self.sans_souci()
+
+    def test_planifier_et_cocher(self):
+        self.agir("importer", contenu=semaine_type())
+        self.agir("importer", contenu=examens_ics())
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.element.cours').length === 10")
+        self.assertIn("Examen BDR", nav.evaluer("document.querySelector('.examens').innerText"))
+        self.assertEqual(nav.evaluer("getComputedStyle(document.querySelector('.element.examen')).borderTopColor"), "rgb(243, 243, 246)",
+                         "l'examen porte le trait lumineux")
+        nav.cliquer("Planifier ma semaine")
+        nav.attendre(r"[...document.querySelectorAll('#annonces .annonce')].some((a) => /^Semaine planifiée : \d+ blocs\.$/.test(a.textContent))")
+        nav.attendre("document.querySelectorAll('.element.planifie').length > 20")
+        self.assertIn("révisées sur", nav.evaluer("document.querySelector('.examens').innerText"), "bilan des révisions de l'examen")
+        nav.capture("agenda-planifie")
+        nom = nav.evaluer("document.querySelector('.element.revision').getAttribute('aria-label')")
+        nav.cliquer(nom)
+        nav.attendre("document.querySelector('dialog.detail[open]') !== null")
+        nav.cliquer("C'est fait", dans="document.querySelector('dialog.detail')")
+        nav.attendre(f"[...document.querySelectorAll('.element')].some((e) => e.getAttribute('aria-label') === {json.dumps(nom + ', fait')})",
+                     quoi="le bloc est montré fait")
+        self.assertEqual(len([x for x in self.etat()["elements"] if x.get("fait")]), 1)
+        # une séance de salle : les charges se notent depuis son détail
+        nav.cliquer(nav.evaluer("document.querySelector('.element.salle').getAttribute('aria-label')"))
+        nav.attendre("document.querySelector('dialog.detail .salle') !== null")
+        self.assertNotIn("null", nav.evaluer("document.querySelector('dialog.detail').innerText"))
+        nav.evaluer("""(() => { const [kg, reps] = document.querySelectorAll('dialog.detail .exercice input');
+            kg.value = '42.5'; reps.value = '10'; })()""")
+        nav.cliquer("Noter la séance", dans="document.querySelector('dialog.detail')")
+        nav.attendre("document.querySelector('dialog.detail') === null")
+        self.assertEqual([v["kg"] for v in self.etat()["charges"].values()], [42.5])
+        self.sans_souci()
+
+    def test_planifier_avec_claude(self):
+        from test_agenda import FAUX_CLAUDE                     # même faux Claude Code que les tests du serveur
+        (self.srv.faux / "claude").write_text(FAUX_CLAUDE)
+        (self.srv.faux / "claude").chmod(0o755)
+        (self.srv.faux / "claude-connecte").touch()
+        (self.srv.faux / "claude-lent").touch()                 # Claude met du temps : le message de départ passe d'abord
+        self.addCleanup(lambda: [(self.srv.faux / f).unlink(missing_ok=True) for f in ("claude", "claude-connecte", "claude-reponse", "claude-lent")])
+        blocs = [{"day": "2026-11-18", "start": "18:00", "end": "19:00", "type": "revision", "title": "Révision : BDR"}]
+        (self.srv.faux / "claude-reponse").write_text(json.dumps({"is_error": False, "result": json.dumps({"blocks": blocs})}))
+        self.agir("importer", contenu=semaine_type())
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("[...document.querySelectorAll('button')].some((b) => b.textContent === 'Avec Claude')", quoi="bouton « Avec Claude » (compte connecté)")
+        nav.cliquer("Avec Claude")
+        self.annonce("Claude organise ta semaine. Cela peut prendre quelques minutes.")
+        nav.attendre("[...document.querySelectorAll('button')].some((b) => b.textContent === 'Claude organise ta semaine…' && b.disabled)",
+                     quoi="le bouton montre que Claude travaille")
+        self.annonce("Claude a organisé ta semaine : 1 blocs.")
+        nav.attendre("[...document.querySelectorAll('.element.revision')].some((e) => e.getAttribute('aria-label').startsWith('Révision, Révision : BDR, mercredi 18 novembre, 18 h'))")
+        self.assertTrue(nav.evaluer("[...document.querySelectorAll('button')].some((b) => b.textContent === 'Avec Claude' && !b.disabled)"),
+                        "le bouton revient une fois le travail fini")
+        self.sans_souci()
+
+    def test_ajouter(self):
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelector('.semaine') !== null")
+        nav.cliquer("Ajouter")
+        nav.attendre("document.querySelector('dialog.ajout-agenda[open]') !== null")
+        self.assertEqual(nav.evaluer("document.activeElement.type"), "text", "le curseur est dans le nom")
+        nav.ecrire("dialog.ajout-agenda input[type=text]", "Dentiste")
+        nav.evaluer("""(() => { const d = document.querySelector('dialog.ajout-agenda');
+            d.querySelector('input[type=date]').value = '2026-11-18';
+            const [debut, fin] = d.querySelectorAll('input[type=time]'); debut.value = '17:00'; fin.value = '16:00'; })()""")
+        nav.cliquer("Ajouter", dans="document.querySelector('dialog.ajout-agenda')")
+        nav.attendre("document.querySelector('#annonces .annonce.erreur')?.textContent === 'La fin doit être après le début.'")
+        self.assertTrue(nav.evaluer("!!document.querySelector('dialog.ajout-agenda[open]')"), "la fenêtre reste ouverte pour corriger")
+        nav.evaluer("document.querySelectorAll('dialog.ajout-agenda input[type=time]')[1].value = '18:30'")
+        nav.cliquer("Ajouter", dans="document.querySelector('dialog.ajout-agenda')")
+        nav.attendre("document.querySelector('dialog.ajout-agenda') === null")
+        nav.attendre("document.querySelectorAll('.element.perso').length === 1")
+        [rdv] = [x for x in self.etat()["elements"] if x["genre"] == "perso"]
+        self.assertEqual((rdv["titre"], rdv["debut"], rdv["fin"]), ("Dentiste", "2026-11-18T17:00", "2026-11-18T18:30"))
+        # tâche à caser : les champs changent avec le genre choisi
+        nav.cliquer("Ajouter")
+        nav.cliquer("Tâche à caser", dans="document.querySelector('dialog.ajout-agenda')")
+        nav.attendre("document.querySelector('dialog.ajout-agenda input[type=number]') !== null")
+        self.assertEqual(nav.evaluer("[...document.querySelectorAll('dialog.ajout-agenda .segment [aria-pressed=true]')].map((b) => b.textContent)"),
+                         ["Tâche à caser"], "le genre choisi est montré")
+        self.assertEqual(nav.evaluer("document.querySelectorAll('dialog.ajout-agenda input[type=time]').length"), 0)
+        nav.ecrire("dialog.ajout-agenda input[type=text]", "Préparer l'exposé")
+        nav.cliquer("Ajouter", dans="document.querySelector('dialog.ajout-agenda')")
+        nav.attendre("document.querySelector('dialog.ajout-agenda') === null")
+        nav.attendre("[...document.querySelectorAll('.a-caser li')].some((l) => l.textContent.includes(\"Préparer l'exposé\"))")
+        self.assertEqual([(t["titre"], t["minutes"]) for t in self.etat()["a_caser"]], [("Préparer l'exposé", 60)])
+        # toucher un créneau vide : la fenêtre s'ouvre ce jour-là, à cette heure-là (la grille commence à 6 h)
+        heure = nav.evaluer("parseFloat(getComputedStyle(document.querySelector('.semaine')).getPropertyValue('--heure'))")
+        self.toucher(".colonne[data-jour='2026-11-19']", (18 - 6) * heure + 3)
+        nav.attendre("document.querySelector('dialog.ajout-agenda[open]') !== null")
+        valeurs = nav.evaluer("[...document.querySelectorAll('dialog.ajout-agenda input')].filter((c) => c.type === 'date' || c.type === 'time').map((c) => c.value)")
+        self.assertEqual(valeurs, ["2026-11-19", "18:00", "19:00"])
+        nav.touche("Escape", 27)
+        nav.attendre("document.querySelector('dialog.ajout-agenda') === null")
+        self.sans_souci(tolerer=("réponse 400", "status of 400"))
+
+    def test_reglages(self):
+        self.ouvrir("&a=/agenda/reglages")
+        nav = self.nav
+        nav.attendre("document.querySelector('.entete .sous')?.textContent === 'réglages'")
+        nav.capture("agenda-reglages")
+        nav.evaluer("""(() => { const c = document.querySelector('input[aria-label="Réveil"]'); c.dataset.avant = '1'; c.focus(); c.value = '06:30';
+            c.dispatchEvent(new Event('change', { bubbles: true })); })()""")
+        self.assertTrue(attendre(lambda: self.etat()["reglages"]["reveil"] == "06:30", 10), "réveil enregistré")
+        nav.attendre("!document.querySelector('input[aria-label=\"Réveil\"]').dataset.avant", quoi="la page est redessinée après l'enregistrement")
+        nav.attendre("document.activeElement?.getAttribute('aria-label') === 'Réveil' && document.activeElement.value === '06:30'",
+                     quoi="le curseur reste dans le champ après l'enregistrement")
+        nav.cliquer("Rappels")
+        self.assertTrue(attendre(lambda: self.etat()["reglages"]["rappels"] is False, 10), "rappels coupés")
+        nav.evaluer("""(() => { const c = document.querySelector('input[aria-label="Matières"]'); c.focus(); c.value = 'BDR, Anglais, en cours de fra'; })()""")
+        self.agir("ajouter", genre="perso", titre="Dentiste", jour="2026-11-18", debut="17:00", fin="18:00")   # changé ailleurs
+        time.sleep(1.5)
+        self.assertEqual(nav.evaluer("document.querySelector('input[aria-label=\"Matières\"]').value"), "BDR, Anglais, en cours de fra",
+                         "ce que tu tapes n'est pas effacé par une mise à jour venue d'ailleurs")
+        nav.cliquer("Haiku")
+        self.assertTrue(attendre(lambda: self.etat()["reglages"]["modele"] == "haiku", 10))
+        nav.ecrire('input[aria-label="Lien iCal de l\'emploi du temps"]', "ftp://ent.exemple/edt.ics")
+        nav.cliquer("Enregistrer")
+        nav.attendre(f"document.querySelector('#annonces .annonce.erreur')?.textContent === {json.dumps('Le lien de l’emploi du temps doit commencer par https://'.replace('’', chr(39)))}")
+        self.assertEqual(self.etat()["reglages"]["lien"], "")
+        nav.cliquer("Revenir à la semaine")
+        nav.attendre("document.querySelector('.entete .sous').textContent.startsWith('semaine du')")
+        self.sans_souci(tolerer=("réponse 400", "status of 400"))
+
+    def test_petit_ecran(self):
+        self.agir("importer", contenu=semaine_type())
+        self.nav.taille(760, 1000)
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.colonne').length === 1 && document.querySelectorAll('.element.cours').length === 2",
+                     quoi="un seul jour à la fois")
+        self.assertEqual(nav.evaluer("document.querySelector('.colonne').dataset.jour"), "2026-11-17", "aujourd'hui d'abord")
+        nav.cliquer("mercredi 18 novembre")
+        nav.attendre("document.querySelector('.colonne').dataset.jour === '2026-11-18'")
+        self.assertEqual(nav.evaluer("document.querySelector('.jour-tete[aria-pressed=true]').dataset.jour"), "2026-11-18")
+        self.assertLessEqual(nav.evaluer("document.documentElement.scrollWidth"), 760, "pas de défilement horizontal")
+        petits = nav.evaluer("""[...document.querySelectorAll('.bouton, .segment button, button.jour-tete')]
+            .filter((e) => e.offsetParent !== null).map((e) => [e.textContent.trim() || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)])
+            .filter(([, h]) => h < 44)""")
+        self.assertEqual(petits, [], "commandes trop petites pour le doigt")
+        nav.capture("agenda-etroit")
+        self.sans_souci()
+
+    def test_au_clavier(self):
+        self.agir("importer", contenu=semaine_type())
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.element.cours').length === 10")
+        nav.evaluer("document.querySelector('#rail a').focus()")
+        vus = []
+        for _ in range(16):
+            nav.touche("Tab", 9)
+            vus.append(nav.evaluer("""(() => { const e = document.activeElement; const s = getComputedStyle(e);
+                return [e.tagName, (e.getAttribute('aria-label') || e.textContent.trim()).slice(0, 40),
+                        s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 || s.boxShadow !== 'none']; })()"""))
+        self.assertTrue([v for v in vus if v[1].startswith("Cours, ")], f"les cours se rejoignent au clavier : {vus}")
+        self.assertEqual([v for v in vus if v[0] != "BODY" and not v[2]], [], "au clavier, l'élément actif doit toujours être repérable")
+        nav.touche("Enter", 13)
+        nav.attendre("document.querySelector('dialog.detail[open]') !== null", quoi="Entrée ouvre le détail")
+        nav.touche("Escape", 27)
+        nav.attendre("document.querySelector('dialog.detail') === null")
+        self.sans_souci()
+
+    def test_ta_journee_dans_aujourdhui(self):
+        self.agir("importer", contenu=semaine_type())
+        self.ouvrir("")
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.journee a').length === 2", quoi="les deux cours du jour")
+        nav.capture("aujourdhui-journee")
+        lignes = nav.evaluer(r"[...document.querySelectorAll('.journee a')].map((a) => [a.className, a.innerText.replace(/\s+/g, ' ').trim()])")
+        self.assertEqual(lignes, [["en-cours", "8 h Analyse CM Amphi 1"], ["", "14 h BDR TD B201"]])
+        nav.evaluer("document.querySelector('.journee a').click()")
+        nav.attendre("location.hash === '#/agenda' && document.querySelector('#page h1')?.textContent === 'agenda'")
+        self.assertEqual(nav.evaluer("document.querySelector('#rail a[aria-current]').textContent"), "Agenda")
         self.sans_souci()
 
 

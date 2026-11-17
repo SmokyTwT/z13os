@@ -8,6 +8,7 @@ import json
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 MIGRATIONS = [
@@ -23,6 +24,40 @@ MIGRATIONS = [
         terminee REAL
     );
     CREATE INDEX taches_ouvertes ON taches (faite, echeance);
+    """,
+    # 2 — agenda : rendez-vous et examens, blocs du planning, séances de salle ; durée d'une tâche à caser
+    """
+    ALTER TABLE taches ADD COLUMN minutes INTEGER;          -- durée pour la caser dans la semaine (NULL : simple tâche)
+    CREATE TABLE agenda_evenements (
+        id TEXT PRIMARY KEY,                 -- toi-… (ajouté ici) ou exam-… (même numéro à chaque import)
+        genre TEXT NOT NULL,                 -- perso | examen
+        titre TEXT NOT NULL,
+        lieu TEXT NOT NULL DEFAULT '',
+        debut TEXT NOT NULL,                 -- AAAA-MM-JJTHH:MM, heure locale
+        fin TEXT NOT NULL,
+        journee INTEGER NOT NULL DEFAULT 0,
+        matiere TEXT,
+        notes TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX agenda_evenements_fin ON agenda_evenements (fin, debut);
+    CREATE TABLE agenda_blocs (
+        id TEXT PRIMARY KEY,
+        genre TEXT NOT NULL,                 -- revision | salle | courses | repas | tache | perso
+        titre TEXT NOT NULL,
+        debut TEXT NOT NULL,
+        fin TEXT NOT NULL,
+        fait INTEGER NOT NULL DEFAULT 0,
+        matiere TEXT,
+        tache INTEGER REFERENCES taches (id) ON DELETE CASCADE,   -- tâche casée par ce bloc
+        notes TEXT NOT NULL DEFAULT '',
+        origine TEXT NOT NULL DEFAULT 'pc'   -- pc | claude | toi
+    );
+    CREATE INDEX agenda_blocs_fin ON agenda_blocs (fin, debut);
+    CREATE INDEX agenda_blocs_tache ON agenda_blocs (tache);
+    CREATE TABLE agenda_seances (
+        jour TEXT NOT NULL, bloc TEXT NOT NULL, exercice TEXT NOT NULL, kg REAL NOT NULL, reps INTEGER NOT NULL
+    );
+    CREATE INDEX agenda_seances_bloc ON agenda_seances (bloc);
     """,
 ]
 
@@ -71,6 +106,18 @@ class Base:
         with self.verrou:
             c = self.db.execute(sql, params)
             return c.lastrowid, c.rowcount
+
+    @contextmanager
+    def transaction(self):
+        """Plusieurs écritures qui passent toutes, ou aucune."""
+        with self.verrou:
+            self.db.execute("BEGIN")
+            try:
+                yield
+            except BaseException:
+                self.db.execute("ROLLBACK")
+                raise
+            self.db.execute("COMMIT")
 
     def reglage(self, cle, defaut=None):
         ligne = self.un("SELECT valeur FROM reglages WHERE cle = ?", (cle,))

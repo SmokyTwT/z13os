@@ -1,17 +1,24 @@
 """Le serveur de Smoky :
     /usr/lib/smoky/lancer.py [--port N] [--page DOSSIER] [--arret-auto SECONDES [--profil DOSSIER]]
+    /usr/lib/smoky/lancer.py --rappels     prépare les rappels de l'agenda puis s'arrête
+                                           (smoky-agenda-reminders.service : chaque matin et à la connexion)
 
 Le lanceur /usr/bin/smoky s'en charge ; le port et le code d'accès sont écrits dans
 $XDG_RUNTIME_DIR/smoky/serveur.json (lisible par toi seul).
 """
 import argparse
+import os
+import re
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
 from . import PORT, VERSION
+from .agenda import Agenda, maintenant
 from .base import Base
 from .commandes import BIN, detacher, navigateur_ouvert
+from .planning import iso
 from .serveur import Appli, Erreur
 from .systeme import Systeme
 from .taches import Taches
@@ -20,7 +27,8 @@ from .taches import Taches
 PAGE = Path(__file__).resolve().parents[3] / "share/smoky"
 
 # Applis pas encore refaites dans Smoky : elles s'ouvrent à part, comme avant.
-ANCIENNES = {"notes": "smoky-notes", "agenda": "smoky-agenda", "mail": "smoky-mail", "maison": "smoky-home"}
+ANCIENNES = {"notes": "smoky-notes", "mail": "smoky-mail", "maison": "smoky-home"}
+ANCIEN_AGENDA = Path(os.environ.get("SMOKY_ANCIEN_AGENDA", "/usr/libexec/smokyagenda/server.py"))   # variable : essais
 
 
 def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=None):
@@ -28,15 +36,18 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     base = base or Base()
     taches = Taches(base)
     systeme = Systeme(prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
+    agenda = Agenda(base, prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
 
     def prevenir_taches(resultat):
-        """Les autres fenêtres ouvertes relisent la liste."""
+        """Les autres fenêtres ouvertes relisent la liste (la page Agenda aussi : tâches à caser)."""
         appli.flux.publier("change", {"quoi": "taches"})
+        agenda.taches_changees()
         return resultat
 
     @appli.route("GET", "/api/aujourdhui")
     def aujourdhui(requete):
-        return {"taches": taches.liste(), "systeme": systeme.resume(), "version": VERSION}
+        return {"taches": taches.liste(), "journee": agenda.journee(), "maintenant": iso(maintenant()),
+                "systeme": systeme.resume(), "version": VERSION}
 
     @appli.route("POST", "/api/taches")
     def tache_creer(requete):
@@ -49,6 +60,17 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     @appli.route("DELETE", "/api/taches/<id>")
     def tache_supprimer(requete):
         return prevenir_taches(taches.supprimer(requete.morceaux["id"]))
+
+    @appli.route("GET", "/api/agenda")
+    def agenda_etat(requete):
+        semaine = requete.params.get("semaine", ["0"])[-1]
+        if not re.fullmatch(r"-?[0-9]{1,2}", semaine) or not -60 <= int(semaine) <= 60:
+            raise Erreur(400, "Semaine invalide.")
+        return agenda.etat(int(semaine))
+
+    @appli.route("POST", "/api/agenda")
+    def agenda_agir(requete):
+        return agenda.agir(requete.json())
 
     @appli.route("GET", "/api/systeme")
     def systeme_etat(requete):
@@ -69,7 +91,32 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
         return {}
 
     appli.base = base
+    appli.agenda = agenda
     return appli
+
+
+def rappels():
+    """Chaque matin et à la connexion (smoky-agenda-reminders.timer) : relit l'emploi du temps et
+    prépare les rappels des 36 prochaines heures. Tant que le nouvel agenda n'a pas ton emploi du
+    temps, l'ancien Smoky Agenda continue de préparer les siens."""
+    code = 0
+    try:
+        agenda = Agenda(Base())
+        agenda.ramasser_telechargements()
+        if agenda.reglages()["lien"]:
+            agenda.rafraichir_lien(attendre=True, delai=20)
+        print(f"smoky : {agenda.apres_changement()} rappel(s) préparé(s)")
+        relais = agenda.prend_le_relais()
+    except (OSError, RuntimeError, sqlite3.Error) as e:
+        print(f"smoky : rappels impossibles ({e})", file=sys.stderr)
+        code, relais = 1, False
+    ancien = Path.home() / ".local/share/smoky-agenda/agenda.json"
+    if not relais and ANCIEN_AGENDA.is_file() and ancien.is_file():
+        try:
+            subprocess.run([sys.executable, "-I", str(ANCIEN_AGENDA), "--reminders"], timeout=300, check=False)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            print(f"smoky : rappels de l'ancien Agenda impossibles ({e})", file=sys.stderr)
+    return code
 
 
 def main(argv=None):
@@ -80,7 +127,11 @@ def main(argv=None):
                    help="s'arrêter quand plus aucune fenêtre n'est ouverte depuis S secondes")
     p.add_argument("--profil", default=None, metavar="DOSSIER",
                    help="dossier de profil du navigateur de l'appli : tant qu'il tourne, le serveur reste")
+    p.add_argument("--rappels", action="store_true",
+                   help="préparer les rappels de l'agenda (et le ménage pendant les cours), puis s'arrêter")
     args = p.parse_args(argv)
+    if args.rappels:
+        return rappels()
     present = (lambda: navigateur_ouvert(args.profil)) if args.profil else None
     try:
         appli = construire(args.page, args.port, arret_auto=args.arret_auto, present=present)

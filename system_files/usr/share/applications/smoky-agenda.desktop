@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Smoky Agenda
-Comment=Planifie tes journées : cours, révisions, salle, courses, repas
+Name=Smoky Agenda (ancien)
+Comment=L'ancien agenda ; le nouveau est dans l'appli Smoky
 Exec=/usr/bin/smoky-agenda
 Icon=smoky-agenda
 StartupWMClass=chrome-127.0.0.1__agenda-Default
 Categories=Office;Calendar;Education;
-Keywords=agenda;planning;emploi du temps;révision;salle;sport;courses;journée;
+Keywords=ancien agenda;
 Terminal=false

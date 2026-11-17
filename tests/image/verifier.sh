@@ -230,6 +230,13 @@ else
   echec "tests de l'appli Smoky"
   tail -40 /tmp/verif-smoky.log | sed 's/^/          /'
 fi
+verifie "rappels de l'agenda : service relié à l'appli Smoky" grep -q '^ExecStart=/usr/bin/python3 -I /usr/lib/smoky/lancer.py --rappels$' /usr/lib/systemd/user/smoky-agenda-reminders.service
+if SMOKY_RACINE=/ HOME=/tmp/verif-home python3 /tests/test_agenda.py >/tmp/verif-agenda.log 2>&1; then
+  ok "tests de l'agenda : $(tail -3 /tmp/verif-agenda.log | grep -oE 'Ran [0-9]+ tests' || echo réussis)"
+else
+  echec "tests de l'agenda"
+  tail -40 /tmp/verif-agenda.log | sed 's/^/          /'
+fi
 # la page, dans le Chrome de l'image (sans fenêtre)
 rm -f /tmp/verif-smoky-page-2.log
 page() { SMOKY_RACINE=/ HOME=/tmp/verif-home SMOKY_CHROME=/usr/lib/google/chrome/chrome python3 /tests/test_smoky_page.py "$@"; }

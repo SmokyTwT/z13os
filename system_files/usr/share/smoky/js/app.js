@@ -59,7 +59,7 @@ export async function tenter(action, { succes } = {}) {
 const PAGES = [
   { id: "aujourdhui", nom: "Aujourd'hui", module: "/js/aujourdhui.js" },
   { id: "notes", nom: "Notes", ancienne: true },
-  { id: "agenda", nom: "Agenda", ancienne: true },
+  { id: "agenda", nom: "Agenda", module: "/js/agenda.js" },
   { id: "mail", nom: "Mail", ancienne: true },
   { id: "maison", nom: "Maison", ancienne: true },
   { id: "systeme", nom: "Système", module: "/js/systeme.js" },
