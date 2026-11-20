@@ -7,8 +7,11 @@ Le serveur tourne dans un dossier personnel jetable (voir test_smoky.py).
   python3 tests/test_notes.py
   SMOKY_RACINE=/ python3 tests/test_notes.py      image construite
 """
+import importlib.machinery
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -336,6 +339,112 @@ class TestServeurNotes(unittest.TestCase):
         self.assertIn("worker-src 'self';", csp)
         self.assertNotIn("unsafe-inline", csp)
         self.assertNotRegex(csp, r"'unsafe-eval'")
+
+
+def pdf_minimal(pages, rot=None, texte=b""):
+    """Un vrai petit PDF (table des objets exacte) : une page par taille donnée, rot = {index: degrés}."""
+    rot = rot or {}
+    objets = [b"<< /Type /Catalog /Pages 2 0 R >>", b""]
+    kids = []
+    for i, (w, h) in enumerate(pages):
+        kids.append(f"{3 + i} 0 R")
+        objets.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w} {h}] /Rotate {rot.get(i, 0)} >>".encode())
+    objets[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages)} >>".encode()
+    sortie = bytearray(b"%PDF-1.4\n" + texte)
+    positions = []
+    for n, o in enumerate(objets, 1):
+        positions.append(len(sortie))
+        sortie += f"{n} 0 obj\n".encode() + o + b"\nendobj\n"
+    xref = len(sortie)
+    sortie += f"xref\n0 {len(objets) + 1}\n0000000000 65535 f \n".encode()
+    for p in positions:
+        sortie += f"{p:010d} 00000 n \n".encode()
+    sortie += f"trailer\n<< /Size {len(objets) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(sortie)
+
+
+@unittest.skipUnless(shutil.which("pdfinfo"), "pdfinfo (poppler-utils) absent")
+class TestMoodle(unittest.TestCase):
+    """Les cours de Moodle arrivent dans les Notes de l'appli (Notes/Carnets), lisibles par son serveur ;
+    les carnets de l'ancien Smoky Notes ne sont plus touchés."""
+
+    def setUp(self):
+        self.srv = Serveur()
+        self.addCleanup(self.srv.stop)
+        chemin = RACINE / "usr/libexec/smokyos/smoky-moodle.py"
+        chargeur = importlib.machinery.SourceFileLoader("smoky_moodle", str(chemin))
+        self.m = importlib.util.module_from_spec(importlib.util.spec_from_loader("smoky_moodle", chargeur))
+        chargeur.exec_module(self.m)
+        self.m.CARNETS = self.srv.home / "Notes" / "Carnets"
+        self.m.STATE_DIR = self.srv.home / ".local/share/smoky-moodle"
+        self.m.STATE = self.m.STATE_DIR / "state.json"
+        self.m.DEADLINES = self.m.STATE_DIR / "echeances.json"
+        self.m.SUBJECTS_FILE = RACINE / "usr/share/smokyos/matieres.json"
+        self.notifs = []
+        self.m.notify = lambda titre, corps, **k: self.notifs.append((titre, corps))
+
+    def carnets(self):
+        return {c["titre"]: c for c in self.srv.json("GET", "/api/notes")[1]["carnets"]}
+
+    def test_un_pdf_devient_un_carnet(self):
+        pdf = pdf_minimal([(595.28, 841.89), (612, 792), (595.28, 841.89)], rot={2: 90})
+        cid = self.m.create_notebook(pdf, "Chapitre 3 — Énergie", "Méca")
+        c = self.carnets()["Chapitre 3 — Énergie"]
+        self.assertEqual((c["id"], c["classeur"], c["pages"], c["pdf"], c["couverture"]), (cid, "Méca", 3, True, "ardoise"))
+        carnet = self.srv.json("GET", f"/api/notes/{cid}")[1]
+        self.assertEqual([(p["w"], p["h"], p["fond"]["page"]) for p in carnet["pages"]],
+                         [(595.28, 841.89, 0), (612, 792, 1), (841.89, 595.28, 2)], "tailles en points ; page tournée : largeur et hauteur échangées")
+        nom = carnet["pages"][0]["fond"]["pdf"]
+        self.assertEqual(self.srv.req("GET", f"/api/notes/{cid}/fichiers/{nom}")[2], pdf)
+        # l'éditeur peut le réenregistrer tel quel (le serveur accepte ce qu'a écrit l'import)
+        self.assertEqual(self.srv.json("PUT", f"/api/notes/{cid}", {"pages": carnet["pages"]})[0], 200)
+        self.assertEqual(self.srv.json("PUT", f"/api/notes/{cid}/pages/{carnet['pages'][0]['id']}", {"traits": []})[0], 200)
+
+    def test_synchronisation(self):
+        cours_pdf = pdf_minimal([(595.28, 841.89)])
+        nouvelle = pdf_minimal([(595.28, 841.89)] * 2)
+        fichiers = {"https://moodle.exemple/f/cours1.pdf": (cours_pdf, 100), "https://moodle.exemple/f/ancien.pdf": (cours_pdf, 100),
+                    "https://moodle.exemple/f/td.pdf": (cours_pdf, 100)}
+        m = self.m
+        m.site = lambda: "https://moodle.exemple"
+        m.token_get = lambda: "jeton"
+        m.deadlines = lambda token, st: None
+
+        def ws(token, fn, **p):
+            if fn == "core_webservice_get_site_info":
+                return {"userid": 7}
+            if fn == "core_enrol_get_users_courses":
+                return [{"id": 1, "shortname": "MECA S1", "fullname": "Mécanique du point"}]
+            return [{"modules": [{"contents": [{"type": "file", "filename": url.rsplit("/", 1)[1], "fileurl": url, "timemodified": t}
+                                               for url, (_, t) in fichiers.items()]}]}]
+        m.ws = ws
+        m.http = lambda url, timeout=60: fichiers[url.split("?")[0]][0]
+        # déjà importé dans l'ancien Smoky Notes : ni repris, ni touché
+        m.save_state({"files": {"https://moodle.exemple/f/ancien.pdf": {"mtime": 100, "notebook": "n123"}}, "notified": []})
+        self.assertEqual(m.sync(), 0)
+        c = self.carnets()
+        self.assertEqual(sorted(c), ["cours1", "td"])
+        self.assertTrue(all(x["classeur"] == "Méca" for x in c.values()), "rangés dans le classeur de la matière")
+        self.assertEqual(self.notifs[0][0], "Nouveaux cours dans tes Notes")
+        # nouvelle version : le carnet pas encore annoté est remplacé (l'ancien part à la corbeille) ;
+        # celui qui est annoté reste, la nouvelle version arrive à côté
+        td = c["td"]["id"]
+        page = self.srv.json("GET", f"/api/notes/{td}")[1]["pages"][0]["id"]
+        self.srv.json("PUT", f"/api/notes/{td}/pages/{page}", {"traits": [{"id": "t1", "outil": "stylo", "couleur": "#141417", "largeur": 2,
+                                                                         "points": [1, 2, 0.5, 3, 4, 0.5]}]})
+        fichiers["https://moodle.exemple/f/cours1.pdf"] = (nouvelle, 200)
+        fichiers["https://moodle.exemple/f/td.pdf"] = (nouvelle, 200)
+        fichiers["https://moodle.exemple/f/ancien.pdf"] = (nouvelle, 200)
+        self.assertEqual(m.sync(), 0)
+        c = self.carnets()
+        self.assertEqual(sorted(c), ["ancien", "cours1", "td", "td (nouvelle version)"])
+        self.assertEqual(c["cours1"]["pages"], 2)
+        self.assertEqual([x["titre"] for x in self.srv.json("GET", "/api/notes")[1]["corbeille"]], ["cours1"])
+        self.assertEqual(c["td"]["id"], td, "le carnet annoté n'a pas bougé")
+        # rien ne bouge si Moodle n'a rien de neuf
+        self.assertEqual(m.sync(), 0)
+        self.assertEqual(sorted(self.carnets()), ["ancien", "cours1", "td", "td (nouvelle version)"])
+        self.assertFalse((self.srv.home / "Notes" / "Smoky Notes").exists(), "rien n'est écrit dans l'ancien Smoky Notes")
 
 
 class TestInstallation(unittest.TestCase):
