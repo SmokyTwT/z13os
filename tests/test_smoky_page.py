@@ -26,6 +26,7 @@ import threading
 import time
 import unittest
 import urllib.parse
+import zlib
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -971,6 +972,15 @@ class TestAgendaDansLeNavigateur(unittest.TestCase):
         self.sans_souci()
 
 
+def png(largeur, hauteur, couleur=(45, 111, 224)):
+    """Une vraie image PNG unie."""
+    def bloc(genre, donnees):
+        return len(donnees).to_bytes(4, "big") + genre + donnees + zlib.crc32(genre + donnees).to_bytes(4, "big")
+    lignes = b"".join(b"\0" + bytes(couleur) * largeur for _ in range(hauteur))
+    return (b"\x89PNG\r\n\x1a\n" + bloc(b"IHDR", largeur.to_bytes(4, "big") + hauteur.to_bytes(4, "big") + bytes([8, 2, 0, 0, 0]))
+            + bloc(b"IDAT", zlib.compress(lignes)) + bloc(b"IEND", b""))
+
+
 def vague(x0, y0, n=50, pas=4, ampleur=10):
     """Un trait d'écriture : une vague de n points vers la droite."""
     return [(x0 + i * pas, y0 + math.sin(i / 3) * ampleur) for i in range(n)]
@@ -1615,6 +1625,67 @@ class TestNotesDansLeNavigateur(unittest.TestCase):
         self.prete(pid)
         self.assertGreater(self.encre(pid, 180 / z, 300 / z), 150, "le deuxième trait est là aussi")
         self.enregistre(lire, lambda p: len(p["traits"]) == 2, "les deux traits")
+        self.sans_souci()
+
+    def test_formes_et_gribouillis(self):
+        c = self.creer("Géométrie")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        # un rectangle tremblé, le stylet gardé immobile une demi-seconde au bout : rectangle parfait
+        tour = [(x + 100 + i * 12, y + 100 + (i % 2)) for i in range(16)] + [(x + 290 + (i % 2), y + 100 + i * 8) for i in range(16)]
+        tour += [(x + 290 - i * 12, y + 228 + (i % 2)) for i in range(16)] + [(x + 100 + (i % 2), y + 228 - i * 8) for i in range(17)]
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mousePressed", x=tour[0][0], y=tour[0][1], button="left", buttons=1, clickCount=1, pointerType="pen", force=0.5)
+        for px, py in tour[1:]:
+            nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseMoved", x=px, y=py, button="left", buttons=1, pointerType="pen", force=0.5)
+        time.sleep(0.8)
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseReleased", x=tour[-1][0], y=tour[-1][1], button="left", buttons=0, clickCount=1, pointerType="pen")
+        [r] = self.enregistre(lire, lambda p: len(p["traits"]) == 1, "forme")["traits"]
+        self.assertEqual((r.get("forme"), r.get("ferme")), ("rectangle", True))
+        self.assertLessEqual(len(r["points"]) // 3, 5, "quatre coins, pas des dizaines de points tremblés")
+        # un mot, puis un gribouillis dessus : le mot part, le gribouillis ne reste pas
+        self.stylo(vague(x + 100, y + 400, n=30))
+        mot = self.enregistre(lire, lambda p: len(p["traits"]) == 2, "mot écrit")["traits"][1]
+        zigzag = [(x + 95 + (i % 2) * 130, y + 385 + i * 1.5) for i in range(24)]
+        self.stylo([pt for a, b in zip(zigzag, zigzag[1:]) for pt in [(a[0] + (b[0] - a[0]) * k / 6, a[1] + (b[1] - a[1]) * k / 6) for k in range(6)]])
+        self.enregistre(lire, lambda p: self.ids(p) == [r["id"]], "gribouillis : le mot est effacé, rien d'autre")
+        nav.cliquer("Annuler")
+        self.enregistre(lire, lambda p: sorted(self.ids(p)) == sorted([r["id"], mot["id"]]), "annulé : le mot revient")
+        self.sans_souci()
+
+    def test_image_copier_coller_zoom_clavier(self):
+        c = self.creer("TP")
+        pid = self.editeur(c)
+        nav = self.nav
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        image = self.srv.base / "schéma.png"
+        image.write_bytes(png(120, 60))
+        objet = nav.ordre("Runtime.evaluate", page=True, expression="document.querySelector('.editeur input[type=file][accept^=\"image\"]')")["result"]["objectId"]
+        nav.ordre("DOM.setFileInputFiles", page=True, files=[str(image)], objectId=objet)
+        [im] = self.enregistre(lire, lambda p: len(p["images"]) == 1, "image insérée")["images"]
+        self.assertEqual((im["w"], im["h"]), (90, 45), "taille naturelle (75 %), proportions gardées")
+        self.assertEqual(self.srv.req("GET", f"/api/notes/{c['id']}/fichiers/{im['fichier']}")[2], image.read_bytes())
+        nav.attendre("document.querySelector('.boite-selection') !== null", quoi="l'image arrive sélectionnée")
+        self.assertEqual(nav.evaluer("document.querySelector('.outil[aria-pressed=true]').getAttribute('aria-label')"), "Lasso")
+        # copier, coller : une seconde image, décalée
+        self.raccourci("c", 67, ctrl=True)
+        self.raccourci("v", 86, ctrl=True)
+        a, b = self.enregistre(lire, lambda p: len(p["images"]) == 2, "image collée")["images"]
+        self.assertEqual(a["fichier"], b["fichier"], "le même fichier, pas une copie")
+        self.assertNotEqual((a["x"], a["y"]), (b["x"], b["y"]))
+        # raccourcis des outils, zoom au clavier
+        nav.evaluer("document.querySelector('.feuilles').focus()")
+        for touche, code, nom in (("h", 72, "Surligneur"), ("e", 69, "Gomme"), ("t", 84, "Texte"), ("p", 80, "Stylo")):
+            self.raccourci(touche, code)
+            self.assertEqual(nav.evaluer("document.querySelector('.outil[aria-pressed=true]').getAttribute('aria-label')"), nom)
+        largeur = self.feuille(pid)[2]
+        for _ in range(2):
+            nav.ordre("Input.dispatchKeyEvent", page=True, type="keyDown", key="+", code="Equal", windowsVirtualKeyCode=187, modifiers=2)
+            nav.ordre("Input.dispatchKeyEvent", page=True, type="keyUp", key="+", code="Equal", windowsVirtualKeyCode=187, modifiers=2)
+        nav.attendre(f"document.querySelector('.feuille').getBoundingClientRect().width > {largeur * 1.3}", quoi="Ctrl + agrandit")
+        self.raccourci("0", 48, ctrl=True)
+        nav.attendre(f"Math.abs(document.querySelector('.feuille').getBoundingClientRect().width - {largeur}) < 1", quoi="Ctrl+0 : page en largeur")
         self.sans_souci()
 
     def test_change_ailleurs(self):
