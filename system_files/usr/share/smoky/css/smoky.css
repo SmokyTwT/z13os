@@ -1,7 +1,7 @@
 /* Smoky — l'apparence de l'appli. Thème de Smoky OS : noir de fumée, argent, lueur blanche.
    Une seule chose lumineuse par écran (le grand titre) ; tout le reste est mat.
    Sommaire : 1 couleurs et mesures, 2 base, 3 rail, 4 page et titres, 5 commandes, 6 rangées,
-              7 Aujourd'hui, 8 Système, 9 Agenda, 10 annonces et dialogues, 11 mouvement */
+              7 Aujourd'hui, 8 Système, 9 Agenda, 10 Notes, 11 annonces et dialogues, 12 mouvement */
 
 /* 1 — couleurs et mesures ------------------------------------------------------------------ */
 @font-face {
@@ -330,7 +330,168 @@ dialog.ajout-agenda input[type="date"].champ, dialog.ajout-agenda input[type="ti
 .reglages-agenda textarea.champ { min-height: 260px; }
 .reglages-agenda .rangee input[type="text"].champ { width: min(440px, 62vw); }
 
-/* 10 — annonces et dialogues --------------------------------------------------------------------- */
+/* 10 — Notes --------------------------------------------------------------------------------------
+   Bibliothèque : les carnets comme des objets (couverture, dos, ombre portée), rangés par classeur.
+   Éditeur : une table sombre, des feuilles claires ; la barre d'outils reste discrète, l'outil choisi
+   seul est éclairé. */
+.icone-seule {
+  width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 12px;
+  background: none; color: var(--argent);
+}
+.icone-seule svg { width: 22px; height: 22px; }
+.icone-seule:hover { color: var(--lueur); background: rgba(255, 255, 255, .06); }
+.icone-seule:disabled { opacity: .35; cursor: default; background: none; }
+
+.notes-biblio .filtres { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 26px; }
+.notes-biblio .recherche { width: min(320px, 100%); }
+.notes-biblio .fil { margin: -10px 0 22px; color: var(--argent); }
+.notes-biblio .fil a { color: var(--lueur); }
+.classeur + .classeur { margin-top: 38px; }
+.classeur h2 a { color: inherit; text-decoration: none; }
+.classeur h2 a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.grille-carnets { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 30px 24px; }
+.carnet { position: relative; }
+.carnet .ouvrir { display: grid; gap: 4px; width: 100%; padding: 0; border: 0; background: none; text-align: left; border-radius: 12px; }
+.carnet .ouvrir .titre { margin-top: 10px; font-weight: 600; overflow-wrap: anywhere; }
+.carnet .ouvrir .meta, .liste-corbeille .meta { color: var(--cendre); font-size: 12.5px; }
+.couverture {
+  position: relative; aspect-ratio: 210 / 297; border-radius: 5px 12px 12px 5px; overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 16px 30px -18px rgba(0, 0, 0, .95);
+  transition: transform .18s ease;
+}
+.couverture .dos {
+  position: absolute; inset: 0 auto 0 0; width: 9%;
+  background: linear-gradient(90deg, rgba(0, 0, 0, .32), rgba(255, 255, 255, .07) 70%, transparent);
+  border-right: 1px solid rgba(255, 255, 255, .08);
+}
+.couverture .nom {
+  position: absolute; left: 17%; right: 9%; bottom: 11%; font: 300 17px/1.18 var(--titre); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.couverture .etiquette { position: absolute; top: 10px; right: 10px; font-size: 10.5px; font-weight: 650; padding: 1px 6px; border: 1px solid currentColor; border-radius: 6px; opacity: .65; }
+.carnet:not(.dossier) .ouvrir:hover .couverture { transform: translateY(-3px); }
+.carnet a.ouvrir { color: inherit; text-decoration: none; }
+.pile-couvertures { position: relative; aspect-ratio: 210 / 297; }
+.pile-couvertures .couverture { position: absolute; inset: 0; }
+.pile-couvertures .couverture:nth-last-child(2) { transform: rotate(-4deg) translate(-6px, 2px); filter: brightness(.8); }
+.pile-couvertures .couverture:nth-last-child(3) { transform: rotate(4deg) translate(7px, 3px); filter: brightness(.65); }
+.dossier .ouvrir:hover .pile-couvertures .couverture:last-child { transform: translateY(-3px); }
+.carnet .favori { position: absolute; top: -3px; right: 18px; color: var(--lueur); pointer-events: none; }
+.carnet .favori svg { width: 20px; height: 26px; fill: currentColor; }
+.carnet .options { position: absolute; top: 6px; right: 6px; background: rgba(8, 8, 9, .55); color: #fff; border-radius: 50%; opacity: 0; transition: opacity .15s; }
+.carnet:hover .options, .carnet .options:focus-visible { opacity: 1; }
+@media (hover: none) { .carnet .options { opacity: 1; } }
+.vide-liste { color: var(--argent); margin-bottom: 16px; }
+.liste-corbeille { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--trait); }
+.liste-corbeille li { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 12px 2px; border-bottom: 1px solid var(--trait); }
+.liste-corbeille .couverture .nom { display: none; }
+.liste-corbeille .quoi { display: grid; }
+.liste-corbeille .titre { font-weight: 600; overflow-wrap: anywhere; }
+.anciens-carnets { margin-top: 46px; padding-top: 22px; border-top: 1px solid var(--trait); max-width: 620px; display: grid; justify-items: start; gap: 10px; }
+.anciens-carnets h2 { margin: 0; }
+.anciens-carnets p { margin: 0; }
+
+dialog.menu-notes { width: auto; min-width: 250px; max-width: min(380px, calc(100vw - 16px)); padding: 6px; border-radius: 16px; z-index: 30; }
+.menu-notes .groupe-menu { display: grid; padding: 4px 0; }
+.menu-notes .groupe-menu + .groupe-menu { border-top: 1px solid var(--trait); }
+.menu-notes .entree { min-height: 44px; padding: 0 14px; border: 0; border-radius: 10px; background: none; text-align: left; }
+.menu-notes .entree:hover { background: rgba(255, 255, 255, .07); }
+.menu-notes .entree.braise { color: var(--braise); }
+.menu-notes .titre-groupe { margin: 6px 14px 6px; color: var(--cendre); font-size: 12.5px; }
+.choix-papier { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 6px; }
+.choix-papier button { min-height: 44px; padding: 0 11px; border: 1px solid var(--trait-fort); border-radius: 999px; background: none; color: var(--argent); font-size: 13.5px; }
+.choix-papier button[aria-pressed="true"] { background: var(--lueur); color: #0d0d0f; border-color: var(--lueur); }
+.nuancier-couvertures { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 8px 8px; }
+.pastille-couverture { width: 34px; height: 44px; border-radius: 4px 8px 8px 4px; border: 2px solid transparent; padding: 0; }
+.pastille-couverture[aria-pressed="true"] { border-color: var(--lueur); }
+
+dialog.demande label, dialog.nouveau-carnet label, dialog.nouveau-carnet .choix { display: grid; gap: 6px; margin-top: 16px; }
+dialog.demande label > span, dialog.nouveau-carnet label > span, dialog.nouveau-carnet .choix > span { font-size: 13px; color: var(--argent); }
+dialog.demande .boutons, dialog.nouveau-carnet .boutons { margin-top: 24px; }
+dialog.nouveau-carnet { width: min(780px, calc(100vw - 40px)); }
+.nouveau-carnet .deux-colonnes { display: grid; grid-template-columns: minmax(0, 1fr) 170px; gap: 28px; align-items: start; }
+.nouveau-carnet .segment { display: flex; flex-wrap: wrap; border-radius: 22px; }
+.apercu-papier { margin-top: 38px; border-radius: 4px; border: 1px solid var(--trait-fort); background-color: #fff; --l: rgba(28, 28, 36, .2); }
+.apercu-papier[data-sombre="true"] { --l: rgba(255, 255, 255, .16); }
+.apercu-papier[data-modele="ligne"] { background-image: repeating-linear-gradient(to bottom, transparent 0 8px, var(--l) 8px 9px); }
+.apercu-papier[data-modele="carreaux"] { background-image: linear-gradient(var(--l) 1px, transparent 1px), linear-gradient(90deg, var(--l) 1px, transparent 1px); background-size: 6px 6px; }
+.apercu-papier[data-modele="points"] { background-image: radial-gradient(circle, var(--l) 1px, transparent 1.4px); background-size: 8px 8px; }
+.apercu-papier[data-modele="seyes"] { background-image: repeating-linear-gradient(to bottom, transparent 0 2px, var(--l) 2px 2.5px), linear-gradient(90deg, var(--l) 1px, transparent 1px); background-size: 100% 100%, 9px 100%; }
+.apercu-papier[data-modele="cornell"] { background-image: linear-gradient(90deg, transparent 29%, var(--l) 29% 30%, transparent 30%), repeating-linear-gradient(to bottom, transparent 0 8px, var(--l) 8px 9px); }
+.apercu-papier[data-modele="portees"] { background-image: repeating-linear-gradient(to bottom, var(--l) 0 1px, transparent 1px 3px, var(--l) 3px 4px, transparent 4px 6px, var(--l) 6px 7px, transparent 7px 9px, var(--l) 9px 10px, transparent 10px 12px, var(--l) 12px 13px, transparent 13px 26px); }
+
+/* l'éditeur occupe toute la hauteur ; seules les feuilles défilent */
+.editeur { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); background: #0b0b0c; }
+.barre-notes { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; padding: 6px 12px; border-bottom: 1px solid var(--trait); background: var(--suie); z-index: 4; }
+.barre-notes .rangee-haut, .barre-notes .rangee-outils { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.barre-notes .rangee-haut { flex: 1 1 380px; }
+/* la barre garde la même hauteur quel que soit l'outil (la page ne bouge pas sous le stylet) : le
+   passage à deux rangées dépend de la largeur de la fenêtre seulement, pas des réglages affichés */
+.barre-notes .rangee-outils { flex: 1 1 900px; min-width: 0; }
+.barre-notes .pousse { flex: 1; }
+.titre-carnet { min-width: 0; flex: 0 1 280px; height: 40px; padding: 0 8px; border: 0; border-radius: 10px; background: none; font: 300 20px/1 var(--titre); color: var(--lueur); text-overflow: ellipsis; }
+.titre-carnet:hover, .titre-carnet:focus { background: rgba(255, 255, 255, .06); }
+.etat-enregistrement { color: var(--cendre); font-size: 12.5px; white-space: nowrap; }
+.etat-enregistrement[data-etat="erreur"] { color: var(--braise); }
+.numero-page { color: var(--argent); font-size: 13px; padding: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.outils { display: flex; gap: 2px; flex: none; }
+.outil[aria-pressed="true"] { background: var(--lueur); color: #0d0d0f; }
+.outil[aria-pressed="true"]:hover { background: var(--lueur); color: #0d0d0f; }
+.barre-notes .separateur { width: 1px; height: 26px; background: var(--trait-fort); margin: 0 8px; flex: none; }
+.reglage-outil { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.reglage-outil > * { flex: none; }
+.nuancier { display: flex; }
+.pastille-couleur { width: 34px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: none; }
+.pastille-couleur i { width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); }
+.pastille-couleur[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--suie), 0 0 0 4px var(--lueur); }
+.epaisseurs { display: flex; }
+.epaisseur { width: 38px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 10px; background: none; }
+.epaisseur i { width: 20px; border-radius: 4px; background: var(--cendre); }
+.epaisseur[aria-pressed="true"] i { background: var(--lueur); }
+.bascule-mode { min-height: 44px; padding: 0 12px; border: 1px solid var(--trait-fort); border-radius: 999px; background: none; color: var(--argent); font-size: 13.5px; }
+.bascule-mode[aria-pressed="true"] { border-color: var(--lueur); color: var(--lueur); }
+.bascule-doigt[aria-pressed="true"] { color: var(--lueur); background: rgba(255, 255, 255, .1); }
+#page .barre-notes button.enregistre { color: var(--braise); animation: pouls 1.6s ease-in-out infinite; }
+@keyframes pouls { 50% { opacity: .45; } }
+
+.editeur .zone { position: relative; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.feuilles { position: relative; overflow: auto; touch-action: none; overscroll-behavior: contain; outline: none; }
+.feuilles[data-outil="stylo"], .feuilles[data-outil="surligneur"], .feuilles[data-outil="lasso"] { cursor: crosshair; }
+.feuilles[data-outil="texte"] { cursor: text; }
+.feuilles[data-outil="gomme"] { cursor: cell; }
+.pile { position: relative; }
+.feuille { position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(255, 255, 255, .05), 0 18px 40px -22px rgba(0, 0, 0, .95); }
+.feuille .calque { position: absolute; inset: 0; width: 100%; height: 100%; }
+.feuille .marque-signet { position: absolute; top: -3px; right: 26px; color: #2b2b31; pointer-events: none; }
+.feuille .marque-signet svg { width: 20px; height: 28px; fill: currentColor; stroke: none; }
+.boite-selection { position: absolute; border: 1px dashed rgba(170, 170, 190, .95); border-radius: 6px; pointer-events: none; z-index: 2; }
+.boite-selection .poignee { position: absolute; right: -9px; bottom: -9px; width: 18px; height: 18px; border-radius: 6px; background: var(--lueur); box-shadow: 0 0 0 2px #0d0d0f; }
+.menu-selection { position: absolute; display: flex; align-items: center; gap: 2px; padding: 4px 6px; background: var(--fumee); border: 1px solid var(--trait-fort); border-radius: 16px; z-index: 3; box-shadow: 0 16px 34px -14px rgba(0, 0, 0, .9); }
+.zone-texte {
+  position: absolute; z-index: 3; margin: 0; padding: 0 2px; border: 1px dashed rgba(120, 120, 135, .85); border-radius: 4px;
+  background: rgba(255, 255, 255, .02); resize: none; overflow: hidden; white-space: pre; line-height: 1.3;
+  font-family: "Adwaita Sans", "Inter", "Cantarell", sans-serif; min-width: 120px;
+}
+.zone-texte:focus-visible { outline: none; }
+.panneau-pages { width: 188px; overflow-y: auto; border-left: 1px solid var(--trait); background: var(--suie); padding: 10px 12px 24px; }
+.panneau-pages .tete-panneau { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.miniatures { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.miniature { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; border-radius: 4px; }
+.miniature canvas { display: block; width: 100%; height: auto; border-radius: 2px; box-shadow: 0 0 0 1px var(--trait-fort); background: #fff; }
+.miniatures li[aria-current="page"] canvas { box-shadow: 0 0 0 2px var(--lueur); }
+.miniature .num { display: block; margin-top: 4px; text-align: center; font-size: 12px; color: var(--cendre); }
+.miniature .marque-signet { position: absolute; top: -3px; right: 10px; color: #2b2b31; }
+.miniature .marque-signet svg { width: 14px; height: 20px; fill: currentColor; stroke: none; }
+.vide-panneau { margin-top: 8px; }
+.barre-lecture { position: fixed; left: calc(50% + var(--rail) / 2); bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border-radius: 22px; background: var(--fumee); border: 1px solid var(--trait-fort); z-index: 10; }
+.barre-lecture .temps { font-variant-numeric: tabular-nums; color: var(--argent); font-size: 13px; }
+@media (max-width: 900px) {
+  .nouveau-carnet .deux-colonnes { grid-template-columns: minmax(0, 1fr); }
+  .apercu-papier { display: none; }
+  .panneau-pages { position: absolute; right: 0; top: 0; bottom: 0; z-index: 5; box-shadow: -18px 0 40px rgba(0, 0, 0, .6); }
+}
+
+/* 11 — annonces et dialogues --------------------------------------------------------------------- */
 #annonces { position: fixed; left: calc(var(--rail) + 24px); right: 24px; bottom: 22px; display: grid; justify-items: center; gap: 8px; pointer-events: none; z-index: 20; }
 .annonce {
   pointer-events: auto; max-width: min(640px, 100%); padding: 13px 18px; border-radius: 16px; font-weight: 550;
@@ -346,7 +507,7 @@ dialog p { color: var(--argent); margin: 10px 0 22px; }
 dialog .boutons { justify-content: flex-end; }
 .ecran-plein { height: 100%; display: grid; place-content: center; justify-items: start; gap: 14px; padding: var(--marge); max-width: 60ch; }
 
-/* 11 — mouvement et petits écrans ---------------------------------------------------------------- */
+/* 12 — mouvement et petits écrans ---------------------------------------------------------------- */
 @media (prefers-reduced-motion: no-preference) {
   body:not(.calme) .entete h1 { animation: souffle .7s cubic-bezier(.2, .7, .2, 1) both; }
   body:not(.calme) .annonce { animation: monte .22s ease-out both; }

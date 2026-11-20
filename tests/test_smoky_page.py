@@ -17,6 +17,7 @@ import base64
 import fcntl
 import glob
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -24,6 +25,8 @@ import sys
 import threading
 import time
 import unittest
+import urllib.parse
+import zlib
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -76,7 +79,10 @@ class Navigateur:
              "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--remote-debugging-pipe",
              f"--user-data-dir={self.dossier / 'profil'}", "--no-first-run", "--no-default-browser-check",
              "--disable-background-networking", "--disable-component-update", "--disable-sync", "--mute-audio",
-             "--force-dark-mode", f"--window-size={taille[0]},{taille[1]}", "about:blank"],
+             "--force-dark-mode", f"--window-size={taille[0]},{taille[1]}",
+             # micro factice accordé d'office (enregistrements des Notes), lecture du son sans geste
+             "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required",
+             "about:blank"],
             pass_fds=(a, b), stdin=subprocess.DEVNULL, stdout=self.journal, stderr=self.journal, env=env, cwd=str(self.dossier))
         for fd in (vers_r, de_w, a, b):
             os.close(fd)
@@ -238,11 +244,15 @@ class Navigateur:
         with self.etat:
             self.evenements.clear()
 
+    def _du_onglet(self):
+        """Événements de l'onglet en cours seulement (pas ceux, tardifs, d'un onglet déjà fermé)."""
+        with self.etat:
+            return [e for e in self.evenements if e.get("sessionId") == self.session]
+
     def soucis(self, tolerer=()):
         """Erreurs JavaScript, messages d'erreur de la console (dont les blocages CSP), fichiers
         non chargés, réponses en erreur."""
-        with self.etat:
-            evenements = list(self.evenements)
+        evenements = self._du_onglet()
         adresses = {e["params"]["requestId"]: e["params"]["request"]["url"] for e in evenements if e["method"] == "Network.requestWillBeSent"}
         trouves = []
         for e in evenements:
@@ -262,8 +272,7 @@ class Navigateur:
 
     def demandes(self):
         """Adresses demandées par la page depuis le dernier oublier()."""
-        with self.etat:
-            return [e["params"]["request"]["url"] for e in self.evenements if e["method"] == "Network.requestWillBeSent"]
+        return [e["params"]["request"]["url"] for e in self._du_onglet() if e["method"] == "Network.requestWillBeSent"]
 
     def fermer(self):
         if self.proc.poll() is None:
@@ -549,18 +558,23 @@ class TestDansLeNavigateur(unittest.TestCase):
     def test_anciennes_applis(self):
         self.ouvrir()
         nav = self.nav
-        nav.attendre("document.querySelectorAll('#rail a.ancienne').length === 3")
-        self.assertFalse(nav.evaluer("document.querySelector('#rail a[data-page=agenda]').classList.contains('ancienne')"),
-                         "l'agenda est refait dans Smoky")
+        nav.attendre("document.querySelectorAll('#rail a.ancienne').length === 2")
+        for refaite in ("agenda", "notes"):
+            self.assertFalse(nav.evaluer(f"document.querySelector('#rail a[data-page={refaite}]').classList.contains('ancienne')"),
+                             f"{refaite} est refait dans Smoky")
         self.srv.vider()
-        nav.cliquer("Notes", dans="document.querySelector('#rail')")
-        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-notes"]])
+        nav.cliquer("Maison", dans="document.querySelector('#rail')")
+        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-home"]])
         self.assertEqual(nav.evaluer("location.hash"), "#/aujourdhui", "on reste sur la page ; l'ancienne appli s'ouvre à part")
-        nav.attendre("[...document.querySelectorAll('#annonces .annonce')].some((a) => a.textContent === \"Notes s'ouvre dans sa fenêtre.\")")
+        nav.attendre("[...document.querySelectorAll('#annonces .annonce')].some((a) => a.textContent === \"Maison s'ouvre dans sa fenêtre.\")")
         self.srv.vider()
         nav.cliquer("Ouvrir Mail")
         self.assertEqual(self.srv.attendre_commandes(1), [["smoky-mail"]])
-        self.assertNotIn("Ouvrir Agenda", nav.texte())
+        for refaite in ("Ouvrir Agenda", "Ouvrir Notes"):
+            self.assertNotIn(refaite, nav.texte())
+        nav.cliquer("Notes", dans="document.querySelector('#rail')")
+        nav.attendre("location.hash === '#/notes' && document.querySelector('#page h1')?.textContent === 'notes'", quoi="les Notes s'ouvrent dans l'appli")
+        self.assertEqual(self.srv.commandes(), [["smoky-mail"]], "aucune ancienne appli lancée pour les Notes")
         self.sans_souci()
 
     def test_sans_code_d_acces(self):
@@ -770,6 +784,14 @@ class TestAgendaDansLeNavigateur(unittest.TestCase):
         nav.attendre("document.querySelector('.entete .sous').textContent === 'semaine du 30 novembre au 6 décembre'")
         nav.cliquer("Cette semaine")
         nav.attendre("document.querySelectorAll('.element.cours').length === 10")
+        # depuis un cours, ses notes : le classeur de la matière dans la page Notes
+        nav.cliquer("Cours, BDR TD, mardi 17 novembre, 14 h à 16 h, B201")
+        nav.attendre("document.querySelector('dialog.detail[open]') !== null")
+        nav.cliquer("Ouvrir les notes de BDR", dans="document.querySelector('dialog.detail')")
+        nav.attendre("location.hash === '#/notes/classeur/BDR' && document.querySelector('.entete .sous')?.textContent === 'classeur BDR'",
+                     quoi="le classeur BDR s'ouvre dans les Notes")
+        self.assertEqual(nav.evaluer("document.querySelector('#rail a[aria-current]').textContent"), "Notes")
+        self.assertEqual(self.srv.commandes(), [], "aucune ancienne appli lancée")
         self.sans_souci()
 
     def test_planifier_et_cocher(self):
@@ -947,6 +969,733 @@ class TestAgendaDansLeNavigateur(unittest.TestCase):
         nav.evaluer("document.querySelector('.journee a').click()")
         nav.attendre("location.hash === '#/agenda' && document.querySelector('#page h1')?.textContent === 'agenda'")
         self.assertEqual(nav.evaluer("document.querySelector('#rail a[aria-current]').textContent"), "Agenda")
+        self.sans_souci()
+
+
+def png(largeur, hauteur, couleur=(45, 111, 224)):
+    """Une vraie image PNG unie."""
+    def bloc(genre, donnees):
+        return len(donnees).to_bytes(4, "big") + genre + donnees + zlib.crc32(genre + donnees).to_bytes(4, "big")
+    lignes = b"".join(b"\0" + bytes(couleur) * largeur for _ in range(hauteur))
+    return (b"\x89PNG\r\n\x1a\n" + bloc(b"IHDR", largeur.to_bytes(4, "big") + hauteur.to_bytes(4, "big") + bytes([8, 2, 0, 0, 0]))
+            + bloc(b"IDAT", zlib.compress(lignes)) + bloc(b"IEND", b""))
+
+
+def vague(x0, y0, n=50, pas=4, ampleur=10):
+    """Un trait d'écriture : une vague de n points vers la droite."""
+    return [(x0 + i * pas, y0 + math.sin(i / 3) * ampleur) for i in range(n)]
+
+
+@unittest.skipUnless(CHROME, "aucun Chrome ou Chromium trouvé (variable SMOKY_CHROME pour en désigner un)")
+class TestNotesDansLeNavigateur(unittest.TestCase):
+    """La page Notes : bibliothèque, éditeur au stylet, PDF importé puis exporté, son relié à
+    l'écriture. Le stylet est simulé par le protocole de débogage (pointeur « pen », avec sa
+    pression), les doigts par de vrais événements tactiles. Chaque geste est vérifié jusque sur le
+    disque (Notes/Carnets du dossier personnel jetable)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = Serveur()
+        try:
+            cls.nav = Navigateur(CHROME, cls.srv.base)
+        except Exception:
+            cls.srv.stop()
+            raise
+        cls.adresse = f"http://localhost:{cls.srv.port}/smoky"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.nav.fermer()
+        cls.srv.stop()
+
+    def setUp(self):
+        # bibliothèque vide et réglages des outils oubliés à chaque essai
+        self.srv.arreter()
+        shutil.rmtree(self.srv.environnement["SMOKY_DONNEES"], ignore_errors=True)
+        shutil.rmtree(self.srv.home / "Notes", ignore_errors=True)
+        self.srv.demarrer()
+        self.nav.dimensions = (1280, 800)
+        self.nav.nouvel_onglet()
+        self.srv.vider()
+
+    # --- aides ---------------------------------------------------------------------------------------
+    def ouvrir(self, suite="&a=/notes"):
+        self.nav.aller(f"{self.adresse}#k={self.srv.jeton}{suite}")
+        self.nav.attendre("document.querySelector('#page h1, .editeur .feuilles') !== null", quoi="la page s'affiche")
+
+    def creer(self, titre="Algèbre", **valeurs):
+        code, r = self.srv.json("POST", "/api/notes", {"action": "creer", "titre": titre, **valeurs})
+        self.assertEqual(code, 200, r)
+        return r["carnet"]
+
+    def prete(self, pid):
+        self.nav.attendre(f"document.querySelector('.feuille[data-page=\"{pid}\"]')?.dataset.prete === '1'", quoi=f"la page {pid} est prête")
+
+    def editeur(self, carnet):
+        """Ouvre le carnet ; → l'identifiant de sa première page, prête à recevoir l'encre."""
+        self.ouvrir(f"&a=/notes/c/{carnet['id']}")
+        pid = carnet["pages"][0]["id"]
+        self.prete(pid)
+        return pid
+
+    def feuille(self, pid):
+        """[gauche, haut, largeur, hauteur] de la page à l'écran."""
+        return self.nav.evaluer(f"""(() => {{ const r = document.querySelector('.feuille[data-page="{pid}"]').getBoundingClientRect();
+            return [r.left, r.top, r.width, r.height]; }})()""")
+
+    def stylo(self, points, pression=0.6, genre="pen"):
+        """Un geste au stylet (ou à la souris) : appui, glissé point par point, relâché."""
+        nav = self.nav
+        (x0, y0), (x1, y1) = points[0], points[-1]
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseMoved", x=x0, y=y0, pointerType=genre)
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mousePressed", x=x0, y=y0, button="left", buttons=1, clickCount=1,
+                  pointerType=genre, force=pression)
+        for x, y in points[1:]:
+            nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseMoved", x=x, y=y, button="left", buttons=1, pointerType=genre, force=pression)
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseReleased", x=x1, y=y1, button="left", buttons=0, clickCount=1,
+                  pointerType=genre, force=0)
+
+    def doigts(self, etapes):
+        """Gestes aux doigts : chaque étape donne les doigts posés ; une étape vide les lève tous."""
+        avant = 0
+        for pts in etapes:
+            genre = "touchEnd" if not pts else "touchStart" if len(pts) > avant else "touchMove"
+            self.nav.ordre("Input.dispatchTouchEvent", page=True, type=genre,
+                           touchPoints=[{"x": x, "y": y, "id": i, "radiusX": 6, "radiusY": 6, "force": 1} for i, (x, y) in enumerate(pts)])
+            avant = len(pts)
+
+    def raccourci(self, touche, code, ctrl=False, maj=False):
+        for genre in ("keyDown", "keyUp"):
+            self.nav.ordre("Input.dispatchKeyEvent", page=True, type=genre, key=touche.upper() if maj else touche, code=f"Key{touche.upper()}",
+                           windowsVirtualKeyCode=code, nativeVirtualKeyCode=code, modifiers=(2 if ctrl else 0) | (8 if maj else 0))
+
+    def page_serveur(self, cid, pid):
+        return self.srv.json("GET", f"/api/notes/{cid}/pages/{pid}")[1]
+
+    def carnet_serveur(self, cid):
+        return self.srv.json("GET", f"/api/notes/{cid}")[1]
+
+    def carnets(self):
+        return self.srv.json("GET", "/api/notes")[1]["carnets"]
+
+    def enregistre(self, lire, condition, quoi):
+        """Attend que ce qui est enregistré remplisse la condition ; → ce qui a été lu."""
+        dernier = {}
+
+        def essai():
+            dernier["v"] = lire()
+            return condition(dernier["v"])
+        if not attendre(essai, 10, 0.1):
+            self.fail(f"jamais enregistré : {quoi}\n{json.dumps(dernier.get('v'), ensure_ascii=False)[:900]}")
+        return dernier["v"]
+
+    def annonce(self, texte):
+        self.nav.attendre(f"[...document.querySelectorAll('#annonces .annonce')].some((a) => a.textContent === {json.dumps(texte)})",
+                          quoi=f"annonce « {texte} »")
+
+    def encre(self, pid, x, y, largeur=595.28):
+        """Opacité de l'encre (0 à 255) autour du point (x, y) de la page, en points PDF."""
+        return self.nav.evaluer(f"""(() => {{ const c = document.querySelector('.feuille[data-page="{pid}"] canvas.encre');
+            const s = c.width / {largeur}; const d = c.getContext('2d').getImageData(Math.round({x} * s) - 3, Math.round({y} * s) - 3, 7, 7).data;
+            let m = 0; for (let i = 3; i < d.length; i += 4) m = Math.max(m, d[i]); return m; }})()""")
+
+    def ids(self, page):
+        return [t["id"] for t in page["traits"]]
+
+    def retarder_envois(self, secondes):
+        """Les pages envoyées au serveur (PUT …/pages/…) mettent `secondes` à partir, comme sur une
+        connexion lente ; les lectures passent tout de suite. → fonction qui arrête le retard."""
+        nav = self.nav
+        nav.ordre("Fetch.enable", page=True, patterns=[{"urlPattern": "*/api/notes/*/pages/*", "requestStage": "Request"}])
+        fini = threading.Event()
+        vus = set()
+
+        def relayer():
+            while not fini.is_set():
+                with nav.etat:
+                    pauses = [e for e in nav.evenements if e["method"] == "Fetch.requestPaused" and e["params"]["requestId"] not in vus]
+                for e in pauses:
+                    vus.add(e["params"]["requestId"])
+                    lent = e["params"]["request"]["method"] == "PUT"
+                    threading.Timer(secondes if lent else 0, lambda r=e["params"]["requestId"]: nav.ordre(
+                        "Fetch.continueRequest", page=True, requestId=r)).start()
+                time.sleep(0.02)
+        threading.Thread(target=relayer, daemon=True).start()
+
+        def arreter():
+            fini.set()
+            nav.ordre("Fetch.disable", page=True)
+        return arreter
+
+    def sans_souci(self, tolerer=()):
+        self.assertEqual(self.nav.soucis(tolerer), [], "erreurs relevées dans le navigateur")
+        texte = self.nav.texte()
+        for mot in ("null", "undefined", "NaN", "[object"):
+            self.assertNotIn(mot, texte, "une valeur absente s'affiche en toutes lettres")
+
+    # ---------------------------------------------------------------------------------------------
+    def test_premier_carnet(self):
+        ancien = self.srv.home / "Notes" / "Smoky Notes" / "nb1"
+        ancien.mkdir(parents=True)
+        (ancien / "notebook.json").write_text("{}")
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelector('.invitation h2')?.textContent === 'ton premier carnet'", quoi="invitation au premier carnet")
+        nav.attendre("document.querySelector('.anciens-carnets h2')?.textContent === \"carnets d'avant\"", quoi="rappel des carnets d'avant")
+        nav.capture("notes-vide")
+        self.srv.vider()
+        nav.cliquer("Ouvrir l'ancien Smoky Notes")
+        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-notes"]])
+        self.annonce("L'ancien Smoky Notes s'ouvre dans sa fenêtre.")
+        nav.cliquer("Nouveau carnet", dans="document.querySelector('.invitation')")
+        nav.attendre("document.querySelector('dialog.nouveau-carnet[open]') !== null")
+        self.assertEqual(nav.evaluer("document.activeElement.getAttribute('aria-label')"), "Nom du carnet", "le curseur est dans le nom")
+        # une matière choisie comme classeur donne son nom au carnet et son papier habituel (Algèbre : quadrillé)
+        nav.evaluer("""(() => { const c = document.querySelector('dialog.nouveau-carnet input[aria-label="Classeur"]');
+            c.value = 'Algèbre'; c.dispatchEvent(new Event('change')); })()""")
+        self.assertEqual(nav.evaluer("document.querySelector('dialog.nouveau-carnet input[aria-label=\"Nom du carnet\"]').value"), "Algèbre")
+        self.assertEqual(nav.evaluer("[...document.querySelectorAll('dialog.nouveau-carnet [aria-pressed=true]')].map((b) => b.textContent || b.getAttribute('aria-label'))"),
+                         ["Quadrillé", "Blanc", "A4", "Couverture Fumée"])
+        nav.cliquer("Ivoire", dans="document.querySelector('dialog.nouveau-carnet')")
+        nav.cliquer("Couverture Encre", dans="document.querySelector('dialog.nouveau-carnet')")
+        self.assertEqual(nav.evaluer("document.querySelector('.apercu-papier').dataset.modele"), "carreaux", "l'aperçu montre le papier choisi")
+        nav.capture("notes-nouveau")
+        nav.cliquer("Créer", dans="document.querySelector('dialog.nouveau-carnet')")
+        nav.attendre("location.hash.startsWith('#/notes/c/') && document.querySelector('.titre-carnet')?.value === 'Algèbre'", quoi="le carnet s'ouvre")
+        [c] = self.carnets()
+        self.assertEqual((c["titre"], c["classeur"], c["couverture"], c["papier"]["modele"], c["papier"]["couleur"]),
+                         ("Algèbre", "Algèbre", "encre", "carreaux", "ivoire"))
+        self.assertEqual(self.carnet_serveur(c["id"])["papier"], {"format": "a4", "modele": "carreaux", "couleur": "ivoire"})
+        nav.cliquer("Revenir aux carnets")
+        nav.attendre("location.hash === '#/notes' && document.querySelectorAll('.carnet').length === 1")
+        self.assertEqual(nav.evaluer("document.querySelector('.carnet .ouvrir').getAttribute('aria-label')"), "Ouvrir Algèbre, Algèbre, 1 page, à l'instant")
+        self.assertFalse(nav.evaluer("!!document.querySelector('.invitation')"))
+        self.sans_souci()
+
+    def test_ecrire_annuler_retablir(self):
+        c = self.creer("Méca")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        z = w / 595.28
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        self.stylo(vague(x + 100, y + 150))
+        self.stylo([(x + 100 + i * 4, y + 220) for i in range(40)], pression=0.9)
+        t1, t2 = self.enregistre(lire, lambda p: len(p["traits"]) == 2, "les deux traits")["traits"]
+        self.assertEqual((t1["outil"], t1["couleur"], t1["largeur"]), ("stylo", "#141417", 2))
+        self.assertAlmostEqual(t1["points"][0], 100 / z, delta=1.5, msg="les points sont dans l'unité de la page, pas de l'écran")
+        self.assertAlmostEqual(t1["points"][1], 150 / z, delta=1.5)
+        self.assertTrue(all(abs(p - 0.6) < 0.05 for p in t1["points"][2::3]), "la pression du stylet est gardée")
+        self.assertTrue(all(abs(p - 0.9) < 0.05 for p in t2["points"][2::3]))
+        self.assertGreater(self.encre(pid, 180 / z, 220 / z), 200, "le trait est peint")
+        self.assertEqual(nav.evaluer("document.querySelector('.etat-enregistrement').textContent"), "Enregistré")
+        nav.capture("notes-editeur")
+        nav.cliquer("Annuler")
+        self.enregistre(lire, lambda p: self.ids(p) == [t1["id"]], "annulé : il reste le premier trait")
+        self.raccourci("z", 90, ctrl=True)
+        self.enregistre(lire, lambda p: p["traits"] == [], "Ctrl+Z : page vide")
+        self.assertLess(self.encre(pid, 180 / z, 220 / z), 30, "la page est effacée à l'écran aussi")
+        self.raccourci("z", 90, ctrl=True, maj=True)
+        self.enregistre(lire, lambda p: self.ids(p) == [t1["id"]], "Ctrl+Maj+Z : rétabli")
+        nav.cliquer("Rétablir")
+        self.enregistre(lire, lambda p: self.ids(p) == [t1["id"], t2["id"]], "tout rétabli")
+        self.assertTrue(nav.evaluer("document.querySelector('[aria-label=\"Rétablir\"]').disabled"))
+        self.sans_souci()
+
+    def test_surligneur_et_gommes(self):
+        c = self.creer("Bio")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        z = w / 595.28
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        nav.cliquer("Surligneur")
+        self.stylo([(x + 80 + i * 6, y + 300) for i in range(40)])
+        [s] = self.enregistre(lire, lambda p: len(p["traits"]) == 1, "trait de surligneur")["traits"]
+        self.assertEqual((s["outil"], s["couleur"], s["largeur"]), ("surligneur", "#ffe45c", 14))
+        # la gomme « trait entier » efface tout ce qu'elle touche
+        nav.cliquer("Gomme")
+        self.assertEqual(self.feuille(pid)[:2], [x, y], "changer d'outil ne déplace pas la page sous le stylet")
+        self.stylo([(x + 150, y + 280 + i * 4) for i in range(12)])
+        self.enregistre(lire, lambda p: p["traits"] == [], "surligneur gommé")
+        nav.cliquer("Annuler")
+        self.enregistre(lire, lambda p: self.ids(p) == [s["id"]], "gomme annulée")
+        # la gomme précise coupe le trait là où elle passe
+        nav.cliquer("Stylo")
+        self.stylo([(x + 80 + i * 6, y + 420) for i in range(50)])
+        trait = self.enregistre(lire, lambda p: len(p["traits"]) == 2, "trait au stylo")["traits"][1]
+        nav.cliquer("Gomme")
+        nav.cliquer("Précise")
+        self.assertEqual(nav.evaluer("document.querySelector('.bascule-mode').getAttribute('aria-pressed')"), "true")
+        self.stylo([(x + 250, y + 395 + i * 5) for i in range(11)])
+        p = self.enregistre(lire, lambda p: len(p["traits"]) == 3, "trait coupé en deux")
+        gauche, droite = sorted((t for t in p["traits"] if t["outil"] == "stylo"), key=lambda t: t["points"][0])
+        self.assertLess(max(gauche["points"][0::3]), 250 / z - 3)
+        self.assertGreater(min(droite["points"][0::3]), 250 / z + 3)
+        self.assertLess(self.encre(pid, 250 / z, 420 / z), 30, "le passage de la gomme est vide à l'écran")
+        nav.cliquer("Annuler")
+        self.enregistre(lire, lambda p: sorted(self.ids(p)) == sorted([s["id"], trait["id"]]), "coupe annulée : le trait revient entier")
+        self.enregistre(lambda: self.srv.json("GET", "/api/notes")[1]["preferences"], lambda r: r.get("gomme", {}).get("precise") is True,
+                        "la gomme précise est retenue pour la prochaine fois")
+        # un réglage changé juste avant de quitter le carnet est gardé aussi
+        nav.cliquer("Précise")
+        nav.cliquer("Revenir aux carnets")
+        self.enregistre(lambda: self.srv.json("GET", "/api/notes")[1]["preferences"], lambda r: r.get("gomme", {}).get("precise") is False,
+                        "réglage changé à l'instant de partir")
+        self.sans_souci()
+
+    def test_lasso(self):
+        c = self.creer("Chimie")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        z = w / 595.28
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        self.stylo(vague(x + 200, y + 200, n=20))
+        [t] = self.enregistre(lire, lambda p: len(p["traits"]) == 1, "trait")["traits"]
+        nav.cliquer("Lasso")
+        cx, cy = x + 240, y + 200
+        self.stylo([(cx + 90 * math.cos(a * math.pi / 10), cy + 50 * math.sin(a * math.pi / 10)) for a in range(21)])
+        nav.attendre("document.querySelector('.boite-selection') !== null && document.querySelector('.menu-selection') !== null", quoi="sélection et son menu")
+        nav.capture("notes-lasso")
+        # glisser la sélection : 80 px à droite, 60 px plus bas
+        bx, by = nav.evaluer("(() => { const r = document.querySelector('.boite-selection').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+        self.stylo([(bx + i * 8, by + i * 6) for i in range(11)])
+        p = self.enregistre(lire, lambda p: p["traits"] and abs(p["traits"][0]["points"][0] - t["points"][0] - 80 / z) < 1.5, "trait déplacé")
+        self.assertAlmostEqual(p["traits"][0]["points"][1] - t["points"][1], 60 / z, delta=1.5)
+        self.assertEqual(p["traits"][0]["id"], t["id"], "c'est le même trait, déplacé")
+        nav.cliquer("Supprimer la sélection")
+        self.enregistre(lire, lambda p: p["traits"] == [], "sélection supprimée")
+        self.raccourci("z", 90, ctrl=True)
+        self.enregistre(lire, lambda p: self.ids(p) == [t["id"]], "suppression annulée")
+        self.sans_souci()
+
+    def test_texte(self):
+        c = self.creer("Maths")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        z = w / 595.28
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        nav.cliquer("Texte")
+        self.stylo([(x + 120, y + 300)] * 2, genre="mouse")
+        nav.attendre("document.activeElement?.classList.contains('zone-texte')", quoi="zone de texte prête")
+        nav.ordre("Input.insertText", page=True, text="Théorème de Pythagore")
+        nav.touche("Escape", 27)
+        [t] = self.enregistre(lire, lambda p: len(p["textes"]) == 1, "texte")["textes"]
+        self.assertEqual((t["texte"], t["taille"], t["couleur"]), ("Théorème de Pythagore", 16, "#141417"))
+        self.assertAlmostEqual(t["x"], 120 / z, delta=1.5)
+        # un deuxième texte, puis toucher ailleurs : le deuxième est gardé (pas perdu en ouvrant le troisième)
+        self.stylo([(x + 120, y + 400)] * 2, genre="mouse")
+        nav.attendre("document.activeElement?.classList.contains('zone-texte') && document.activeElement.value === ''")
+        nav.ordre("Input.insertText", page=True, text="a² + b² = c²")
+        self.stylo([(x + 120, y + 520)] * 2, genre="mouse")
+        nav.attendre("document.querySelectorAll('.zone-texte').length === 1 && document.activeElement.value === ''", quoi="une seule zone ouverte, la nouvelle")
+        nav.touche("Escape", 27)
+        self.enregistre(lire, lambda p: sorted(x["texte"] for x in p["textes"]) == sorted(["a² + b² = c²", "Théorème de Pythagore"]), "deux textes")
+        # retoucher un texte le rouvre ; vidé, il disparaît
+        self.stylo([(x + 124, y + 300)] * 2, genre="mouse")
+        nav.attendre("document.activeElement?.value === 'Théorème de Pythagore'", quoi="le texte se rouvre")
+        nav.evaluer("document.activeElement.value = ''")
+        nav.touche("Escape", 27)
+        self.enregistre(lire, lambda p: [x["texte"] for x in p["textes"]] == ["a² + b² = c²"], "texte vidé, retiré")
+        self.sans_souci()
+
+    def test_pages_et_signets(self):
+        c = self.creer("Physique")
+        self.editeur(c)
+        nav = self.nav
+        lire = lambda: self.carnet_serveur(c["id"])  # noqa: E731
+
+        def menu(entree):
+            nav.cliquer("Plus d'options")
+            nav.attendre("document.querySelector('dialog.menu-notes[open]') !== null")
+            nav.cliquer(entree, dans="document.querySelector('dialog.menu-notes')")
+        menu("Ajouter une page après celle-ci")
+        p1, p2 = self.enregistre(lire, lambda x: len(x["pages"]) == 2, "page ajoutée")["pages"]
+        self.assertEqual((p2["modele"], p2["couleur"], p2["w"]), (p1["modele"], p1["couleur"], p1["w"]), "même papier que la page d'avant")
+        nav.attendre("document.querySelector('.numero-page').textContent === '2 / 2'", quoi="la nouvelle page est à l'écran")
+        menu("Poser un signet sur cette page")
+        self.annonce("Signet posé sur la page 2.")
+        self.enregistre(lire, lambda x: x["pages"][1]["signet"] is True, "signet")
+        menu("Quadrillé")
+        self.enregistre(lire, lambda x: x["pages"][1]["modele"] == "carreaux", "papier de la page changé")
+        nav.cliquer("Pages")
+        nav.attendre("document.querySelectorAll('.miniature').length === 2")
+        self.assertEqual(nav.evaluer("[...document.querySelectorAll('.miniature')].map((b) => b.getAttribute('aria-label'))"),
+                         ["Aller à la page 1", "Aller à la page 2 (signet)"])
+        nav.cliquer("Signets")
+        nav.attendre("document.querySelectorAll('.miniature').length === 1")
+        nav.capture("notes-pages")
+        nav.cliquer("Signets")
+        nav.cliquer("Aller à la page 1")
+        nav.attendre("document.querySelector('.numero-page').textContent === '1 / 2'")
+        nav.cliquer("Aller à la page 2 (signet)")
+        nav.attendre("document.querySelector('.numero-page').textContent === '2 / 2'")
+        self.prete(p2["id"])
+        # une page écrite ne part qu'après confirmation, avec son fichier
+        x, y, _, _ = self.feuille(p2["id"])
+        self.stylo(vague(x + 100, y + 120))
+        self.enregistre(lambda: self.page_serveur(c["id"], p2["id"]), lambda p: len(p["traits"]) == 1, "page 2 écrite")
+        fichier = self.srv.home / "Notes" / "Carnets" / c["id"] / "pages" / f"{p2['id']}.json"
+        self.assertTrue(fichier.is_file())
+        menu("Supprimer cette page")
+        nav.attendre("document.querySelector('dialog[open] h2')?.textContent === 'Supprimer la page 2 ?'")
+        nav.cliquer("Supprimer la page", dans="document.querySelector('dialog[open]')")
+        self.enregistre(lire, lambda x: [p["id"] for p in x["pages"]] == [p1["id"]], "page supprimée")
+        self.assertFalse(fichier.exists(), "son fichier part avec elle")
+        menu("Supprimer cette page")
+        self.annonce("Un carnet garde au moins une page.")
+        self.sans_souci()
+
+    def pdf_d_essai(self, pages=2):
+        """Un vrai PDF A4 de deux pages, fabriqué par Chrome lui-même."""
+        html = ("<style>@page { size: A4; margin: 0 } body { margin: 0; font: 46px sans-serif; color: #000 }"
+                " section { padding: 70px } section + section { break-before: page }</style>"
+                + "".join(f"<section><h1>Chapitre {i + 1}</h1><p>Énergie cinétique</p></section>" for i in range(pages)))
+        self.nav.aller("data:text/html;charset=utf-8," + urllib.parse.quote(html))
+        self.nav.attendre("document.readyState === 'complete' && document.querySelectorAll('section').length > 0")
+        donnees = base64.b64decode(self.nav.ordre("Page.printToPDF", page=True, preferCSSPageSize=True)["data"])
+        fichier = self.srv.base / "cours de méca.pdf"
+        fichier.write_bytes(donnees)
+        return fichier
+
+    def test_pdf_importe_annote_exporte(self):
+        fichier = self.pdf_d_essai()
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelector('.invitation') !== null")
+        objet = nav.ordre("Runtime.evaluate", page=True, expression="document.querySelector('.notes-biblio input[type=file]')")["result"]["objectId"]
+        nav.ordre("DOM.setFileInputFiles", page=True, files=[str(fichier)], objectId=objet)
+        nav.attendre("location.hash.startsWith('#/notes/c/') && document.querySelector('.feuille') !== null", delai=30, quoi="le PDF devient un carnet")
+        [c] = self.carnets()
+        self.assertEqual((c["titre"], c["pages"], c["pdf"]), ("cours de méca", 2, True))
+        p1, p2 = self.carnet_serveur(c["id"])["pages"]
+        self.assertEqual(([p1["fond"]["page"], p2["fond"]["page"]], p1["fond"]["pdf"]), ([0, 1], p2["fond"]["pdf"]))
+        self.assertRegex(p1["fond"]["pdf"], r"^[0-9a-f]{24}\.pdf$")
+        self.assertEqual((round(p1["w"]), round(p1["h"])), (595, 842), "format de la page du PDF (A4)")
+        garde = self.srv.home / "Notes" / "Carnets" / c["id"] / "fichiers" / p1["fond"]["pdf"]
+        self.assertEqual(garde.read_bytes(), fichier.read_bytes(), "le PDF est gardé tel quel")
+        nav.attendre(f"""(() => {{ const c = document.querySelector('.feuille[data-page="{p1['id']}"] canvas.fond'); if (!c || !c.width) return false;
+            const d = c.getContext('2d').getImageData(0, 0, c.width, Math.round(c.height / 4)).data;
+            let sombres = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 90 && d[i + 1] < 90 && d[i + 2] < 90) sombres++;
+            return sombres > 400; }})()""", delai=30, quoi="la page du PDF est peinte (titre en noir)")
+        nav.capture("notes-pdf")
+        # annoter la première page, puis exporter le carnet
+        self.prete(p1["id"])
+        x, y, w, _ = self.feuille(p1["id"])
+        z = w / p1["w"]
+        self.stylo([(x + 100 + i * 5, y + 420) for i in range(60)], pression=0.8)
+        self.enregistre(lambda: self.page_serveur(c["id"], p1["id"]), lambda p: len(p["traits"]) == 1, "annotation")
+        nav.cliquer("Plus d'options")
+        nav.cliquer("Exporter en PDF (dans Notes/PDF)", dans="document.querySelector('dialog.menu-notes')")
+        self.annonce("PDF enregistré dans Notes/PDF/cours de méca.pdf.")
+        exporte = (self.srv.home / "Notes" / "PDF" / "cours de méca.pdf").read_bytes()
+        self.assertEqual(exporte[:5], b"%PDF-")
+        # relu par PDF.js : deux pages, le texte du cours y est encore, l'annotation aussi, là où elle a été écrite
+        relu = nav.evaluer(f"""(async () => {{
+            const pdfjs = await import('/vendor/pdf.min.mjs');
+            pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';
+            const octets = Uint8Array.from(atob({json.dumps(base64.b64encode(exporte).decode())}), (c) => c.charCodeAt(0));
+            const doc = await pdfjs.getDocument({{ data: octets, isEvalSupported: false }}).promise;
+            const page = await doc.getPage(1);
+            const texte = (await page.getTextContent()).items.map((i) => i.str).join(' ');
+            const vue = page.getViewport({{ scale: 1 }});
+            const toile = document.createElement('canvas');
+            toile.width = Math.round(vue.width); toile.height = Math.round(vue.height);
+            await page.render({{ canvasContext: toile.getContext('2d'), viewport: vue }}).promise;
+            const encre = (x, y) => {{ const d = toile.getContext('2d').getImageData(Math.round(x), Math.round(y) - 4, 1, 9).data;
+                let s = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 110 && d[i + 1] < 110 && d[i + 2] < 110) s++; return s; }};
+            return {{ pages: doc.numPages, texte, ecrit: encre({250 / z}, {420 / z}), vide: encre({250 / z}, {520 / z}) }};
+        }})()""")
+        self.assertEqual(relu["pages"], 2)
+        self.assertIn("Chapitre 1", relu["texte"])
+        self.assertGreater(relu["ecrit"], 0, "l'annotation est dans le PDF exporté")
+        self.assertEqual(relu["vide"], 0)
+        self.sans_souci()
+
+    def test_bibliotheque(self):
+        self.creer("Algèbre linéaire", classeur="Algèbre")
+        self.creer("Brouillon")
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.carnet').length === 2")
+
+        def menu(titre, entree):
+            nav.cliquer(f"Options de {titre}")
+            nav.attendre("document.querySelector('dialog.menu-notes[open]') !== null")
+            nav.cliquer(entree, dans="document.querySelector('dialog.menu-notes')")
+
+        def resume(titre):
+            return next((x for x in self.carnets() if x["titre"] == titre), None)
+        menu("Brouillon", "Ajouter aux favoris")
+        self.enregistre(lambda: resume("Brouillon"), lambda x: x["favori"], "favori")
+        nav.attendre("document.querySelectorAll('.carnet .favori').length === 1")
+        nav.cliquer("Favoris")
+        nav.attendre("location.hash === '#/notes/favoris' && document.querySelectorAll('.carnet').length === 1")
+        nav.cliquer("Tous")
+        nav.attendre("location.hash === '#/notes' && document.querySelectorAll('.carnet').length === 2")
+        menu("Brouillon", "Renommer")
+        nav.attendre("document.querySelector('dialog.demande[open]') !== null")
+        nav.ecrire("dialog.demande input", "Brouillon de méca")
+        nav.cliquer("Renommer", dans="document.querySelector('dialog.demande')")
+        self.enregistre(lambda: resume("Brouillon de méca"), lambda x: x is not None, "renommé")
+        nav.attendre("[...document.querySelectorAll('.carnet .titre')].some((t) => t.textContent === 'Brouillon de méca')")
+        menu("Brouillon de méca", "Ranger dans un classeur")
+        nav.ecrire("dialog.demande input", "MNA")
+        nav.cliquer("Ranger", dans="document.querySelector('dialog.demande')")
+        self.enregistre(lambda: resume("Brouillon de méca"), lambda x: x["classeur"] == "MNA", "rangé")
+        menu("Brouillon de méca", "Couverture Braise")
+        self.enregistre(lambda: resume("Brouillon de méca"), lambda x: x["couverture"] == "braise", "couverture")
+        menu("Brouillon de méca", "Dupliquer")
+        self.enregistre(self.carnets, lambda x: len(x) == 3, "dupliqué")
+        nav.attendre("document.querySelectorAll('.carnet').length === 3")
+        nav.ecrire("input.recherche", "méca")
+        nav.attendre("document.querySelectorAll('.carnet').length === 2", quoi="la recherche filtre")
+        self.assertTrue(nav.evaluer("document.activeElement.classList.contains('recherche')"), "le curseur reste dans la recherche")
+        nav.ecrire("input.recherche", "")
+        nav.attendre("document.querySelectorAll('.carnet').length === 3")
+        nav.capture("notes-bibliotheque")
+        corbeille_1 = "[...document.querySelectorAll('.segment button')].some((b) => b.textContent === 'Corbeille (1)')"
+        menu("Brouillon de méca (copie)", "Mettre à la corbeille")
+        self.annonce("Carnet mis à la corbeille.")
+        nav.attendre(f"document.querySelectorAll('.carnet').length === 2 && {corbeille_1}")
+        nav.cliquer("Corbeille (1)")
+        nav.attendre("document.querySelectorAll('.liste-corbeille li').length === 1")
+        nav.cliquer("Restaurer")
+        nav.attendre("document.querySelector('.vide-liste')?.textContent === 'La corbeille est vide.'")
+        nav.cliquer("Tous")
+        nav.attendre("document.querySelectorAll('.carnet').length === 3")
+        menu("Brouillon de méca (copie)", "Mettre à la corbeille")
+        nav.attendre(corbeille_1)
+        nav.cliquer("Corbeille (1)")
+        nav.attendre("document.querySelectorAll('.liste-corbeille li').length === 1")
+        nav.cliquer("Effacer")
+        nav.attendre("document.querySelector('dialog[open] h2')?.textContent.startsWith('Effacer « Brouillon de méca (copie) »')")
+        nav.cliquer("Effacer", dans="document.querySelector('dialog[open]')")
+        nav.attendre("document.querySelector('.vide-liste')?.textContent === 'La corbeille est vide.'")
+        self.assertEqual(self.srv.json("GET", "/api/notes")[1]["corbeille"], [])
+        self.sans_souci()
+
+    def test_classeurs(self):
+        for i in range(4):
+            self.creer(f"Algèbre {i + 1}", classeur="Algèbre")
+        for i in range(2):
+            self.creer(f"BDR {i + 1}", classeur="BDR")
+        self.creer("Idées")
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('section.classeur').length === 3", quoi="derniers carnets, classeurs, sans classeur")
+        self.assertEqual(nav.evaluer("[...document.querySelectorAll('section.classeur h2')].map((h) => h.textContent)"),
+                         ["derniers carnets", "classeurs", "sans classeur"])
+        self.assertEqual(sorted(nav.evaluer("[...document.querySelectorAll('.dossier .ouvrir')].map((a) => a.getAttribute('aria-label'))")),
+                         ["Classeur Algèbre, 4 carnets", "Classeur BDR, 2 carnets"])
+        nav.capture("notes-classeurs")
+        nav.evaluer("[...document.querySelectorAll('.dossier .ouvrir')].find((a) => a.getAttribute('aria-label').startsWith('Classeur Algèbre')).click()")
+        nav.attendre("location.hash === '#/notes/classeur/Alg%C3%A8bre' && document.querySelectorAll('.carnet').length === 4")
+        self.assertEqual(nav.evaluer("document.querySelector('.entete .sous').textContent"), "classeur Algèbre")
+        nav.cliquer("Nouveau carnet")
+        nav.attendre("document.querySelector('dialog.nouveau-carnet[open]') !== null")
+        self.assertEqual(nav.evaluer("document.querySelector('dialog.nouveau-carnet input[aria-label=\"Classeur\"]').value"), "Algèbre",
+                         "un carnet créé depuis un classeur y est rangé")
+        nav.touche("Escape", 27)
+        nav.attendre("document.querySelector('dialog.nouveau-carnet') === null")
+        nav.cliquer("Tous les carnets")
+        nav.attendre("location.hash === '#/notes' && document.querySelectorAll('section.classeur').length === 3")
+        # un classeur sans carnet (venu de l'agenda) invite à en créer un
+        nav.evaluer("location.hash = '#/notes/classeur/Optique'")
+        nav.attendre("document.querySelector('.vide-liste')?.textContent === 'Ce classeur est vide.'")
+        self.assertIn("Nouveau carnet dans Optique", nav.texte())
+        self.sans_souci()
+
+    def test_petit_ecran(self):
+        c = self.creer("Algèbre", classeur="Algèbre")
+        self.nav.taille(760, 1000)
+        self.ouvrir()
+        nav = self.nav
+        nav.attendre("document.querySelectorAll('.carnet').length === 1")
+        self.assertLessEqual(nav.evaluer("document.documentElement.scrollWidth"), 760, "pas de défilement horizontal")
+        petits = nav.evaluer("""[...document.querySelectorAll('.bouton, .segment button, .carnet .options')]
+            .filter((e) => e.offsetParent !== null).map((e) => [e.textContent.trim() || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)])
+            .filter(([, h]) => h < 44)""")
+        self.assertEqual(petits, [], "commandes trop petites pour le doigt")
+        nav.capture("notes-etroit")
+        nav.evaluer(f"location.hash = '#/notes/c/{c['id']}'")
+        self.prete(c["pages"][0]["id"])
+        self.assertLessEqual(nav.evaluer("document.documentElement.scrollWidth"), 760)
+        petits = nav.evaluer("""[...document.querySelectorAll('.barre-notes button')]
+            .filter((e) => e.offsetParent !== null).map((e) => [e.textContent.trim() || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)])
+            .filter(([, h]) => h < 44)""")
+        self.assertEqual(petits, [], "outils trop petits pour le doigt")
+        dehors = nav.evaluer("""[...document.querySelectorAll('.barre-notes .rangee-haut button, .barre-notes > * > .icone-seule')]
+            .filter((e) => e.getBoundingClientRect().right > innerWidth + 0.5).map((e) => e.getAttribute('aria-label'))""")
+        self.assertEqual(dehors, [], "toute la barre tient dans la fenêtre")
+        place = self.feuille(c["pages"][0]["id"])
+        for outil in ("Gomme", "Lasso", "Surligneur", "Stylo"):
+            nav.cliquer(outil)
+            self.assertEqual(self.feuille(c["pages"][0]["id"]), place, f"{outil} : la page ne bouge pas en changeant d'outil")
+        x, _, w, _ = self.feuille(c["pages"][0]["id"])
+        self.assertGreater(w, 560, "la page prend la largeur disponible")
+        self.assertLessEqual(x + w, 760, "la page entière est visible en largeur")
+        nav.capture("notes-editeur-etroit")
+        self.sans_souci()
+
+    def test_doigts(self):
+        c = self.creer("Méca")
+        pid = self.editeur(c)
+        nav = self.nav
+        nav.cliquer("Plus d'options")
+        nav.cliquer("Ajouter une page après celle-ci", dans="document.querySelector('dialog.menu-notes')")
+        nav.evaluer("document.querySelector('.feuilles').scrollTop = 0")
+        x, y, w, _ = self.feuille(pid)
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        # un doigt fait défiler, sans écrire
+        avant = nav.evaluer("document.querySelector('.feuilles').scrollTop")
+        self.doigts([[(x + 300, y + 560)], [(x + 300, y + 480)], [(x + 300, y + 400)], [(x + 300, y + 320)], []])
+        self.assertGreater(nav.evaluer("document.querySelector('.feuilles').scrollTop"), avant + 150, "la page a défilé")
+        self.assertEqual(lire()["traits"], [], "le doigt n'écrit pas (sauf réglage « Écrire au doigt »)")
+        # le défilement continue sur sa lancée puis s'arrête
+        self.assertTrue(attendre(lambda: (lambda a: (time.sleep(0.25), nav.evaluer("document.querySelector('.feuilles').scrollTop") == a)[1])(
+            nav.evaluer("document.querySelector('.feuilles').scrollTop")), 8), "l'élan s'arrête")
+        nav.evaluer("document.querySelector('.feuilles').scrollTop = 0")
+        x, y, w, _ = self.feuille(pid)
+        self.stylo(vague(x + 100, y + 150))
+        # la main posée juste après le stylet (la paume) ne fait rien : ni défilement, ni annulation
+        self.doigts([[(x + 300, y + 300), (x + 420, y + 300)], []])
+        self.doigts([[(x + 300, y + 500)], [(x + 300, y + 400)], [(x + 300, y + 300)], []])
+        self.assertEqual(nav.evaluer("document.querySelector('.feuilles').scrollTop"), 0, "la paume ne fait pas défiler")
+        [t] = self.enregistre(lire, lambda p: len(p["traits"]) == 1, "trait au stylet")["traits"]
+        time.sleep(0.8)                                   # la paume n'est plus ignorée
+        self.assertEqual(self.ids(lire()), [t["id"]], "la paume n'a rien annulé")
+        self.doigts([[(x + 300, y + 300), (x + 420, y + 300)], []])
+        self.enregistre(lire, lambda p: p["traits"] == [], "toucher à deux doigts : annulé")
+        self.doigts([[(x + 300, y + 300), (x + 420, y + 300), (x + 360, y + 380)], []])
+        self.enregistre(lire, lambda p: self.ids(p) == [t["id"]], "toucher à trois doigts : rétabli")
+        # avec « Écrire au doigt », un doigt écrit
+        nav.cliquer("Écrire au doigt")
+        self.doigts([[(x + 100 + i * 5, y + 260)] for i in range(30)] + [[]])
+        self.enregistre(lire, lambda p: len(p["traits"]) == 2, "trait au doigt")
+        self.sans_souci()
+
+    def test_son_relie_a_l_ecriture(self):
+        c = self.creer("Cours magistral")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, _, _ = self.feuille(pid)
+        nav.cliquer("Enregistrer le son")
+        self.annonce("Enregistrement en cours : ce que tu écris est relié au son.")
+        time.sleep(1.5)
+        self.stylo(vague(x + 100, y + 200))
+        time.sleep(1)
+        nav.cliquer("Arrêter l'enregistrement")
+        self.annonce("Enregistrement gardé. Avec « Écouter », touche ce que tu as écrit pour réentendre ce moment.")
+        [son] = self.enregistre(lambda: self.carnet_serveur(c["id"]), lambda x: len(x.get("sons", [])) == 1, "enregistrement")["sons"]
+        self.assertGreater(son["duree"], 2000)
+        fichier = self.srv.home / "Notes" / "Carnets" / c["id"] / "fichiers" / son["fichier"]
+        self.assertEqual(fichier.read_bytes()[:4], b"\x1a\x45\xdf\xa3", "un vrai fichier WebM")
+        [t] = self.enregistre(lambda: self.page_serveur(c["id"], pid), lambda p: len(p["traits"]) == 1, "trait")["traits"]
+        self.assertEqual(t["son"], son["id"])
+        self.assertGreater(t["ts"], 1000, "le moment de l'enregistrement où le trait a été écrit")
+        nav.cliquer("Écouter")
+        self.stylo([(x + 100, y + 200)] * 2)
+        nav.attendre("!document.querySelector('.barre-lecture').hidden", quoi="la lecture commence au moment du trait")
+        nav.cliquer("Fermer la lecture")
+        self.sans_souci()
+
+    def test_rien_ne_se_perd_en_changeant_de_page(self):
+        c = self.creer("Méca")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        z = w / 595.28
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        self.stylo(vague(x + 100, y + 150))
+        nav.cliquer("Agenda", dans="document.querySelector('#rail')")          # avant que l'enregistrement ne parte de lui-même
+        nav.attendre("document.querySelector('#page h1')?.textContent === 'agenda'")
+        self.enregistre(lire, lambda p: len(p["traits"]) == 1, "enregistré en quittant le carnet")
+        nav.evaluer(f"location.hash = '#/notes/c/{c['id']}'")
+        self.prete(pid)
+        self.assertGreater(self.encre(pid, 180 / z, 150 / z), 150, "le trait est là au retour")
+        # partir et revenir aussitôt, l'envoi étant lent : le carnet n'est relu qu'une fois enregistré
+        x, y, w, _ = self.feuille(pid)
+        self.addCleanup(self.retarder_envois(1.5))
+        self.stylo(vague(x + 100, y + 300))
+        nav.evaluer(f"location.hash = '#/agenda'; setTimeout(() => {{ location.hash = '#/notes/c/{c['id']}'; }}, 0); true")
+        nav.attendre(f"location.hash === '#/notes/c/{c['id']}'")
+        self.prete(pid)
+        self.assertGreater(self.encre(pid, 180 / z, 300 / z), 150, "le deuxième trait est là aussi")
+        self.enregistre(lire, lambda p: len(p["traits"]) == 2, "les deux traits")
+        self.sans_souci()
+
+    def test_formes_et_gribouillis(self):
+        c = self.creer("Géométrie")
+        pid = self.editeur(c)
+        nav = self.nav
+        x, y, w, _ = self.feuille(pid)
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        # un rectangle tremblé, le stylet gardé immobile une demi-seconde au bout : rectangle parfait
+        tour = [(x + 100 + i * 12, y + 100 + (i % 2)) for i in range(16)] + [(x + 290 + (i % 2), y + 100 + i * 8) for i in range(16)]
+        tour += [(x + 290 - i * 12, y + 228 + (i % 2)) for i in range(16)] + [(x + 100 + (i % 2), y + 228 - i * 8) for i in range(17)]
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mousePressed", x=tour[0][0], y=tour[0][1], button="left", buttons=1, clickCount=1, pointerType="pen", force=0.5)
+        for px, py in tour[1:]:
+            nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseMoved", x=px, y=py, button="left", buttons=1, pointerType="pen", force=0.5)
+        time.sleep(0.8)
+        nav.ordre("Input.dispatchMouseEvent", page=True, type="mouseReleased", x=tour[-1][0], y=tour[-1][1], button="left", buttons=0, clickCount=1, pointerType="pen")
+        [r] = self.enregistre(lire, lambda p: len(p["traits"]) == 1, "forme")["traits"]
+        self.assertEqual((r.get("forme"), r.get("ferme")), ("rectangle", True))
+        self.assertLessEqual(len(r["points"]) // 3, 5, "quatre coins, pas des dizaines de points tremblés")
+        # un mot, puis un gribouillis dessus : le mot part, le gribouillis ne reste pas
+        self.stylo(vague(x + 100, y + 400, n=30))
+        mot = self.enregistre(lire, lambda p: len(p["traits"]) == 2, "mot écrit")["traits"][1]
+        zigzag = [(x + 95 + (i % 2) * 130, y + 385 + i * 1.5) for i in range(24)]
+        self.stylo([pt for a, b in zip(zigzag, zigzag[1:]) for pt in [(a[0] + (b[0] - a[0]) * k / 6, a[1] + (b[1] - a[1]) * k / 6) for k in range(6)]])
+        self.enregistre(lire, lambda p: self.ids(p) == [r["id"]], "gribouillis : le mot est effacé, rien d'autre")
+        nav.cliquer("Annuler")
+        self.enregistre(lire, lambda p: sorted(self.ids(p)) == sorted([r["id"], mot["id"]]), "annulé : le mot revient")
+        self.sans_souci()
+
+    def test_image_copier_coller_zoom_clavier(self):
+        c = self.creer("TP")
+        pid = self.editeur(c)
+        nav = self.nav
+        lire = lambda: self.page_serveur(c["id"], pid)  # noqa: E731
+        image = self.srv.base / "schéma.png"
+        image.write_bytes(png(120, 60))
+        objet = nav.ordre("Runtime.evaluate", page=True, expression="document.querySelector('.editeur input[type=file][accept^=\"image\"]')")["result"]["objectId"]
+        nav.ordre("DOM.setFileInputFiles", page=True, files=[str(image)], objectId=objet)
+        [im] = self.enregistre(lire, lambda p: len(p["images"]) == 1, "image insérée")["images"]
+        self.assertEqual((im["w"], im["h"]), (90, 45), "taille naturelle (75 %), proportions gardées")
+        self.assertEqual(self.srv.req("GET", f"/api/notes/{c['id']}/fichiers/{im['fichier']}")[2], image.read_bytes())
+        nav.attendre("document.querySelector('.boite-selection') !== null", quoi="l'image arrive sélectionnée")
+        self.assertEqual(nav.evaluer("document.querySelector('.outil[aria-pressed=true]').getAttribute('aria-label')"), "Lasso")
+        # copier, coller : une seconde image, décalée
+        self.raccourci("c", 67, ctrl=True)
+        self.raccourci("v", 86, ctrl=True)
+        a, b = self.enregistre(lire, lambda p: len(p["images"]) == 2, "image collée")["images"]
+        self.assertEqual(a["fichier"], b["fichier"], "le même fichier, pas une copie")
+        self.assertNotEqual((a["x"], a["y"]), (b["x"], b["y"]))
+        # raccourcis des outils, zoom au clavier
+        nav.evaluer("document.querySelector('.feuilles').focus()")
+        for touche, code, nom in (("h", 72, "Surligneur"), ("e", 69, "Gomme"), ("t", 84, "Texte"), ("p", 80, "Stylo")):
+            self.raccourci(touche, code)
+            self.assertEqual(nav.evaluer("document.querySelector('.outil[aria-pressed=true]').getAttribute('aria-label')"), nom)
+        largeur = self.feuille(pid)[2]
+        for _ in range(2):
+            nav.ordre("Input.dispatchKeyEvent", page=True, type="keyDown", key="+", code="Equal", windowsVirtualKeyCode=187, modifiers=2)
+            nav.ordre("Input.dispatchKeyEvent", page=True, type="keyUp", key="+", code="Equal", windowsVirtualKeyCode=187, modifiers=2)
+        nav.attendre(f"document.querySelector('.feuille').getBoundingClientRect().width > {largeur * 1.3}", quoi="Ctrl + agrandit")
+        self.raccourci("0", 48, ctrl=True)
+        nav.attendre(f"Math.abs(document.querySelector('.feuille').getBoundingClientRect().width - {largeur}) < 1", quoi="Ctrl+0 : page en largeur")
+        self.sans_souci()
+
+    def test_change_ailleurs(self):
+        c = self.creer("Méca")
+        pid = self.editeur(c)
+        trait = {"id": "tailleurs1", "outil": "stylo", "couleur": "#d4392f", "largeur": 3, "points": [v for i in range(30) for v in (60 + i * 5, 300, 0.5)]}
+        self.assertEqual(self.srv.json("PUT", f"/api/notes/{c['id']}/pages/{pid}", {"traits": [trait]})[0], 200)
+        self.nav.attendre(f"""(() => {{ const c = document.querySelector('.feuille[data-page="{pid}"] canvas.encre'); const s = c.width / 595.28;
+            return c.getContext('2d').getImageData(Math.round(130 * s), Math.round(300 * s), 1, 1).data[3] > 150; }})()""",
+                          quoi="un trait écrit dans une autre fenêtre apparaît")
         self.sans_souci()
 
 

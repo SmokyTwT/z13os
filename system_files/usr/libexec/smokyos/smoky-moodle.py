@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoky OS — Moodle → Smoky Notes et échéances.
+"""Smoky OS — Moodle → Notes de l'appli Smoky, et échéances.
 
   smoky-moodle.py connect            connexion (identifiant + mot de passe, ou page de l'université)
   smoky-moodle.py receive URL        reçoit l'accès après connexion par la page de l'université
@@ -7,10 +7,12 @@
   smoky-moodle.py status             état (JSON)
   smoky-moodle.py disconnect         oublie l'accès
 
-Les PDF arrivent dans Smoky Notes, un carnet par document, rangés dans le classeur de la
-matière (Algèbre, Méca… : /usr/share/smokyos/matieres.json), sinon dans un classeur au nom
-du cours. Rien n'est jamais modifié ni supprimé dans tes carnets existants. Le mot de passe
-n'est jamais enregistré : seul le jeton d'accès Moodle l'est, dans le trousseau GNOME.
+Les PDF arrivent dans les Notes de l'appli Smoky (Notes/Carnets), un carnet par document, rangés
+dans le classeur de la matière (Algèbre, Méca… : /usr/share/smokyos/matieres.json), sinon dans un
+classeur au nom du cours. Une nouvelle version d'un cours remplace le carnet s'il n'est pas encore
+annoté (l'ancien part à la corbeille des Notes) ; sinon elle arrive à côté. Les carnets de l'ancien
+Smoky Notes (Notes/Smoky Notes), y compris ceux venus de Moodle avant, ne sont plus jamais touchés.
+Le mot de passe n'est jamais enregistré : seul le jeton d'accès Moodle l'est, dans le trousseau GNOME.
 """
 import base64
 import hashlib
@@ -18,7 +20,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import subprocess
 import sys
 import time
@@ -32,7 +33,7 @@ STATE_DIR = HOME / ".local/share/smoky-moodle"
 STATE = STATE_DIR / "state.json"
 DEADLINES = STATE_DIR / "echeances.json"
 NOTES = HOME / "Notes"
-NOTEBOOKS = NOTES / "Smoky Notes"
+CARNETS = NOTES / "Carnets"                      # les Notes de l'appli Smoky (même dossier, même format)
 SITE_FILE = Path("/etc/smokyos/moodle-url")
 SUBJECTS_FILE = Path(os.environ.get("SMOKY_MATIERES", "/usr/share/smokyos/matieres.json"))
 SERVICE = "moodle_mobile_app"
@@ -106,7 +107,7 @@ def subject_for(course):
     return None
 
 
-# Documents sans intérêt pour réviser : jamais importés dans Smoky Notes
+# Documents sans intérêt pour réviser : jamais importés dans les Notes
 USELESS = ["reglement", "charte", "modalites", "mcc", "emploi du temps", "edt", "planning", "calendrier",
            "convocation", "inscription", "attestation", "formulaire", "fiche d inscription", "consignes d examen",
            "trombinoscope", "liste des groupes", "groupes de td", "groupes de tp", "repartition", "affectation", "covid", "plan d acces",
@@ -118,21 +119,18 @@ def useless(filename):
     return any(re.search(r"(?<![a-z0-9])" + re.escape(w) + r"(?![a-z0-9])", name) for w in USELESS)
 
 
-def set_folder(nid, folder, only_from):
+def set_folder(cid, folder, only_from):
     """Range un carnet importé avant les matières dans le classeur de sa matière, s'il est encore
     dans le classeur d'origine (un carnet que tu as déplacé toi-même ne bouge pas)."""
-    d = NOTEBOOKS / nid
+    d = CARNETS / cid
     try:
-        nb, meta = json.loads((d / "notebook.json").read_text()), json.loads((d / "meta.json").read_text())
+        carnet = json.loads((d / "carnet.json").read_text())
     except (OSError, ValueError):
         return
-    if nb.get("folder") != only_from or only_from == folder:
+    if carnet.get("classeur") != only_from or only_from == folder:
         return
-    nb["folder"] = meta["folder"] = folder
-    for name, obj in (("notebook.json", nb), ("meta.json", meta)):
-        tmp = d / f".{name}.tmp"
-        tmp.write_text(json.dumps(obj, separators=(",", ":")))
-        os.replace(tmp, d / name)
+    carnet["classeur"] = folder
+    write_json(d / "carnet.json", carnet)
 
 
 # --- Jeton (trousseau GNOME, sinon fichier privé) ------------------------------------------
@@ -201,7 +199,7 @@ def connect():
         return 1
     if res.get("token"):
         token_set(res["token"])
-        zenity("--info", "--width=420", "--text=✅ Moodle est connecté. Tes cours arrivent dans Smoky Notes.")
+        zenity("--info", "--width=420", "--text=✅ Moodle est connecté. Tes cours arrivent dans les Notes de Smoky.")
         return sync()
     # Connexion unique de l'université (CAS…) : on passe par la page de connexion officielle
     passport = secrets.token_hex(8)
@@ -236,54 +234,82 @@ def receive(url):
         return 1
     passport_file.unlink(missing_ok=True)
     token_set(parts[1])
-    notify("Moodle connecté", "Tes cours arrivent dans Smoky Notes.")
+    notify("Moodle connecté", "Tes cours arrivent dans les Notes de Smoky.")
     return sync()
 
 
-# --- Création des carnets (même format que Smoky Notes) -------------------------------------
-def uid(prefix):
-    return prefix + format(int(time.time() * 1000), "x") + "-" + secrets.token_hex(4)
+# --- Création des carnets (format des Notes de l'appli Smoky : Notes/Carnets/<id>/) ----------------
+def write_json(path, obj):
+    """Écrit d'un coup (l'appli ou la synchro ne voient jamais un fichier à moitié écrit)."""
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
+    os.replace(tmp, path)
 
 
 def pdf_pages(path):
+    """Taille de chaque page en points (pages tournées : largeur et hauteur échangées), comme
+    l'appli les mesure ; 50 à 5000 points (limites des Notes)."""
     out = run(["pdfinfo", "-f", "1", "-l", "100000", str(path)], capture_output=True, text=True).stdout
-    sizes = []
+    sizes, rot = {}, {}
     for line in out.splitlines():
-        m = re.match(r"Page\s+\d+\s+size:\s+([\d.]+) x ([\d.]+)", line)
+        m = re.match(r"Page\s+(\d+)\s+size:\s+([\d.]+) x ([\d.]+)", line)
         if m:
-            sizes.append((round(float(m.group(1))), round(float(m.group(2)))))
+            sizes[int(m.group(1))] = (float(m.group(2)), float(m.group(3)))
+        m = re.match(r"Page\s+(\d+)\s+rot:\s+(\d+)", line)
+        if m:
+            rot[int(m.group(1))] = int(m.group(2)) % 360
     if not sizes:
         n = re.search(r"^Pages:\s+(\d+)", out, re.M)
-        sizes = [(595, 842)] * int(n.group(1) if n else 1)
-    return sizes
+        return [(595.28, 841.89)] * min(int(n.group(1)) if n else 1, 2000)
+    borne = lambda v: round(min(5000.0, max(50.0, v)), 2)  # noqa: E731
+    return [(borne(h), borne(w)) if rot.get(i) in (90, 270) else (borne(w), borne(h))
+            for i, (w, h) in sorted(sizes.items())][:2000]
 
 
 def create_notebook(pdf_bytes, title, folder):
-    nid = uid("n")
-    d = NOTEBOOKS / nid
-    (d / "assets").mkdir(parents=True)
-    asset = hashlib.sha256(pdf_bytes).hexdigest()[:24] + ".pdf"
-    (d / "assets" / asset).write_bytes(pdf_bytes)
+    """Un PDF de cours devient un carnet des Notes, à annoter au stylet. → son identifiant."""
     now = int(time.time() * 1000)
-    pages = [{"id": uid("p"), "w": w, "h": h, "template": "blank", "paper": "white",
-              "bg": {"type": "pdf", "asset": asset, "page": i}, "items": [], "marked": False}
-             for i, (w, h) in enumerate(pdf_pages(d / "assets" / asset))]
-    nb = {"id": nid, "version": 1, "title": title, "cover": "slate", "created": now, "updated": now,
-          "favorite": False, "folder": folder, "source": "moodle",
-          "defaults": {"size": "a4", "template": "lined", "paper": "white"}, "pages": pages}
-    meta = {k: nb[k] for k in ("id", "title", "cover", "created", "updated", "favorite", "folder")}
-    meta["pages"] = len(pages)
-    (d / "notebook.json").write_text(json.dumps(nb, separators=(",", ":")))
-    (d / "meta.json").write_text(json.dumps(meta))
-    return nid
+    cid = "c" + format(now, "x")[:12] + "-" + secrets.token_hex(3)
+    d = CARNETS / cid
+    (d / "pages").mkdir(parents=True)
+    (d / "fichiers").mkdir()
+    name = hashlib.sha256(pdf_bytes).hexdigest()[:24] + ".pdf"
+    (d / "fichiers" / name).write_bytes(pdf_bytes)
+    pages = [{"id": f"p{now:x}-{i:x}{secrets.token_hex(2)}", "w": w, "h": h, "modele": "vierge", "couleur": "blanc",
+              "signet": False, "fond": {"pdf": name, "page": i}}
+             for i, (w, h) in enumerate(pdf_pages(d / "fichiers" / name))]
+    write_json(d / "carnet.json", {"format": 1, "id": cid, "titre": title[:100], "classeur": folder[:60], "couverture": "ardoise",
+                                   "favori": False, "cree": now, "papier": {"format": "a4", "modele": "vierge", "couleur": "blanc"},
+                                   "pages": pages, "sons": [], "source": "moodle"})
+    return cid
 
 
-def notebook_untouched(nid):
+def notebook_untouched(cid):
+    """Rien d'écrit dessus : aucune page annotée, aucun enregistrement."""
+    d = CARNETS / cid
     try:
-        nb = json.loads((NOTEBOOKS / nid / "notebook.json").read_text())
-        return all(not p.get("items") for p in nb.get("pages", []))
+        if json.loads((d / "carnet.json").read_text()).get("sons"):
+            return False
+        for f in (d / "pages").glob("*.json"):
+            page = json.loads(f.read_text())
+            if page.get("traits") or page.get("textes") or page.get("images"):
+                return False
+        return True
     except (OSError, ValueError):
         return False
+
+
+def to_trash(cid):
+    """Vers la corbeille des Notes (rien n'est effacé d'un coup : il se restaure depuis l'appli)."""
+    d = CARNETS / cid
+    if not (d / "carnet.json").is_file():
+        return
+    trash = CARNETS / ".corbeille"
+    trash.mkdir(exist_ok=True)
+    t = int(time.time())
+    while (trash / f"{cid}-{t}").exists():
+        t += 1
+    os.replace(d, trash / f"{cid}-{t}")
 
 
 # --- Synchronisation --------------------------------------------------------------------------
@@ -323,8 +349,11 @@ def sync():
                     if not same_site(key) or useless(f["filename"]):
                         continue
                     known = st["files"].get(key)
+                    # importé avant dans l'ancien Smoky Notes (« notebook ») : on n'y touche plus
+                    mine = known.get("carnet") if known else None
                     if known and known["mtime"] >= f.get("timemodified", 0):
-                        set_folder(known["notebook"], folder, course_folder)   # importés avant les matières
+                        if mine:
+                            set_folder(mine, folder, course_folder)   # importés avant les matières
                         continue
                     url = f["fileurl"] + ("&" if "?" in f["fileurl"] else "?") + "token=" + token
                     try:
@@ -335,17 +364,17 @@ def sync():
                     if not data.startswith(b"%PDF"):
                         continue
                     title = f["filename"][:-4]
-                    if known and notebook_untouched(known["notebook"]):   # pas encore annoté : on remplace
-                        shutil.rmtree(NOTEBOOKS / known["notebook"], ignore_errors=True)
-                    elif known:
+                    if mine and notebook_untouched(mine):     # pas encore annoté : on remplace
+                        to_trash(mine)
+                    elif mine:
                         title += " (nouvelle version)"
-                    nid = create_notebook(data, title, folder)
-                    st["files"][key] = {"mtime": f.get("timemodified", 0), "notebook": nid}
+                    cid = create_notebook(data, title, folder)
+                    st["files"][key] = {"mtime": f.get("timemodified", 0), "carnet": cid}
                     added.append(f"{folder} — {title}")
     deadlines(token, st)
     save_state(st)
     if added:
-        notify("Nouveaux cours dans Smoky Notes",
+        notify("Nouveaux cours dans tes Notes",
                "\n".join(added[:6]) + (f"\n… et {len(added) - 6} autres" if len(added) > 6 else ""))
     print(f"{len(added)} document(s) importé(s)")
     return 0

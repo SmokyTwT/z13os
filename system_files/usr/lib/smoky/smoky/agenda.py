@@ -31,7 +31,7 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .base import dossier_donnees
-from .commandes import BIN, detacher, lancer
+from .commandes import lancer
 from .planning import PROGRAMME, hm, iso, lire_iso, planifier, seances
 from .serveur import Erreur
 
@@ -87,7 +87,7 @@ def _liste_matieres():
 
 
 def matieres_par_defaut():
-    """Matières communes à Smoky OS (carnets de Smoky Notes, cours Moodle)."""
+    """Matières communes à Smoky OS (classeurs des Notes, cours Moodle)."""
     return [m["nom"] for m in _liste_matieres() if isinstance(m, dict) and m.get("nom")][:20]
 
 
@@ -443,7 +443,7 @@ class Agenda:
                     sortie.append({"id": "edt-" + hashlib.sha1(f"{e['debut']}{titre}".encode()).hexdigest()[:10],
                                    "genre": "cours", "titre": titre, "lieu": _propre(e.get("lieu", ""), 120),
                                    "debut": iso(e["debut"]), "fin": iso(e["fin"]), "journee": bool(e.get("journee")),
-                                   "source": "edt"})
+                                   "source": "edt", "matiere": matiere_de(titre)})   # matière : ouvrir ses notes depuis le cours
         return sortie
 
     def _echeances(self, s0, s1):
@@ -799,14 +799,6 @@ class Agenda:
             self.base.ecrire("INSERT INTO agenda_seances (jour, bloc, exercice, kg, reps) VALUES (?, ?, ?, ?, ?)", ligne)
         self.prevenir("agenda")
         return {"message": "Séance notée."}
-
-    def _a_ouvrir_carnet(self, a):
-        matiere = a.get("matiere")
-        if not isinstance(matiere, str) or matiere not in self.reglages()["matieres"]:
-            raise Erreur(400, "Matière inconnue.")
-        if not detacher(f"{BIN}/smoky-notes", "--classeur", matiere):
-            raise Erreur(502, "Smoky Notes n'a pas pu s'ouvrir.")
-        return {"message": f"Carnet {matiere} ouvert dans Smoky Notes."}
 
     # --- Planifier ---------------------------------------------------------------------------------------
     def _a_planifier(self, a):

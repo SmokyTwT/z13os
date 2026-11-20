@@ -7,8 +7,12 @@ Icon=smoky-appli
 Terminal=false
 Categories=Utility;
 StartupWMClass=chrome-localhost__smoky-Default
-Keywords=smoky;aujourd'hui;tâches;agenda;emploi du temps;planning;révision;examen;salle;réglages;système;batterie;écran;mise à jour;vpn;moodle;
-Actions=agenda;systeme;
+Keywords=smoky;aujourd'hui;tâches;notes;carnet;stylet;cahier;pdf;goodnotes;agenda;emploi du temps;planning;révision;examen;salle;réglages;système;batterie;écran;mise à jour;vpn;moodle;
+Actions=notes;agenda;systeme;
+
+[Desktop Action notes]
+Name=Notes
+Exec=/usr/bin/smoky --aller /notes
 
 [Desktop Action agenda]
 Name=Agenda

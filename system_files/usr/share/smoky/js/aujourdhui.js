@@ -123,7 +123,7 @@ export async function monter(conteneur, contexte) {
     } catch (e) { if (numero === relectures) annoncer(e.message, { erreur: true }); }
   }
 
-  const anciennes = [["notes", "Notes"], ["mail", "Mail"], ["maison", "Maison"]];
+  const anciennes = [["mail", "Mail"], ["maison", "Maison"]];
   conteneur.replaceChildren(
     h("header", { class: "entete" }, h("h1", { texte: "aujourd'hui" }), h("p", { class: "sous", texte: dateLongue() })),
     h("div", { class: "corps deux" },
@@ -132,7 +132,7 @@ export async function monter(conteneur, contexte) {
         h("section", { "aria-labelledby": "t-journee" }, h("h2", { id: "t-journee", texte: "ta journée" }), jour),
         h("section", {}, h("h2", { texte: "l'ordinateur" }), pc),
         h("section", {}, h("h2", { texte: "bientôt ici" }),
-          h("p", { class: "discret petit", texte: "Notes, Mail et Maison sont en train d'être refaits dans Smoky. D'ici là, chaque ancienne appli s'ouvre dans sa propre fenêtre." }),
+          h("p", { class: "discret petit", texte: "Mail et Maison sont en train d'être refaits dans Smoky. D'ici là, chaque ancienne appli s'ouvre dans sa propre fenêtre." }),
           h("div", { class: "liste" }, anciennes.map(([id, nom]) =>
             h("button", { type: "button", surclick: () => ouvrirAncienne(id) }, h("span", { texte: `Ouvrir ${nom}` }), icone("dehors"))))))));
 

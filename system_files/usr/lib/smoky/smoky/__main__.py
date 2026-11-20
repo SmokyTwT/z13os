@@ -18,6 +18,7 @@ from . import PORT, VERSION
 from .agenda import Agenda, maintenant
 from .base import Base
 from .commandes import BIN, detacher, navigateur_ouvert
+from .notes import CARNET_MAXI, FICHIER_MAXI, PAGE_MAXI, Notes
 from .planning import iso
 from .serveur import Appli, Erreur
 from .systeme import Systeme
@@ -37,6 +38,7 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     taches = Taches(base)
     systeme = Systeme(prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
     agenda = Agenda(base, prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
+    notes = Notes(base, prevenir=lambda quoi, **plus: appli.flux.publier("change", {"quoi": quoi, **plus}))
 
     def prevenir_taches(resultat):
         """Les autres fenêtres ouvertes relisent la liste (la page Agenda aussi : tâches à caser)."""
@@ -72,6 +74,43 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     def agenda_agir(requete):
         return agenda.agir(requete.json())
 
+    # --- Notes : bibliothèque, carnets, pages, fichiers joints ---
+    @appli.route("GET", "/api/notes")
+    def notes_bibliotheque(requete):
+        return notes.bibliotheque()
+
+    @appli.route("POST", "/api/notes")
+    def notes_agir(requete):
+        return notes.agir(requete.json())
+
+    @appli.route("POST", "/api/notes/export", corps_maxi=FICHIER_MAXI)
+    def notes_exporter(requete):
+        return notes.exporter(requete.params.get("nom", [""])[-1], requete.corps)
+
+    @appli.route("GET", "/api/notes/<cid>")
+    def notes_carnet(requete):
+        return notes.carnet(requete.morceaux["cid"])
+
+    @appli.route("PUT", "/api/notes/<cid>", corps_maxi=CARNET_MAXI)
+    def notes_enregistrer_carnet(requete):
+        return notes.enregistrer_carnet(requete.morceaux["cid"], requete.corps)
+
+    @appli.route("GET", "/api/notes/<cid>/pages/<pid>")
+    def notes_page(requete):
+        return notes.page(requete.morceaux["cid"], requete.morceaux["pid"])
+
+    @appli.route("PUT", "/api/notes/<cid>/pages/<pid>", corps_maxi=PAGE_MAXI)
+    def notes_enregistrer_page(requete):
+        return notes.enregistrer_page(requete.morceaux["cid"], requete.morceaux["pid"], requete.corps)
+
+    @appli.route("GET", "/api/notes/<cid>/fichiers/<nom>")
+    def notes_fichier(requete):
+        return notes.lire_fichier(requete.morceaux["cid"], requete.morceaux["nom"])
+
+    @appli.route("PUT", "/api/notes/<cid>/fichiers/<nom>", corps_maxi=FICHIER_MAXI)
+    def notes_envoyer_fichier(requete):
+        return notes.envoyer_fichier(requete.morceaux["cid"], requete.morceaux["nom"], requete.corps)
+
     @appli.route("GET", "/api/systeme")
     def systeme_etat(requete):
         return systeme.etat()
@@ -92,6 +131,7 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
 
     appli.base = base
     appli.agenda = agenda
+    appli.notes = notes
     return appli
 
 
