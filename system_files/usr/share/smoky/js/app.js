@@ -17,20 +17,25 @@ const JETON = (() => {
 
 export class ErreurSmoky extends Error {}
 
-async function appeler(methode, chemin, corps) {
+// corps : objet (envoyé en JSON) ou Blob/ArrayBuffer (envoyé tel quel) ; brut : réponse en Blob
+async function appeler(methode, chemin, corps, { brut = false, keepalive = false } = {}) {
   let reponse;
+  const octets = corps instanceof Blob || corps instanceof ArrayBuffer || ArrayBuffer.isView(corps);
   try {
     reponse = await fetch(chemin, {
-      method: methode, cache: "no-store",
-      headers: { "X-Smoky-Jeton": JETON, ...(corps ? { "Content-Type": "application/json" } : {}) },
-      body: corps ? JSON.stringify(corps) : undefined,
+      method: methode, cache: "no-store", keepalive,
+      headers: { "X-Smoky-Jeton": JETON, ...(corps && !octets ? { "Content-Type": "application/json" } : {}),
+        ...(octets ? { "Content-Type": "application/octet-stream" } : {}) },
+      body: corps ? (octets ? corps : JSON.stringify(corps)) : undefined,
     });
   } catch {
     throw new ErreurSmoky("Smoky ne répond plus. Ferme la fenêtre et rouvre l'appli.");
   }
+  if (brut && reponse.ok) return reponse.blob();
   let donnees = {};
   try { donnees = await reponse.json(); } catch { /* réponse vide */ }
   if (reponse.status === 403) { ecranFerme(); throw new ErreurSmoky(donnees.erreur || "Accès refusé."); }
+  if (reponse.status === 413) throw new ErreurSmoky(donnees.erreur || "Fichier trop gros.");
   if (!reponse.ok) throw new ErreurSmoky(donnees.erreur || "Cette action a échoué.");
   return donnees;
 }
@@ -38,6 +43,8 @@ async function appeler(methode, chemin, corps) {
 export const api = {
   lire: (chemin) => appeler("GET", chemin),
   envoyer: (chemin, corps = {}) => appeler("POST", chemin, corps),
+  mettre: (chemin, corps, options) => appeler("PUT", chemin, corps, options),   // JSON ou octets
+  octets: (chemin) => appeler("GET", chemin, undefined, { brut: true }),           // → Blob
   supprimer: (chemin) => appeler("DELETE", chemin),
 };
 
@@ -58,7 +65,7 @@ export async function tenter(action, { succes } = {}) {
 // « ancienne » : pas encore refaite dans Smoky ; l'ancienne appli s'ouvre à part.
 const PAGES = [
   { id: "aujourdhui", nom: "Aujourd'hui", module: "/js/aujourdhui.js" },
-  { id: "notes", nom: "Notes", ancienne: true },
+  { id: "notes", nom: "Notes", module: "/js/notes.js" },
   { id: "agenda", nom: "Agenda", module: "/js/agenda.js" },
   { id: "mail", nom: "Mail", ancienne: true },
   { id: "maison", nom: "Maison", ancienne: true },
@@ -129,9 +136,9 @@ function ecouterServeur() {
   flux = new EventSource(`/api/flux?k=${encodeURIComponent(JETON)}`);
   flux.addEventListener("open", () => { rates = 0; });
   flux.addEventListener("change", (e) => {
-    let quoi = "";
-    try { quoi = JSON.parse(e.data).quoi; } catch { /* ignoré */ }
-    for (const f of ecouteurs) f(quoi);
+    let d = {};
+    try { d = JSON.parse(e.data) || {}; } catch { /* ignoré */ }
+    for (const f of ecouteurs) f(typeof d.quoi === "string" ? d.quoi : "", d);   // d : le détail (rev d'une page des Notes…)
   });
   flux.addEventListener("arret", () => { fermerFlux(); serveurParti(); });
   // Le navigateur réessaie tout seul (sortie de veille…). S'il n'y arrive vraiment plus, on
@@ -166,7 +173,11 @@ if (!JETON) {
   // le réglage « Animations » de Smoky OS coupe aussi celles de l'appli
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.body.classList.add("calme");
   dessinerRail();
-  addEventListener("hashchange", afficher);
-  afficher();
+  // un changement de page à la fois : la page qui part a fini de se monter (et de s'enregistrer)
+  // avant que la suivante arrive ; chaque tour relit l'adresse du moment, les clics rapides se tassent
+  let file = Promise.resolve();
+  const suivre = () => { file = file.then(afficher, afficher); };
+  addEventListener("hashchange", suivre);
+  suivre();
   ecouterServeur();
 }

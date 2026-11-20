@@ -344,7 +344,7 @@ export async function monter(conteneur, contexte) {
           { succes: "Concentration lancée : les sites qui distraient sont bloqués." }); } }));
     }
     if (x.matiere && e.reglages.matieres.includes(x.matiere)) {
-      boutons.push(bouton(`Ouvrir le carnet ${x.matiere}`, { surClic: () => { fermer(); agir({ action: "ouvrir_carnet", matiere: x.matiere }); } }));
+      boutons.push(bouton(`Ouvrir les notes de ${x.matiere}`, { surClic: () => { fermer(); location.hash = `#/notes/classeur/${encodeURIComponent(x.matiere)}`; } }));
     }
     if (x.source === "plan" || x.source === "toi") {
       boutons.push(bouton("Retirer", { genre: "braise", surClic: async () => {

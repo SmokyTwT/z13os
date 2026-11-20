@@ -384,7 +384,9 @@ class TestSecurite(AvecServeur):
             for regle in ("default-src 'none'", "script-src 'self'", "style-src 'self'", "connect-src 'self'",
                           "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'"):
                 self.assertIn(regle, csp)
-            self.assertNotIn("unsafe", csp, "ni script ni style « en ligne »")
+            # 'wasm-unsafe-eval' laisse seulement compiler du WebAssembly (les décodeurs d'images des PDF) :
+            # jamais de texte transformé en code, jamais de script ni de style « en ligne »
+            self.assertNotIn("unsafe", csp.replace("'wasm-unsafe-eval'", ""), "ni script ni style « en ligne »")
             self.assertNotRegex(csp, r"https?:|\*", "rien ne se charge depuis l'extérieur")
             self.assertEqual(h["x-frame-options"], "DENY")
             self.assertEqual(h["x-content-type-options"], "nosniff")
@@ -1687,7 +1689,8 @@ class TestPage(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.fichiers = sorted(p for p in PAGE.rglob("*") if p.is_file())
+        # vendor/ : pdf.js et pdf-lib, bibliothèques tierces figées (vérifiées par tests/test_notes.py)
+        cls.fichiers = sorted(p for p in PAGE.rglob("*") if p.is_file() and "vendor" not in p.relative_to(PAGE).parts)
         cls.js = [p for p in cls.fichiers if p.suffix == ".js"]
         cls.srv = Serveur()
 
@@ -1747,16 +1750,21 @@ class TestPage(unittest.TestCase):
             self.assertTrue(cible.startswith("/") and (PAGE / cible.lstrip("/")).is_file(), f"smoky.css : {cible} absent")
 
     def test_la_page_et_le_serveur_parlent_des_memes_actions(self):
-        # actions de /api/systeme (toutes les pages) et de /api/agenda (page Agenda) : listes fermées
-        # des deux côtés ; la page Agenda lance aussi la concentration, une action du système
+        # actions de /api/systeme (toutes les pages), de /api/agenda (page Agenda) et de /api/notes
+        # (page Notes, js/notes.js et js/notes/) : listes fermées des deux côtés ; la page Agenda lance
+        # aussi la concentration, une action du système
         agenda_js = (PAGE / "js/agenda.js").read_text()
         vers_systeme = set(re.findall(r'"/api/systeme",\s*\{\s*action:\s*"([a-z_]+)"', agenda_js))
         cote_page_agenda = set(re.findall(r'action:\s*"([a-z_]+)"', agenda_js)) - vers_systeme
-        cote_page = set(vers_systeme)
+        cote_page, cote_page_notes = set(vers_systeme), set()
         for p in self.js:
-            if p.name != "agenda.js":
-                cote_page |= set(re.findall(r'action:\s*"([a-z_]+)"', p.read_text()))
-        for page_, fichier in ((cote_page, "systeme.py"), (cote_page_agenda, "agenda.py")):
+            actions = set(re.findall(r'action:\s*"([a-z_]+)"', p.read_text()))
+            if p.name == "notes.js" or p.parent.name == "notes":
+                self.assertNotIn("/api/systeme", p.read_text(), f"{p.name} : les Notes ne parlent qu'à /api/notes")
+                cote_page_notes |= actions
+            elif p.name != "agenda.js":
+                cote_page |= actions
+        for page_, fichier in ((cote_page, "systeme.py"), (cote_page_agenda, "agenda.py"), (cote_page_notes, "notes.py")):
             with self.subTest(serveur=fichier):
                 cote_serveur = set(re.findall(r"def _a_([a-z_]+)\(", (PAQUET / fichier).read_text()))
                 self.assertEqual(page_ - cote_serveur, set(), "la page demande une action que le serveur ne connaît pas")
@@ -1774,11 +1782,11 @@ class TestPage(unittest.TestCase):
         self.assertEqual(set(GNOME) - cites, set(), "réglage GNOME accepté par le serveur mais absent de la page")
 
     def test_les_adresses_de_l_api_existent(self):
-        routes = ("/api/aujourdhui", "/api/taches", "/api/systeme", "/api/agenda", "/api/ouvrir", "/api/flux")
+        routes = ("/api/aujourdhui", "/api/taches", "/api/systeme", "/api/agenda", "/api/notes", "/api/ouvrir", "/api/flux")
         for p in self.js:
             for adresse in re.findall(r'''["'`](/api/[a-z]+)''', p.read_text()):
                 self.assertIn(adresse, routes, f"{p.name} appelle {adresse}")
-        for route in routes[:4]:
+        for route in routes[:5]:
             self.assertNotEqual(self.srv.req("GET", route)[0], 404, route)
 
     def test_police_et_licence(self):

@@ -76,6 +76,24 @@ if [[ ! -e "$MARK" ]] && command -v gsettings >/dev/null; then
   mkdir -p "$(dirname "$MARK")" && touch "$MARK"
 fi
 
+# Les notes sont maintenant dans l'appli Smoky : l'icône de l'ancien Smoky Notes quitte le dock, une
+# seule fois (il reste dans la grille des applis, nommé « Smoky Notes (ancien) », avec tes carnets
+# d'avant). Si l'appli Smoky n'est pas dans le dock, elle prend la place de l'ancienne icône.
+MARK="$HOME/.config/smoky/setup-notes-dans-smoky"
+if [[ ! -e "$MARK" ]] && command -v gsettings >/dev/null; then
+  cur=$(dconf read /org/gnome/shell/favorite-apps 2>/dev/null)
+  if [[ "$cur" == *"'smoky-notes.desktop'"* ]]; then
+    if [[ "$cur" == *"'smoky.desktop'"* ]]; then
+      new="${cur//, \'smoky-notes.desktop\'/}"; new="${new//\'smoky-notes.desktop\', /}"; new="${new//\'smoky-notes.desktop\'/}"
+      [[ "$new" == "[]" ]] && new="['smoky.desktop']"
+    else
+      new="${cur//\'smoky-notes.desktop\'/\'smoky.desktop\'}"
+    fi
+    gsettings set org.gnome.shell favorite-apps "$new"
+  fi
+  mkdir -p "$(dirname "$MARK")" && touch "$MARK"
+fi
+
 # Spotify devient une appli web Smoky : son icône remplace l'ancienne dans le dock (liste personnalisée)
 favs=$(dconf read /org/gnome/shell/favorite-apps 2>/dev/null)
 if [[ "$favs" == *com.spotify.Client.desktop* ]]; then

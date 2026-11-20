@@ -491,11 +491,12 @@ class TestAgenda(AvecServeur):
             with self.subTest(entrees=str(entrees)[:40]):
                 self.assertEqual(self.agir("seance", id=ident, entrees=entrees), (400, {"erreur": message}))
 
-    def test_ouvrir_un_carnet(self):
+    def test_les_notes_d_une_matiere_s_ouvrent_dans_la_page(self):
+        # les Notes font partie de l'appli : la page va elle-même au classeur de la matière ; le serveur
+        # de l'agenda n'ouvre plus l'ancien Smoky Notes
         self.srv.vider()
-        self.assertEqual(self.reussir("ouvrir_carnet", matiere="BDR")["message"], "Carnet BDR ouvert dans Smoky Notes.")
-        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-notes", "--classeur", "BDR"]])
-        self.assertEqual(self.agir("ouvrir_carnet", matiere="../../x"), (400, {"erreur": "Matière inconnue."}))
+        self.assertEqual(self.agir("ouvrir_carnet", matiere="BDR"), (400, {"erreur": "Action inconnue."}))
+        self.assertEqual(self.srv.commandes(), [])
 
     def test_les_fenetres_sont_prevenues(self):
         fenetre = Ecoute(self.srv)
@@ -875,7 +876,7 @@ class TestInstallation(unittest.TestCase):
     def test_raccourcis(self):
         smoky = (RACINE / "usr/share/applications/smoky.desktop").read_text()
         self.assertIn("[Desktop Action agenda]\nName=Agenda\nExec=/usr/bin/smoky --aller /agenda\n", smoky)
-        self.assertIn("Actions=agenda;systeme;", smoky)
+        self.assertRegex(smoky, r"\nActions=[a-z;]*agenda;[a-z;]*\n")
         ancien = (RACINE / "usr/share/applications/smoky-agenda.desktop").read_text()
         self.assertIn("Name=Smoky Agenda (ancien)\n", ancien)
         self.assertIn("Exec=/usr/bin/smoky-agenda\n", ancien, "l'ancien reste lançable, sous le même nom de fichier")

@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Smoky Notes
-Comment=Prise de notes manuscrites au stylet, annotation de PDF
+Name=Smoky Notes (ancien)
+Comment=Tes carnets d'avant ; les nouveaux carnets sont dans l'appli Smoky
 Exec=/usr/bin/smoky-notes
 Icon=smoky-notes
 StartupWMClass=chrome-127.0.0.1__-Default
 Categories=Office;Education;
-Keywords=notes;stylet;cahier;pdf;goodnotes;
+Keywords=ancien notes;anciens carnets;
 Terminal=false

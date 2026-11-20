@@ -198,11 +198,11 @@ class Adaptive:
     def tablet_notice(self):
         if not self.conf.get("tablet_open_notes"):
             return
-        out = run("notify-send", "-a", "Smoky OS", "-i", "smoky-notes", "-t", "8000",
-                  "-A", "notes=Ouvrir Smoky Notes", "Mode tablette",
+        out = run("notify-send", "-a", "Smoky OS", "-i", "smoky-appli", "-t", "8000",
+                  "-A", "notes=Ouvrir les notes", "Mode tablette",
                   "Grandes icônes et clavier à l'écran activés.")
         if out.strip() == "notes":
-            subprocess.Popen(["/usr/bin/smoky-notes"])
+            subprocess.Popen(["/usr/bin/smoky", "--aller", "/notes"])     # les Notes, dans l'appli Smoky
 
     # --- VPN automatique sur les Wi-Fi ouverts -----------------------------------------------
     def on_nm_state(self, conn, sender, path, iface, signal, params):

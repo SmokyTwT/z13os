@@ -33,12 +33,25 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 TYPES = {
     ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
-    ".webp": "image/webp", ".ico": "image/x-icon", ".woff2": "font/woff2", ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml",
+    ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".ico": "image/x-icon", ".woff2": "font/woff2",
+    ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8",
+    # ressources de pdf.js (affichage des PDF dans Notes)
+    ".wasm": "application/wasm", ".bcmap": "application/octet-stream", ".pfb": "application/octet-stream",
+    ".icc": "application/octet-stream",
 }
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; "
-       "connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+# 'wasm-unsafe-eval' : pdf.js décode certaines images des PDF en WebAssembly (jamais de eval() pour autant)
+CSP = ("default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; "
+       "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; "
+       "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 CORPS_MAXI = 6_000_000      # un emploi du temps .ics importé fait 5 Mo au plus
+
+
+class Brut:
+    """Réponse qui n'est pas du JSON : un fichier (PDF, image, son) envoyé tel quel."""
+
+    def __init__(self, contenu, type_mime):
+        self.contenu, self.type_mime = contenu, type_mime
 
 
 class Erreur(Exception):
@@ -140,23 +153,25 @@ class Appli:
         self._statiques = {}                          # chemin → (signature du fichier, empreinte, contenu)
 
     # --- Routes --------------------------------------------------------------------------------
-    def route(self, methode, motif):
+    def route(self, methode, motif, corps_maxi=None):
         """@appli.route("POST", "/api/taches/<id>") ; la fonction reçoit une Requete et renvoie
-        un objet (envoyé en JSON) ou (statut, objet)."""
+        un objet (envoyé en JSON), (statut, objet) ou un Brut (fichier). corps_maxi : taille
+        permise pour l'envoi (CORPS_MAXI par défaut ; plus pour un PDF ou un enregistrement)."""
         regex = re.compile("^" + re.sub(r"<([a-z_]+)>", r"(?P<\1>[^/]+)", motif) + "$")
 
         def poser(fonction):
-            self.routes.append((methode, regex, fonction))
+            self.routes.append((methode, regex, fonction, corps_maxi or CORPS_MAXI))
             return fonction
         return poser
 
     def _trouver(self, methode, chemin):
+        """→ (fonction, parties nommées du chemin, taille d'envoi permise)."""
         autres = False
-        for m, regex, fonction in self.routes:
+        for m, regex, fonction, maxi in self.routes:
             trouve = regex.match(chemin)
             if trouve:
                 if m == methode:
-                    return fonction, trouve.groupdict()
+                    return fonction, trouve.groupdict(), maxi
                 autres = True
         raise Erreur(405 if autres else 404, "Cette action n'existe pas.")
 
@@ -327,18 +342,25 @@ def _gestionnaire(appli):
                 return self._refuser(403, "Accès refusé : rouvre Smoky depuis son icône.")
             if self._chemin == "/api/flux" and self.command == "GET":
                 return self._flux()
+            try:
+                fonction, morceaux, maxi = appli._trouver("GET" if self.command == "HEAD" else self.command, self._chemin)
+            except Erreur as e:
+                return self._refuser(e.statut, e.message)
             corps = b""
             if self.command in ("POST", "PUT", "DELETE"):
                 try:
                     taille = int(self.headers.get("Content-Length") or 0)
                 except ValueError:
                     return self._refuser(400, "Requête illisible.")
-                if taille < 0 or taille > CORPS_MAXI:
+                if taille < 0 or taille > maxi:
                     return self._refuser(413, "Envoi trop volumineux.")
                 corps = self.rfile.read(taille)
+                if len(corps) != taille:                  # connexion coupée en plein envoi
+                    return self._refuser(400, "Envoi incomplet.")
             try:
-                fonction, morceaux = appli._trouver(self.command, self._chemin)
                 resultat = fonction(Requete(self.command, self._chemin, self._params, self.headers, corps, morceaux))
+                if isinstance(resultat, Brut):
+                    return self._envoyer(200, resultat.contenu, resultat.type_mime, [("Cache-Control", "no-store")])
                 statut = 200
                 if isinstance(resultat, tuple):
                     statut, resultat = resultat

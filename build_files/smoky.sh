@@ -24,6 +24,10 @@ chmod 755 /usr/bin/smoky /usr/bin/smoky-* /usr/bin/z13-notes-setup /usr/lib/smok
 # fichiers (les dates sont remises à zéro quand l'image est installée).
 python3 -m compileall -q --invalidation-mode checked-hash /usr/lib/smoky/smoky
 
+# --- Bibliothèques PDF (pdf.js, pdf-lib) : rangées avec l'appli Smoky, copiées pour l'ancien Smoky
+# Notes qui reste disponible (même contenu : le système de fichiers de l'image ne le stocke qu'une fois)
+cp -a /usr/share/smoky/vendor /usr/share/smokynotes/vendor
+
 # --- Version Smoky : celle de Fedora (44.AAAAMMJJ) ne change qu'avec le socle -------------
 mkdir -p /usr/share/smokyos
 printf '%s\n' "${SMOKY_VERSION:-locale}" > /usr/share/smokyos/version
@@ -85,7 +89,7 @@ make_webapp drive   "Google Drive" "https://drive.google.com"         google-dri
 make_webapp spotify "Spotify"      "https://open.spotify.com"         smokyos-spotify "AudioVideo;Audio;Music;Player;"
 make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;" solo
-FAVS="'smoky.desktop', 'smoky-notes.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'z13-spotify.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop'"
+FAVS="'smoky.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'z13-spotify.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop'"
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
   FAVS+=", 'z13-moodle.desktop'"
