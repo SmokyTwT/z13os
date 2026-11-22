@@ -59,6 +59,48 @@ MIGRATIONS = [
     );
     CREATE INDEX agenda_seances_bloc ON agenda_seances (bloc);
     """,
+    # 3 — mail : boîtes (sans secret : mots de passe et jetons dans le trousseau), mails relevés, règles de tri
+    """
+    CREATE TABLE mail_comptes (
+        id TEXT PRIMARY KEY,                 -- m + 8 chiffres hexadécimaux
+        adresse TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        nom TEXT NOT NULL DEFAULT '',        -- affiché aux destinataires
+        genre TEXT NOT NULL,                 -- gmail | outlook | uphf | autre
+        serveurs TEXT NOT NULL,              -- JSON : imap et smtp (hôte, port, chiffrement), identifiant d'envoi
+        auth TEXT NOT NULL,                  -- motdepasse | microsoft
+        cree REAL NOT NULL,
+        releve REAL NOT NULL DEFAULT 0,      -- dernière relève réussie
+        probleme TEXT NOT NULL DEFAULT '',   -- dernière erreur, à dire
+        validite TEXT NOT NULL DEFAULT ''    -- UIDVALIDITY de la boîte de réception
+    );
+    CREATE TABLE mail_messages (
+        compte TEXT NOT NULL REFERENCES mail_comptes (id) ON DELETE CASCADE,
+        uid INTEGER NOT NULL,
+        date REAL NOT NULL,
+        de_nom TEXT NOT NULL,
+        de_adresse TEXT NOT NULL,
+        a TEXT NOT NULL DEFAULT '',
+        cc TEXT NOT NULL DEFAULT '',
+        objet TEXT NOT NULL,
+        extrait TEXT NOT NULL DEFAULT '',    -- début du texte : liste, recherche, tri
+        lu INTEGER NOT NULL DEFAULT 0,
+        pieces TEXT NOT NULL DEFAULT '[]',   -- noms des pièces jointes
+        liste INTEGER NOT NULL DEFAULT 0,    -- liste de diffusion, envoi en masse
+        auto INTEGER NOT NULL DEFAULT 0,     -- message automatique
+        message_id TEXT NOT NULL DEFAULT '',
+        categorie TEXT NOT NULL,
+        classe_par TEXT NOT NULL DEFAULT 'pc',   -- pc | regle | toi
+        notifie INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (compte, uid)
+    );
+    CREATE INDEX mail_messages_date ON mail_messages (date DESC);
+    CREATE INDEX mail_messages_categorie ON mail_messages (categorie, date DESC);
+    CREATE TABLE mail_regles (
+        expediteur TEXT PRIMARY KEY COLLATE NOCASE,   -- « toujours pour cet expéditeur »
+        categorie TEXT NOT NULL,
+        cree REAL NOT NULL
+    );
+    """,
 ]
 
 

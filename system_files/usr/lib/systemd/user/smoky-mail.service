@@ -2,6 +2,8 @@
 Description=Smoky Mail : relève et tri des mails
 ConditionPathExists=|%h/.local/share/smoky-mail/accounts.json
 ConditionPathExists=|%h/.local/share/smoky-mail/account.json
+# le Mail de l'appli Smoky relève maintenant : l'ancien se tait (pas de notifications en double)
+ConditionPathExists=!%h/.local/share/smoky/mail-actif
 
 [Service]
 Type=oneshot

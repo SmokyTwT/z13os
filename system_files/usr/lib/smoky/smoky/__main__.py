@@ -2,6 +2,7 @@
     /usr/lib/smoky/lancer.py [--port N] [--page DOSSIER] [--arret-auto SECONDES [--profil DOSSIER]]
     /usr/lib/smoky/lancer.py --rappels     prépare les rappels de l'agenda puis s'arrête
                                            (smoky-agenda-reminders.service : chaque matin et à la connexion)
+    /usr/lib/smoky/lancer.py --courrier    relève les mails puis s'arrête (smoky-courrier.timer, 15 min)
 
 Le lanceur /usr/bin/smoky s'en charge ; le port et le code d'accès sont écrits dans
 $XDG_RUNTIME_DIR/smoky/serveur.json (lisible par toi seul).
@@ -18,6 +19,7 @@ from . import PORT, VERSION
 from .agenda import Agenda, maintenant
 from .base import Base
 from .commandes import BIN, detacher, navigateur_ouvert
+from .courrier import PIECES_MAXI, Courrier, releve_de_fond
 from .notes import CARNET_MAXI, FICHIER_MAXI, PAGE_MAXI, Notes
 from .planning import iso
 from .serveur import Appli, Erreur
@@ -28,7 +30,7 @@ from .taches import Taches
 PAGE = Path(__file__).resolve().parents[3] / "share/smoky"
 
 # Applis pas encore refaites dans Smoky : elles s'ouvrent à part, comme avant.
-ANCIENNES = {"notes": "smoky-notes", "mail": "smoky-mail", "maison": "smoky-home"}
+ANCIENNES = {"notes": "smoky-notes", "maison": "smoky-home"}
 ANCIEN_AGENDA = Path(os.environ.get("SMOKY_ANCIEN_AGENDA", "/usr/libexec/smokyagenda/server.py"))   # variable : essais
 
 
@@ -39,6 +41,8 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     systeme = Systeme(prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
     agenda = Agenda(base, prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
     notes = Notes(base, prevenir=lambda quoi, **plus: appli.flux.publier("change", {"quoi": quoi, **plus}))
+    courrier = Courrier(base, prevenir=lambda quoi: appli.flux.publier("change", {"quoi": quoi}))
+    appli.cles = courrier.lecture                 # /courrier/<clé> : corps des mails ouverts, pièces jointes
 
     def prevenir_taches(resultat):
         """Les autres fenêtres ouvertes relisent la liste (la page Agenda aussi : tâches à caser)."""
@@ -111,6 +115,30 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     def notes_envoyer_fichier(requete):
         return notes.envoyer_fichier(requete.morceaux["cid"], requete.morceaux["nom"], requete.corps)
 
+    # --- Mail : boîtes, liste, lecture, envoi ---
+    @appli.route("GET", "/api/mail")
+    def mail_etat(requete):
+        p = {k: requete.params.get(k, [""])[-1] for k in ("categorie", "recherche", "compte", "avant")}
+        avant = None
+        if p["avant"]:
+            try:
+                avant = float(p["avant"])
+            except ValueError:
+                raise Erreur(400, "Date invalide.") from None
+        return courrier.etat(p["categorie"], p["recherche"], p["compte"], avant)
+
+    @appli.route("POST", "/api/mail")
+    def mail_agir(requete):
+        return courrier.agir(requete.json())
+
+    @appli.route("PUT", "/api/mail/pieces", corps_maxi=PIECES_MAXI)
+    def mail_piece(requete):
+        return 201, courrier.piece(requete.params.get("nom", [""])[-1], requete.corps)
+
+    @appli.route("GET", "/api/mail/<id>")
+    def mail_ouvrir(requete):
+        return courrier.ouvrir(requete.morceaux["id"])
+
     @appli.route("GET", "/api/systeme")
     def systeme_etat(requete):
         return systeme.etat()
@@ -132,6 +160,7 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     appli.base = base
     appli.agenda = agenda
     appli.notes = notes
+    appli.courrier = courrier
     return appli
 
 
@@ -169,9 +198,16 @@ def main(argv=None):
                    help="dossier de profil du navigateur de l'appli : tant qu'il tourne, le serveur reste")
     p.add_argument("--rappels", action="store_true",
                    help="préparer les rappels de l'agenda (et le ménage pendant les cours), puis s'arrêter")
+    p.add_argument("--courrier", action="store_true", help="relever les mails (et prévenir des nouveaux), puis s'arrêter")
     args = p.parse_args(argv)
     if args.rappels:
         return rappels()
+    if args.courrier:
+        try:
+            return releve_de_fond(Base())
+        except (OSError, RuntimeError, sqlite3.Error) as e:
+            print(f"smoky : relève des mails impossible ({e})", file=sys.stderr)
+            return 1
     present = (lambda: navigateur_ouvert(args.profil)) if args.profil else None
     try:
         appli = construire(args.page, args.port, arret_auto=args.arret_auto, present=present)

@@ -1,0 +1,9 @@
+[Unit]
+Description=Smoky : relève des mails de toutes tes boîtes, et notifications des nouveaux
+# seulement une fois une boîte ajoutée dans Smoky → Mail (le fichier naît avec la première boîte)
+ConditionPathExists=%h/.local/share/smoky/mail-actif
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/lib/smoky/lancer.py --courrier
+Nice=10

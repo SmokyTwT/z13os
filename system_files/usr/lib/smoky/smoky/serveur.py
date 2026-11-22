@@ -41,8 +41,9 @@ TYPES = {
     ".icc": "application/octet-stream",
 }
 # 'wasm-unsafe-eval' : pdf.js décode certaines images des PDF en WebAssembly (jamais de eval() pour autant)
+# frame-src 'self' : le corps d'un mail s'affiche dans un cadre isolé, servi à part (/courrier/<clé>)
 CSP = ("default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; "
-       "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; "
+       "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 CORPS_MAXI = 6_000_000      # un emploi du temps .ics importé fait 5 Mo au plus
 
@@ -149,6 +150,7 @@ class Appli:
         self.entree = "/smoky"
         self.flux = Flux()
         self.routes = []
+        self.cles = None                              # /courrier/<clé>[/<n>] → (contenu, type, en-têtes) ou None
         self.serveur = None
         self._statiques = {}                          # chemin → (signature du fichier, empreinte, contenu)
 
@@ -336,6 +338,8 @@ def _gestionnaire(appli):
             except UnicodeDecodeError:
                 return self._refuser(400, "Adresse illisible.")
             self._params = parse_qs(url.query)
+            if self._chemin.startswith("/courrier/"):
+                return self._cle()
             if not self._chemin.startswith("/api/"):
                 return self._statique()
             if not self._autorisee():
@@ -372,6 +376,21 @@ def _gestionnaire(appli):
             except Exception:                         # une erreur de programmation ne doit pas tuer le serveur
                 traceback.print_exc()
                 self._json(500, {"erreur": "Erreur interne de Smoky."})
+
+        def _cle(self):
+            """Corps d'un mail ouvert et ses pièces jointes, sous une adresse tirée au sort à
+            l'ouverture (le cadre et les liens de téléchargement ne peuvent pas porter le code
+            d'accès) ; seulement depuis la page de l'appli elle-même."""
+            if self.command not in ("GET", "HEAD"):
+                return self._refuser(405, "Méthode refusée.")
+            if self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+                return self._refuser(403, "Accès refusé.")
+            m = re.fullmatch(r"/courrier/([A-Za-z0-9_-]{20,64})(?:/([0-9]{1,3}))?", self._chemin)
+            trouve = appli.cles(m.group(1), int(m.group(2)) if m.group(2) else None) if m and appli.cles else None
+            if trouve is None:
+                return self._refuser(404, "Ce mail n'est plus ouvert : rouvre-le.")
+            contenu, type_mime, entetes = trouve
+            self._envoyer(200, contenu, type_mime, [("Cache-Control", "no-store"), *entetes])
 
         def _statique(self):
             if self.command not in ("GET", "HEAD"):

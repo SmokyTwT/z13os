@@ -1183,13 +1183,14 @@ class TestSysteme(AvecServeur):
         self.assertEqual(srv.commandes(), [])
 
     def test_ouvrir_les_anciennes_applis(self):
-        for quoi, programme in (("notes", "smoky-notes"), ("mail", "smoky-mail"), ("maison", "smoky-home")):
+        # « notes » : le bouton « Ouvrir l'ancien Smoky Notes » (carnets d'avant) ; le mail est refait, sans retour à l'ancien
+        for quoi, programme in (("notes", "smoky-notes"), ("maison", "smoky-home")):
             self.srv.vider()
             self.assertEqual(self.srv.json("POST", "/api/ouvrir", {"quoi": quoi}), (200, {}))
             self.assertEqual(self.commandes_apres(1), [[programme]])
         self.srv.vider()
         # l'agenda est refait dans Smoky : l'ancien ne s'ouvre plus depuis l'appli
-        for quoi in ("agenda", "center", "../../bin/sh", "", None, 3, ["notes"], {"a": 1}, "notes ", "smoky-notes", "/usr/bin/smoky-notes"):
+        for quoi in ("agenda", "mail", "center", "../../bin/sh", "", None, 3, ["notes"], {"a": 1}, "notes ", "smoky-notes", "/usr/bin/smoky-notes"):
             with self.subTest(quoi=quoi):
                 self.assertEqual(self.srv.json("POST", "/api/ouvrir", {"quoi": quoi}), (400, {"erreur": "Appli inconnue."}))
         self.aucune_commande()

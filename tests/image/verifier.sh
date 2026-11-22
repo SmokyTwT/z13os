@@ -84,7 +84,7 @@ for u in supergfxd.service thermald.service fstrim.timer z13-firstboot.service s
   verifie "$u activé" systemctl is-enabled "$u"
 done
 for u in smoky-autoicons.path smoky-autoicons.service smoky-adaptive.service smoky-mail.timer \
-         smoky-agenda-reminders.timer smoky-backup-check.timer; do
+         smoky-agenda-reminders.timer smoky-backup-check.timer smoky-courrier.timer; do
   verifie "$u activé (session)" systemctl --global is-enabled "$u"
 done
 verifie "Moodle en pause : plus de vérification toutes les 2 h" bash -c '[ -f /usr/share/smokyos/moodle-en-pause ] && ! systemctl --global is-enabled smoky-moodle.timer >/dev/null 2>&1'

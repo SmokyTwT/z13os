@@ -1,0 +1,10 @@
+[Unit]
+Description=Smoky : relève des mails toutes les 15 minutes (30 sur batterie)
+
+[Timer]
+OnStartupSec=3min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
