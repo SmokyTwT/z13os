@@ -28,9 +28,16 @@ export function monterBibliotheque(conteneur, { vue = "tous", classeur = null, s
   let recherche = "";
   let instant = -1;                   // lecture du dossier affichée (les réponses peuvent arriver dans le désordre)
 
+  // La barre des filtres et la recherche sont posées une fois et ne bougent plus : une mise à jour
+  // de la liste (venue d'ailleurs) ne déplace pas la recherche, le curseur et ce qui est tapé restent.
+  const recherchee = h("input", { class: "champ recherche", type: "search", placeholder: "Chercher un carnet", "aria-label": "Chercher un carnet" });
+  recherchee.addEventListener("input", () => { recherche = recherchee.value; dessinerListe(); });
+  let choixVue = h("span");
+  const filtres = h("div", { class: "filtres" }, choixVue, recherchee);
+  const contenu = h("div");
   const sous = h("p", { class: "sous" });
   const actions = h("div", { class: "boutons" });
-  const corps = h("div", { class: "corps large" });
+  const corps = h("div", { class: "corps large" }, filtres, contenu);
   const page = h("div", { class: "notes-biblio" },
     h("header", { class: "entete" }, h("div", {}, h("h1", { texte: "notes" }), sous), actions), corps);
   conteneur.replaceChildren(page);
@@ -63,20 +70,14 @@ export function monterBibliotheque(conteneur, { vue = "tous", classeur = null, s
     remplacer(actions,
       vue === "corbeille" ? null : bouton("Importer un PDF", { titre: "Un cours en PDF devient un carnet à annoter", surClic: () => choixPdf.click() }),
       vue === "corbeille" ? null : bouton("Nouveau carnet", { genre: "plein", surClic: () => creer() }));
-    const recherchee = h("input", { class: "champ recherche", type: "search", placeholder: "Chercher un carnet", "aria-label": "Chercher un carnet", value: recherche });
-    recherchee.addEventListener("input", () => {
-      recherche = recherchee.value;
-      const curseur = recherchee.selectionStart;
-      dessinerListe();
-      recherchee.focus();
-      recherchee.setSelectionRange(curseur, curseur);
-    });
-    const filtres = h("div", { class: "filtres" },
-      segment({ options: [["tous", "Tous"], ["favoris", "Favoris"], ["corbeille", `Corbeille${b.corbeille.length ? ` (${b.corbeille.length})` : ""}`]],
-        valeur: vue === "corbeille" ? "corbeille" : vue === "favoris" ? "favoris" : "tous", nom: "Afficher",
-        surChange: (v) => { location.hash = v === "corbeille" ? "#/notes/corbeille" : v === "favoris" ? "#/notes/favoris" : "#/notes"; } }),
-      vue === "corbeille" ? null : recherchee);
-    remplacer(corps, filtres,
+    if (document.activeElement !== recherchee) recherchee.value = recherche;
+    recherchee.hidden = vue === "corbeille";
+    const nouveau = segment({ options: [["tous", "Tous"], ["favoris", "Favoris"], ["corbeille", `Corbeille${b.corbeille.length ? ` (${b.corbeille.length})` : ""}`]],
+      valeur: vue === "corbeille" ? "corbeille" : vue === "favoris" ? "favoris" : "tous", nom: "Afficher",
+      surChange: (v) => { location.hash = v === "corbeille" ? "#/notes/corbeille" : v === "favoris" ? "#/notes/favoris" : "#/notes"; } });
+    choixVue.replaceWith(nouveau);
+    choixVue = nouveau;
+    remplacer(contenu,
       classeur ? h("p", { class: "fil" }, h("a", { href: "#/notes", texte: "Tous les carnets" }), ` › ${classeur}`) : null,
       h("div", { class: "liste-carnets" }),
       b.ancien && vue === "tous" && !classeur ? anciens() : null);
@@ -190,7 +191,7 @@ export function monterBibliotheque(conteneur, { vue = "tous", classeur = null, s
   // --- Menu d'un carnet ---------------------------------------------------------------------------------
   function options(c, ancre) {
     const d = h("dialog", { class: "menu-notes", "aria-label": `Options de ${c.titre}` });
-    const fermer = () => d.close();
+    const fermer = () => { d.close(); d.remove(); };   // retiré tout de suite : pas de menu fermé qui traîne
     const entree = (texte, faire, danger = false) => h("button", { type: "button", class: danger ? "entree braise" : "entree", surclick: () => { fermer(); faire(); } }, texte);
     ajouter(d,
       h("div", { class: "groupe-menu" },

@@ -330,7 +330,7 @@ export async function monter(conteneur, contexte) {
   function detail(x) {
     const genre = e.genres[x.genre] || "";
     const d = h("dialog", { class: "detail", "aria-labelledby": "d-titre" });
-    const fermer = () => d.close();
+    const fermer = () => { d.close(); d.remove(); };   // retiré tout de suite : pas de menu fermé qui traîne
     const minutes = (minutesDe(x.fin) - minutesDe(x.debut) + 1440) % 1440 || 60;
     const boutons = [];
     if (x.source === "plan") {

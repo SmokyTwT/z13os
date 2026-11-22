@@ -1340,8 +1340,9 @@ class TestNotesDansLeNavigateur(unittest.TestCase):
         fichier = self.srv.home / "Notes" / "Carnets" / c["id"] / "pages" / f"{p2['id']}.json"
         self.assertTrue(fichier.is_file())
         menu("Supprimer cette page")
-        nav.attendre("document.querySelector('dialog[open] h2')?.textContent === 'Supprimer la page 2 ?'")
-        nav.cliquer("Supprimer la page", dans="document.querySelector('dialog[open]')")
+        question = "[...document.querySelectorAll('dialog[open]')].find((d) => d.querySelector('h2')?.textContent === 'Supprimer la page 2 ?')"
+        nav.attendre(f"!!{question}", quoi="la question avant de supprimer la page")
+        nav.cliquer("Supprimer la page", dans=question)
         self.enregistre(lire, lambda x: [p["id"] for p in x["pages"]] == [p1["id"]], "page supprimée")
         self.assertFalse(fichier.exists(), "son fichier part avec elle")
         menu("Supprimer cette page")
@@ -1422,6 +1423,8 @@ class TestNotesDansLeNavigateur(unittest.TestCase):
         nav.attendre("document.querySelectorAll('.carnet').length === 2")
 
         def menu(titre, entree):
+            ouverts = nav.evaluer("[...document.querySelectorAll('dialog.menu-notes')].map((d) => d.getAttribute('aria-label'))")   # fermé = retiré
+            self.assertEqual(ouverts, [], f"menu resté ouvert avant « {entree} » de {titre}")
             nav.cliquer(f"Options de {titre}")
             nav.attendre("document.querySelector('dialog.menu-notes[open]') !== null")
             nav.cliquer(entree, dans="document.querySelector('dialog.menu-notes')")
@@ -1453,6 +1456,14 @@ class TestNotesDansLeNavigateur(unittest.TestCase):
         nav.ecrire("input.recherche", "méca")
         nav.attendre("document.querySelectorAll('.carnet').length === 2", quoi="la recherche filtre")
         self.assertTrue(nav.evaluer("document.activeElement.classList.contains('recherche')"), "le curseur reste dans la recherche")
+        # un carnet arrive d'ailleurs pendant qu'on cherche : la liste suit, la recherche ne bouge pas
+        ailleurs = self.creer("Méca du solide")
+        nav.attendre("document.querySelectorAll('.carnet').length === 3", quoi="le carnet venu d'ailleurs apparaît dans la recherche")
+        self.assertEqual(nav.evaluer("[document.activeElement.classList.contains('recherche'), document.activeElement.value]"), [True, "méca"],
+                         "le curseur et le texte de la recherche restent")
+        self.srv.json("POST", "/api/notes", {"action": "supprimer", "id": ailleurs["id"]})
+        self.srv.json("POST", "/api/notes", {"action": "effacer", "id": self.srv.json("GET", "/api/notes")[1]["corbeille"][0]["id"]})
+        nav.attendre("document.querySelectorAll('.carnet').length === 2")
         nav.ecrire("input.recherche", "")
         nav.attendre("document.querySelectorAll('.carnet').length === 3")
         nav.capture("notes-bibliotheque")
@@ -1471,8 +1482,10 @@ class TestNotesDansLeNavigateur(unittest.TestCase):
         nav.cliquer("Corbeille (1)")
         nav.attendre("document.querySelectorAll('.liste-corbeille li').length === 1")
         nav.cliquer("Effacer")
-        nav.attendre("document.querySelector('dialog[open] h2')?.textContent.startsWith('Effacer « Brouillon de méca (copie) »')")
-        nav.cliquer("Effacer", dans="document.querySelector('dialog[open]')")
+        question = "[...document.querySelectorAll('dialog[open]')].find((d) => d.querySelector('h2')?.textContent.startsWith('Effacer « Brouillon de méca (copie) »'))"
+        nav.attendre(f"!!{question}", quoi="la question avant d'effacer")
+        self.assertEqual(nav.evaluer("document.querySelectorAll('dialog.menu-notes[open]').length"), 0, "aucun menu resté ouvert")
+        nav.cliquer("Effacer", dans=question)
         nav.attendre("document.querySelector('.vide-liste')?.textContent === 'La corbeille est vide.'")
         self.assertEqual(self.srv.json("GET", "/api/notes")[1]["corbeille"], [])
         self.sans_souci()

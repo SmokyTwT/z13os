@@ -1222,7 +1222,7 @@ export async function monterEditeur(conteneur, { carnetId, prefs, surRetour, enr
   function menu(ancre) {
     const p = carnet.carnet.pages[pageCourante];
     const d = h("dialog", { class: "menu-notes", "aria-label": "Options du carnet" });
-    const fermer = () => d.close();
+    const fermer = () => { d.close(); d.remove(); };   // retiré tout de suite : pas de menu fermé qui traîne
     const entree = (texte, faireX, { danger = false, inactif = false } = {}) => h("button", { type: "button", class: danger ? "entree braise" : "entree", disabled: inactif,
       surclick: () => { fermer(); faireX(); } }, texte);
     ajouter(d,
