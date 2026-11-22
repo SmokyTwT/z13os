@@ -92,7 +92,9 @@ case "$appel" in
     fi ;;
   "efibootmgr") [ -e "$F/sans-windows" ] || printf 'BootCurrent: 0001\nBoot0001* Fedora\nBoot0003* Windows Boot Manager\n' ;;
   "mokutil --sb-state") echo "SecureBoot enabled" ;;
-  python3\ *smoky-moodle.py\ status) echo '{"connected": true, "site": "Moodle d essai"}' ;;
+  python3\ *smoky-moodle.py\ status)
+    if [ -e "$F/moodle-pause" ]; then echo '{"connected": true, "site": "Moodle d essai", "en_pause": true}'
+    else echo '{"connected": true, "site": "Moodle d essai"}'; fi ;;
   python3\ *smoky-backup-status.py) echo '{"etat": "ok", "dernier": "hier"}' ;;
   python3\ -I\ *smokygpu.py\ etat) echo '{"mux": 1, "interface": "asus-armoury", "intel_auto": true}' ;;
 esac

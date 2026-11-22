@@ -137,6 +137,9 @@ export async function monter(conteneur, contexte) {
     }],
     ["cours", "Cours", () => {
       const m = e.cours;
+      if (m.en_pause) {
+        return [h("p", { class: "intro", texte: "Moodle est en pause : ni cours ni échéances ne sont importés pour l'instant. La partie Cours de Smoky sera refaite. Tes cours déjà importés restent dans l'ancien Smoky Notes." })];
+      }
       const echeances = (m.deadlines || []).filter((d) => d.time * 1000 > Date.now()).slice(0, 6);
       return [
         h("p", { class: "intro", texte: m.connected ? `Moodle est connecté : ${m.documents || 0} document(s) importé(s) dans tes notes, vérification toutes les 2 heures.`

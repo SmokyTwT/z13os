@@ -34,6 +34,9 @@ DEADLINES = STATE_DIR / "echeances.json"
 NOTES = HOME / "Notes"
 NOTEBOOKS = NOTES / "Smoky Notes"
 SITE_FILE = Path("/etc/smokyos/moodle-url")
+# Moodle en pause (choix du 22/11/2026) : ni cours ni échéances importés, en attendant que la partie
+# « Cours » de l'appli Smoky soit refaite. Retirer ce fichier de l'image relance tout.
+PAUSE = Path(os.environ.get("SMOKY_MOODLE_PAUSE", "/usr/share/smokyos/moodle-en-pause"))
 SUBJECTS_FILE = Path(os.environ.get("SMOKY_MATIERES", "/usr/share/smokyos/matieres.json"))
 SERVICE = "moodle_mobile_app"
 UA = "SmokyOS-Moodle/1.0"
@@ -395,12 +398,17 @@ def status():
     skipped = sorted(set(st.get("skipped", {}).values()))
     ev = json.loads(DEADLINES.read_text()) if DEADLINES.exists() else []
     print(json.dumps({"connected": bool(token_get()), "site": site(), "documents": len(st["files"]), "skipped_courses": skipped,
-                      "deadlines": ev[:10]}, ensure_ascii=False))
+                      "deadlines": ev[:10], "en_pause": PAUSE.exists()}, ensure_ascii=False))
     return 0
 
 
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "sync"
+    if cmd in ("connect", "receive", "sync") and PAUSE.exists():
+        print("Moodle est en pause : rien n'est importé (ni cours, ni échéances).")
+        if cmd != "sync":
+            notify("Moodle en pause", "Rien n'est importé pour l'instant : la partie Cours de Smoky sera refaite.")
+        return 0
     if cmd == "connect":
         return connect()
     if cmd == "receive" and len(argv) > 2:

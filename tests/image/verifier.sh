@@ -83,10 +83,11 @@ for u in supergfxd.service thermald.service fstrim.timer z13-firstboot.service s
          smoky-gpu.service rpm-ostreed-automatic.timer smoky-flatpak-update.timer; do
   verifie "$u activé" systemctl is-enabled "$u"
 done
-for u in smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer \
+for u in smoky-autoicons.path smoky-autoicons.service smoky-adaptive.service smoky-mail.timer \
          smoky-agenda-reminders.timer smoky-backup-check.timer; do
   verifie "$u activé (session)" systemctl --global is-enabled "$u"
 done
+verifie "Moodle en pause : plus de vérification toutes les 2 h" bash -c '[ -f /usr/share/smokyos/moodle-en-pause ] && ! systemctl --global is-enabled smoky-moodle.timer >/dev/null 2>&1'
 verifie "ModemManager désactivé" bash -c '[ "$(systemctl is-enabled ModemManager.service 2>/dev/null)" = masked ]'
 verifie "mises à jour automatiques préparées (stage)" grep -q '^AutomaticUpdatePolicy=stage' /etc/rpm-ostreed.conf
 verifie "pare-feu en zone public" bash -c '[ "$(firewall-offline-cmd --get-default-zone)" = public ]'

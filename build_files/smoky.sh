@@ -247,7 +247,9 @@ else
 fi
 
 # --- Services ----------------------------------------------------------------
-systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-moodle.timer smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer smoky-backup-check.timer
+# smoky-moodle.timer : plus activé tant que Moodle est en pause (/usr/share/smokyos/moodle-en-pause)
+systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-adaptive.service smoky-mail.timer smoky-agenda-reminders.timer smoky-backup-check.timer
+systemctl --global disable smoky-moodle.timer 2>/dev/null || true
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-firstboot.service smoky-focus-cleanup.service smoky-gpu.service \
   rpm-ostreed-automatic.timer smoky-flatpak-update.timer

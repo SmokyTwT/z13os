@@ -7,8 +7,12 @@ Le serveur tourne dans un dossier personnel jetable (voir test_smoky.py).
   python3 tests/test_notes.py
   SMOKY_RACINE=/ python3 tests/test_notes.py      image construite
 """
+import importlib.machinery
+import importlib.util
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -336,6 +340,54 @@ class TestServeurNotes(unittest.TestCase):
         self.assertIn("worker-src 'self';", csp)
         self.assertNotIn("unsafe-inline", csp)
         self.assertNotRegex(csp, r"'unsafe-eval'")
+
+
+class TestMoodleEnPause(unittest.TestCase):
+    """Moodle est en pause (22/11/2026) : rien n'est importé, ni cours ni échéances, en attendant que la
+    partie Cours de l'appli Smoky soit refaite. Le fichier de pause est dans l'image."""
+
+    def charger(self, pause):
+        chemin = RACINE / "usr/libexec/smokyos/smoky-moodle.py"
+        chargeur = importlib.machinery.SourceFileLoader("smoky_moodle_pause", str(chemin))
+        m = importlib.util.module_from_spec(importlib.util.spec_from_loader("smoky_moodle_pause", chargeur))
+        chargeur.exec_module(m)
+        m.PAUSE = pause
+        m.STATE = Path(tempfile.mkdtemp()) / "state.json"
+        self.addCleanup(shutil.rmtree, m.STATE.parent, ignore_errors=True)
+        m.DEADLINES = m.STATE.parent / "echeances.json"
+        m.token_get = lambda: "jeton"
+        m.notify = lambda *a, **k: None
+
+        self.appels = []
+
+        def reseau(*a, **k):                  # Moodle injoignable ; on note qu'il a été appelé
+            self.appels.append(a)
+            raise RuntimeError("hors ligne")
+        m.ws = m.http = m.zenity = reseau
+        return m
+
+    def test_le_fichier_de_pause_est_dans_l_image(self):
+        self.assertTrue((RACINE / "usr/share/smokyos/moodle-en-pause").is_file())
+
+    def test_rien_n_est_importe(self):
+        m = self.charger(RACINE / "usr/share/smokyos/moodle-en-pause")
+        for commande in (["sync"], ["connect"], ["receive", "moodlemobile://token=abc"]):
+            with self.subTest(commande=commande):
+                self.assertEqual(m.main(["smoky-moodle.py", *commande]), 0)
+        self.assertEqual(self.appels, [], "Moodle n'est pas contacté")
+        self.assertFalse(m.STATE.exists(), "rien n'est écrit")
+        sortie = io.StringIO()
+        sys.stdout, avant = sortie, sys.stdout
+        try:
+            m.main(["smoky-moodle.py", "status"])
+        finally:
+            sys.stdout = avant
+        self.assertTrue(json.loads(sortie.getvalue())["en_pause"], "la page Système peut le dire")
+
+    def test_sans_pause_la_synchro_repart(self):
+        m = self.charger(Path(tempfile.gettempdir()) / "pas-de-pause-ici")
+        self.assertEqual(m.main(["smoky-moodle.py", "sync"]), 1, "Moodle injoignable : échec signalé")
+        self.assertTrue(self.appels, "sans le fichier de pause, la synchronisation contacte Moodle")
 
 
 class TestInstallation(unittest.TestCase):

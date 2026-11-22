@@ -310,7 +310,7 @@ class TestDansLeNavigateur(unittest.TestCase):
         cls.srv.stop()
 
     def setUp(self):
-        self.srv.oublier("echecs", "attendre", "continuer", "sans-maj", "sans-windows")
+        self.srv.oublier("echecs", "attendre", "continuer", "sans-maj", "sans-windows", "moodle-pause")
         while taches := self.srv.json("GET", "/api/aujourdhui")[1]["taches"]:
             for t in taches:
                 self.srv.req("DELETE", f"/api/taches/{t['id']}")
@@ -498,6 +498,17 @@ class TestDansLeNavigateur(unittest.TestCase):
                                 "pas d'intertitre seul, sans réglage dessous")
                 self.assertLessEqual(nav.evaluer("document.documentElement.scrollWidth"), 1280, "pas de défilement horizontal")
                 nav.capture(f"systeme-{section}")
+        self.sans_souci()
+
+    def test_moodle_en_pause(self):
+        (self.srv.faux / "moodle-pause").touch()
+        self.assertEqual(self.srv.agir("cours", quoi="sync")[0], 200)          # l'état des cours est relu
+        self.addCleanup(lambda: (self.srv.oublier("moodle-pause"), self.srv.agir("cours", quoi="sync")))   # et le sera après
+        self.ouvrir("&a=/systeme/cours")
+        nav = self.nav
+        nav.attendre("document.querySelector('.section .intro')?.textContent.startsWith('Moodle est en pause')", quoi="la page dit que Moodle est en pause")
+        self.assertNotIn("Synchroniser maintenant", nav.texte(), "rien à lancer tant que Moodle est en pause")
+        self.assertNotIn("Connecter Moodle", nav.texte())
         self.sans_souci()
 
     def test_action_grave_demande_confirmation(self):

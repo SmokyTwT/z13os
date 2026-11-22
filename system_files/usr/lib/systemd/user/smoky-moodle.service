@@ -1,5 +1,5 @@
 [Unit]
-Description=Smoky OS : nouveaux cours Moodle dans Smoky Notes + échéances
+Description=Smoky OS : nouveaux cours Moodle dans Smoky Notes + échéances (en pause : voir /usr/share/smokyos/moodle-en-pause)
 After=network-online.target
 
 [Service]
