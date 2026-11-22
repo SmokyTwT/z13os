@@ -31,6 +31,12 @@ PAGE = Path(__file__).resolve().parents[3] / "share/smoky"
 
 # Applis pas encore refaites dans Smoky : elles s'ouvrent à part, comme avant.
 ANCIENNES = {"notes": "smoky-notes", "maison": "smoky-home"}
+# Pages d'aide ouvertes dans ton navigateur habituel (connecté à tes comptes) : seulement celles-ci.
+PAGES_WEB = {
+    "aide-gmail": "https://myaccount.google.com/apppasswords",                       # mot de passe d'application
+    "aide-microsoft": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+    "microsoft-code": "https://microsoft.com/devicelogin",                           # où entrer le code de connexion
+}
 ANCIEN_AGENDA = Path(os.environ.get("SMOKY_ANCIEN_AGENDA", "/usr/libexec/smokyagenda/server.py"))   # variable : essais
 
 
@@ -150,6 +156,10 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     @appli.route("POST", "/api/ouvrir")
     def ouvrir(requete):
         quoi = requete.json().get("quoi")
+        if isinstance(quoi, str) and quoi in PAGES_WEB:
+            if not detacher("gio", "open", PAGES_WEB[quoi]):
+                raise Erreur(502, "Le navigateur n'a pas pu s'ouvrir.")
+            return {}
         programme = ANCIENNES.get(quoi) if isinstance(quoi, str) else None
         if programme is None:
             raise Erreur(400, "Appli inconnue.")

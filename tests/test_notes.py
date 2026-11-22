@@ -396,7 +396,7 @@ class TestInstallation(unittest.TestCase):
     def test_raccourcis(self):
         smoky = (RACINE / "usr/share/applications/smoky.desktop").read_text()
         self.assertIn("[Desktop Action notes]\nName=Notes\nExec=/usr/bin/smoky --aller /notes\n", smoky)
-        self.assertIn("Actions=notes;agenda;systeme;", smoky)
+        self.assertIn("Actions=notes;agenda;mail;systeme;", smoky)
         self.assertRegex(smoky, r"Keywords=[^\n]*;notes;", "chercher « notes » dans GNOME trouve l'appli Smoky")
         ancien = (RACINE / "usr/share/applications/smoky-notes.desktop").read_text()
         self.assertIn("Name=Smoky Notes (ancien)\n", ancien)

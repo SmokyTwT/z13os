@@ -748,8 +748,16 @@ class TestPlanifierAvecClaude(AvecServeur):
     def test_claude_pas_connecte(self):
         (self.srv.faux / "claude-connecte").unlink()
         self.assertEqual(self.agir("planifier", claude=True),
-                         (400, {"erreur": "Claude n'est pas connecté (Smoky Mail, Réglages, Connecter mon compte Claude)."}))
+                         (400, {"erreur": "Claude n'est pas connecté (Agenda, Réglages, Connecter mon compte Claude)."}))
         self.assertFalse(self.etat()["claude"])
+        # la connexion se fait d'ici (elle était dans l'ancien Smoky Mail) : un terminal lance le script
+        self.srv.vider()
+        self.assertEqual(self.agir("connecter_claude"), (200, {"message": "Un terminal s'ouvre : suis-y la connexion de ton compte Claude."}))
+        self.assertEqual(attendre(lambda: [c for c in self.srv.commandes() if c[0] == "ptyxis"], 5),
+                         [["ptyxis", "--new-window", "--", "bash", "/usr/libexec/smokyos/smoky-claude-connexion.sh"]])
+        script = RACINE / "usr/libexec/smokyos/smoky-claude-connexion.sh"
+        self.assertTrue(os.access(script, os.X_OK))
+        self.assertIn("claude auth login", script.read_text())
 
 
 # --- Rappels -----------------------------------------------------------------------------------------

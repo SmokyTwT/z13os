@@ -506,8 +506,9 @@ export async function monter(conteneur, contexte) {
             rangee("Ménage pendant les cours", "Le robot part 10 minutes après le début du premier cours d'une heure ou plus de la journée (Smoky Home).",
               interrupteur({ coche: r.menage_pendant_cours, nom: "Ménage pendant les cours", surChange: (v) => regler({ menage_pendant_cours: v }) })))),
         h("section", { class: "section" }, h("h2", { texte: "claude" }),
-          h("p", { class: "intro", texte: e.claude ? "Claude est connecté : le bouton « Avec Claude » organise ta semaine avec ton compte. Il reçoit seulement la semaine à organiser." : "Pour planifier avec Claude, connecte d'abord ton compte Claude dans Smoky Mail (Réglages)." }),
+          h("p", { class: "intro", texte: e.claude ? "Claude est connecté : le bouton « Avec Claude » organise ta semaine avec ton compte. Il reçoit seulement la semaine à organiser." : "Pour planifier avec Claude, connecte ton compte Claude (forfait Pro ou Max) : un terminal s'ouvre, installe au besoin l'outil officiel d'Anthropic, puis la connexion se fait dans le navigateur. Aucune clé d'API." }),
           h("div", { class: "groupe" },
+            e.claude ? null : rangee("Compte Claude", "Pas encore connecté.", bouton("Connecter mon compte Claude", { surClic: () => agir({ action: "connecter_claude" }) })),
             rangee("Modèle", null, segment({ options: Object.entries(e.modeles).map(([k, v]) => [k, v.split(" (")[0]]), valeur: r.modele, nom: "Modèle de Claude",
               surChange: (v) => regler({ modele: v }) })))));
   }

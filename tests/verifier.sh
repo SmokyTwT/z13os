@@ -124,6 +124,15 @@ if sortie=$(python3 tests/test_notes.py 2>&1); then
 else
   echec "tests des notes"; printf '%s\n' "$sortie" | tail -40
 fi
+if sortie=$(python3 tests/test_mail.py 2>&1); then
+  if printf '%s\n' "$sortie" | grep -q 'skipped='; then
+    note "mail : openssl absent, une partie non vérifiée ($(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests'))"
+  else
+    ok "mail : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
+  fi
+else
+  echec "tests du mail"; printf '%s\n' "$sortie" | tail -40
+fi
 # Tests ratés d'une sortie unittest, sous la forme Classe.test (ou Classe entière si sa
 # préparation a échoué). Les lignes « [...:ERROR:...] » sont le bavardage de Chrome, pas des tests.
 echoues() {
@@ -145,6 +154,21 @@ else
     printf '%s\n' "$sortie" | grep -v '^\[.*:ERROR:' | grep -A12 '^FAIL\|^ERROR' | head -30
   else
     echec "page de l'appli Smoky dans le navigateur"; printf '%s\n' "${sortie2:-$sortie}" | grep -v '^\[.*:ERROR:' | tail -40
+  fi
+fi
+if sortie=$(python3 tests/test_mail_page.py 2>&1); then
+  if printf '%s\n' "$sortie" | grep -q 'OK (skipped'; then
+    note "Mail dans un navigateur : pas de Chrome ici, non vérifié"
+  else
+    ok "Mail dans un vrai navigateur : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran //')"
+  fi
+else
+  mapfile -t rates < <(echoues "$sortie")
+  if [ "${#rates[@]}" -gt 0 ] && sortie3=$(python3 tests/test_mail_page.py "${rates[@]}" 2>&1); then
+    note "Mail dans un vrai navigateur : réussi au 2e essai pour ${rates[*]} (test instable, à corriger)"
+    printf '%s\n' "$sortie" | grep -v '^\[.*:ERROR:' | grep -A12 '^FAIL\|^ERROR' | head -30
+  else
+    echec "Mail dans le navigateur"; printf '%s\n' "${sortie3:-$sortie}" | grep -v '^\[.*:ERROR:' | tail -40
   fi
 fi
 

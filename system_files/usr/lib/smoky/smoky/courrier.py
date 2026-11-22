@@ -331,9 +331,13 @@ def html_sur(source, message):
     def remplacer(m):
         return m.group(1) + images.get(m.group(3), "") + m.group(4)
     s = re.sub(r"(?i)(src\s*=\s*([\"']))cid:([^\"']+)([\"'])", remplacer, s)
-    s = re.sub(r"(?is)^.*?<body[^>]*>", "", s) if re.search(r"(?i)<body", s) else s
+    styles = ""
+    debut = re.search(r"(?i)<body[^>]*>", s)
+    if debut:                           # l'en-tête part, sauf ses styles (la mise en page du mail en dépend)
+        styles = "".join(re.findall(r"(?is)<style\b[^>]*>.*?</style\s*>", s[:debut.start()]))
+        s = s[debut.end():]
     s = re.sub(r"(?is)</body>.*$", "", s)
-    return (ENTREE_COURRIER + s + "</body></html>").encode("utf-8")
+    return (ENTREE_COURRIER + styles + s + "</body></html>").encode("utf-8")
 
 
 # --- connexion IMAP -----------------------------------------------------------------------------------
@@ -552,7 +556,7 @@ class Courrier:
         if avant is not None:
             conditions.append("date < ?")
             valeurs.append(float(avant))
-        if not categorie and not recherche:
+        if categorie in ("", "non-lus") and not recherche:        # l'indésirable reste à part
             conditions.append("categorie != 'indesirable'")
         ou = " WHERE " + " AND ".join(conditions) if conditions else ""
         lignes = self.base.lire(f"SELECT * FROM mail_messages{ou} ORDER BY date DESC LIMIT ?", (*valeurs, PAR_PAGE + 1))
@@ -561,7 +565,8 @@ class Courrier:
         ms = self.flux_ms
         return {
             "comptes": [{"id": c["id"], "adresse": c["adresse"], "nom": c["nom"], "genre": c["genre"], "auth": c["auth"],
-                         "releve": c["releve"], "probleme": c["probleme"]} for c in comptes],
+                         "releve": c["releve"], "probleme": c["probleme"], "envoi": c["serveurs"].get("identifiant_envoi", "")}
+                        for c in comptes],
             "categories": [{"id": k, "nom": v, "total": comptes_lus.get(k, (0, 0))[0], "non_lus": comptes_lus.get(k, (0, 0))[1] or 0}
                            for k, v in CATEGORIES.items()],
             "messages": [self._ligne(m) for m in lignes[:PAR_PAGE]],
@@ -588,7 +593,9 @@ class Courrier:
     # --- relève ---
     def relever(self, attendre=False, notifier=False):
         """Relève toutes les boîtes (dans un fil, sauf attendre=True). Une seule relève à la fois,
-        même entre l'appli et la relève de fond (verrou dans $XDG_RUNTIME_DIR)."""
+        même entre l'appli et la relève de fond (verrou dans $XDG_RUNTIME_DIR). Seule la relève de
+        fond prévient (notifier=True) : la page ne relève que quand elle est à l'écran, la liste est
+        alors sous tes yeux."""
         if not attendre:
             if self.releve_en_cours:
                 return {"message": "Relève déjà en cours."}
@@ -731,8 +738,10 @@ class Courrier:
         return {
             "id": mid, "compte": compte["id"], "de": ligne["de_nom"], "de_adresse": ligne["de_adresse"],
             "a": en_tete(message, "To"), "cc": en_tete(message, "Cc"), "repondre_a": repondre,
-            "objet": ligne["objet"], "date": ligne["date"], "categorie": ligne["categorie"], "texte": texte[:500_000],
+            "objet": ligne["objet"], "date": ligne["date"], "categorie": ligne["categorie"], "classe_par": ligne["classe_par"],
+            "texte": texte[:500_000],
             "corps": f"/courrier/{cle}" if page else None,
+            "images_distantes": bool(page and re.search(r"(?is)<img\b[^>]*\bsrc\s*=\s*[\"']?\s*(https?:)?//", page)),
             "pieces": [{"nom": nom, "type": t, "taille": len(contenu), "adresse": f"/courrier/{cle}/{i}"}
                        for i, (nom, t, contenu) in enumerate(pieces)],
             "message_id": (message.get("Message-ID") or "").strip()[:300],
@@ -860,7 +869,14 @@ class Courrier:
         if not motdepasse:
             raise Erreur(400, "Mot de passe manquant.")
         serveurs = self._serveurs(genre, adresse, a)
-        ancien = self.base.un("SELECT id FROM mail_comptes WHERE adresse = ? COLLATE NOCASE", (adresse,))
+        ancien = self.base.un("SELECT id, serveurs FROM mail_comptes WHERE adresse = ? COLLATE NOCASE", (adresse,))
+        if ancien and "identifiant_envoi" not in serveurs:          # mot de passe remis : l'identifiant d'envoi reste
+            try:
+                vieux = json.loads(ancien["serveurs"]).get("identifiant_envoi")
+            except (ValueError, AttributeError):
+                vieux = None
+            if vieux:
+                serveurs["identifiant_envoi"] = vieux
         compte = {"id": ancien["id"] if ancien else "m" + secrets.token_hex(4), "adresse": adresse, "genre": genre,
                   "nom": re.sub(r"[\x00-\x1f\x7f<>\"]+", " ", str(a.get("nom", ""))).strip()[:100], "auth": "motdepasse",
                   "serveurs": serveurs, "validite": "", "releve": 0}
@@ -1126,9 +1142,15 @@ class Courrier:
                 else:
                     identifiant = compte["serveurs"].get("identifiant_envoi") or compte["adresse"]
                     motdepasse = secret_lire(compte["id"], "motdepasse")
-                    if not motdepasse.isascii():
-                        raise Erreur(400, "Ce mot de passe contient des caractères accentués : l'envoi ne sait pas s'en servir.")
-                    serveur.login(identifiant, motdepasse)
+                    if motdepasse.isascii() and identifiant.isascii():
+                        serveur.login(identifiant, motdepasse)
+                    else:                       # smtplib n'écrit qu'en ASCII : AUTH PLAIN en UTF-8, comme les applis de mail
+                        serveur.ehlo_or_helo_if_needed()
+                        if "PLAIN" not in serveur.esmtp_features.get("auth", "").upper().split():
+                            raise Erreur(400, "Ce serveur n'accepte pas les mots de passe accentués à l'envoi : rien n'a été envoyé.")
+                        code, reponse = serveur.docmd("AUTH", "PLAIN " + base64.b64encode(f"\0{identifiant}\0{motdepasse}".encode()).decode())
+                        if code != 235:
+                            raise smtplib.SMTPAuthenticationError(code, reponse)
                 refuses = serveur.send_message(message, to_addrs=destinataires)
                 if refuses:
                     raise Erreur(502, "Envoyé, sauf à : " + ", ".join(refuses)[:200])

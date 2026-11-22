@@ -53,7 +53,7 @@ DELAI = float(os.environ.get("SMOKY_DELAI", "40"))
 # pas partir vers la vraie machine).
 FAUSSES = ("asusctl", "supergfxctl", "powerprofilesctl", "nmcli", "systemctl", "rpm-ostree", "flatpak", "gio",
            "efibootmgr", "mokutil", "notify-send", "systemd-run", "python3",
-           "smoky-notes", "smoky-agenda", "smoky-mail", "smoky-home")
+           "smoky-notes", "smoky-agenda", "smoky-mail", "smoky-home", "ptyxis")
 FAUSSE = r'''#!/bin/sh
 # Fausse commande des tests de Smoky : note l'appel, répond ce qui est prévu, ne fait rien d'autre.
 nom=${0##*/}
@@ -1753,21 +1753,25 @@ class TestPage(unittest.TestCase):
             self.assertTrue(cible.startswith("/") and (PAGE / cible.lstrip("/")).is_file(), f"smoky.css : {cible} absent")
 
     def test_la_page_et_le_serveur_parlent_des_memes_actions(self):
-        # actions de /api/systeme (toutes les pages), de /api/agenda (page Agenda) et de /api/notes
-        # (page Notes, js/notes.js et js/notes/) : listes fermées des deux côtés ; la page Agenda lance
-        # aussi la concentration, une action du système
+        # actions de /api/systeme (toutes les pages), de /api/agenda (page Agenda), de /api/notes
+        # (page Notes, js/notes.js et js/notes/) et de /api/mail (page Mail, js/mail.js et js/mail/) :
+        # listes fermées des deux côtés ; la page Agenda lance aussi la concentration, une action du système
         agenda_js = (PAGE / "js/agenda.js").read_text()
         vers_systeme = set(re.findall(r'"/api/systeme",\s*\{\s*action:\s*"([a-z_]+)"', agenda_js))
         cote_page_agenda = set(re.findall(r'action:\s*"([a-z_]+)"', agenda_js)) - vers_systeme
-        cote_page, cote_page_notes = set(vers_systeme), set()
+        cote_page, cote_page_notes, cote_page_mail = set(vers_systeme), set(), set()
         for p in self.js:
             actions = set(re.findall(r'action:\s*"([a-z_]+)"', p.read_text()))
             if p.name == "notes.js" or p.parent.name == "notes":
                 self.assertNotIn("/api/systeme", p.read_text(), f"{p.name} : les Notes ne parlent qu'à /api/notes")
                 cote_page_notes |= actions
+            elif p.name == "mail.js" or p.parent.name == "mail":
+                self.assertNotIn("/api/systeme", p.read_text(), f"{p.name} : le Mail ne parle qu'à /api/mail")
+                cote_page_mail |= actions
             elif p.name != "agenda.js":
                 cote_page |= actions
-        for page_, fichier in ((cote_page, "systeme.py"), (cote_page_agenda, "agenda.py"), (cote_page_notes, "notes.py")):
+        for page_, fichier in ((cote_page, "systeme.py"), (cote_page_agenda, "agenda.py"), (cote_page_notes, "notes.py"),
+                               (cote_page_mail, "courrier.py")):
             with self.subTest(serveur=fichier):
                 cote_serveur = set(re.findall(r"def _a_([a-z_]+)\(", (PAQUET / fichier).read_text()))
                 self.assertEqual(page_ - cote_serveur, set(), "la page demande une action que le serveur ne connaît pas")
@@ -1785,7 +1789,7 @@ class TestPage(unittest.TestCase):
         self.assertEqual(set(GNOME) - cites, set(), "réglage GNOME accepté par le serveur mais absent de la page")
 
     def test_les_adresses_de_l_api_existent(self):
-        routes = ("/api/aujourdhui", "/api/taches", "/api/systeme", "/api/agenda", "/api/notes", "/api/ouvrir", "/api/flux")
+        routes = ("/api/aujourdhui", "/api/taches", "/api/systeme", "/api/agenda", "/api/notes", "/api/ouvrir", "/api/flux", "/api/mail")
         for p in self.js:
             for adresse in re.findall(r'''["'`](/api/[a-z]+)''', p.read_text()):
                 self.assertIn(adresse, routes, f"{p.name} appelle {adresse}")

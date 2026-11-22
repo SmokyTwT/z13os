@@ -42,7 +42,7 @@ async function appeler(methode, chemin, corps, { brut = false, keepalive = false
 
 export const api = {
   lire: (chemin) => appeler("GET", chemin),
-  envoyer: (chemin, corps = {}) => appeler("POST", chemin, corps),
+  envoyer: (chemin, corps = {}, options) => appeler("POST", chemin, corps, options),   // keepalive : part même si la page se ferme
   mettre: (chemin, corps, options) => appeler("PUT", chemin, corps, options),   // JSON ou octets
   octets: (chemin) => appeler("GET", chemin, undefined, { brut: true }),           // → Blob
   supprimer: (chemin) => appeler("DELETE", chemin),
@@ -67,7 +67,7 @@ const PAGES = [
   { id: "aujourdhui", nom: "Aujourd'hui", module: "/js/aujourdhui.js" },
   { id: "notes", nom: "Notes", module: "/js/notes.js" },
   { id: "agenda", nom: "Agenda", module: "/js/agenda.js" },
-  { id: "mail", nom: "Mail", ancienne: true },
+  { id: "mail", nom: "Mail", module: "/js/mail.js" },
   { id: "maison", nom: "Maison", ancienne: true },
   { id: "systeme", nom: "Système", module: "/js/systeme.js" },
 ];

@@ -103,7 +103,8 @@ erreurs=$(systemd-analyze verify --recursive-errors=no "${unites[@]}" 2>&1 | gre
 titre "Applis"
 for f in /usr/bin/smoky-notes /usr/bin/smoky-center /usr/bin/smoky-mail /usr/bin/smoky-agenda /usr/bin/smoky-home \
          /usr/bin/smoky-portail /usr/bin/z13-notes-setup /usr/libexec/smokyos/smoky-app /usr/libexec/smokyos/smoky-webapp \
-         /usr/libexec/smokyos/smoky-bootonce.sh /usr/libexec/smokyos/smoky-focus.sh /usr/libexec/z13os/firstboot.sh \
+         /usr/libexec/smokyos/smoky-bootonce.sh /usr/libexec/smokyos/smoky-focus.sh /usr/libexec/smokyos/smoky-claude-connexion.sh \
+         /usr/libexec/z13os/firstboot.sh \
          /usr/libexec/z13os/user-setup.sh /usr/libexec/z13os/notes-sync.sh; do
   verifie "$f exécutable" test -x "$f"
 done

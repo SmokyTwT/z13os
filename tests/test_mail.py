@@ -6,6 +6,7 @@
   SMOKY_RACINE=/ python3 tests/test_mail.py      image construite
 """
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -163,6 +164,18 @@ class TestBoites(AvecBoites):
         self.assertEqual(len(self.imap.dossiers["INBOX"]), 1, "rien n'est supprimé sur le serveur")
         self.assertEqual(self.agir("retirer", id=cid)[0], 404)
 
+    def test_pages_d_aide(self):
+        for quoi, adresse in (("aide-gmail", "https://myaccount.google.com/apppasswords"),
+                              ("microsoft-code", "https://microsoft.com/devicelogin")):
+            self.srv.vider()
+            self.assertEqual(self.srv.json("POST", "/api/ouvrir", {"quoi": quoi}), (200, {}))
+            self.assertEqual(attendre(lambda: [c for c in self.srv.commandes() if c[0] == "gio"], 5), [["gio", "open", adresse]],
+                             "ouverte dans le navigateur habituel")
+        self.srv.vider()
+        for quoi in ("https://pisteur.example/", "aide", "AIDE-GMAIL", "aide-gmail ", ["aide-gmail"]):
+            self.assertEqual(self.srv.json("POST", "/api/ouvrir", {"quoi": quoi}), (400, {"erreur": "Appli inconnue."}))
+        self.assertEqual(self.srv.commandes(), [], "seulement les pages connues")
+
     def test_ancien_smoky_mail_jamais_lu(self):
         ancien = self.srv.home / ".local/share/smoky-mail"
         ancien.mkdir(parents=True)
@@ -203,7 +216,7 @@ class TestReleve(AvecBoites):
         self.assertEqual([m["objet"] for m in self.etat(recherche="ciné")["messages"]], ["Ciné ce soir ?"], "recherche sans tenir compte de la casse")
         self.assertEqual([m["objet"] for m in self.etat(recherche="lina soir")["messages"]], ["Ciné ce soir ?"], "plusieurs mots : tous")
         self.assertEqual(self.etat(recherche="100%_")["messages"], [], "les % et _ tapés sont des lettres, pas des jokers")
-        self.assertEqual(len(self.etat(categorie="non-lus")["messages"]), 9)
+        self.assertEqual(len(self.etat(categorie="non-lus")["messages"]), 8, "les non lus, sans l'indésirable")
         for mauvais in ({"categorie": "spam"}, {"compte": "../x"}, {"avant": "hier"}):
             with self.subTest(mauvais=mauvais):
                 self.assertEqual(self.srv.json("GET", "/api/mail?" + urllib.parse.urlencode(mauvais))[0], 400)
@@ -235,6 +248,7 @@ class TestReleve(AvecBoites):
         self.releve(1)
         self.imap.validite += 1
         self.imap.dossiers["INBOX"].clear()
+        self.imap.suivant = 1                                         # les numéros (UID) repartent de 1
         self.imap.deposer(mail(objet="Après"))
         self.reussir("relever")
         self.assertEqual([m["objet"] for m in self.releve(1)["messages"]], ["Après"], "UIDVALIDITY changé : la liste repart de zéro")
@@ -287,12 +301,13 @@ class TestReleve(AvecBoites):
 
 class TestLecture(AvecBoites):
     def preparer_mail_html(self):
-        page = ('<html><head><meta http-equiv="refresh" content="0;url=https://pisteur.example/">'
+        page = ('<html><head><meta http-equiv="refresh" content="0;url=https://pisteur.example/"><style>p.note{color:#123456}</style>'
                 '<link rel="stylesheet" href="https://pisteur.example/s.css"><script>alert(1)</script></head>'
                 '<body onload="alert(2)"><p style="color:red">Bonjour <b>toi</b></p>'
                 '<img src="https://pisteur.example/p.gif"><img src="cid:logo123">'
                 '<a href="javascript:alert(3)">piège</a> <a href="https://www.uphf.fr/">site</a>'
-                '<iframe src="https://pisteur.example/"></iframe><form action="https://x.example/"><input name=a></form></body></html>')
+                '<iframe src="https://pisteur.example/">contenu du cadre</iframe><form action="https://x.example/"><input name=a></form>'
+                '<script type="text/javascript">alert(4)</script><object data="x.swf">objet</object></body></html>')
         return self.imap.deposer(mail(de="Prof <prof@uphf.fr>", objet="Sujet du TP", texte="Bonjour toi (texte)", html=page,
                                       images=[("logo123", PNG)], pieces=[("sujet TP n°2.pdf", b"%PDF-1.4 sujet", "application/pdf")]))
 
@@ -319,12 +334,15 @@ class TestLecture(AvecBoites):
         self.assertNotIn("allow-same-origin", csp)
         self.assertEqual((h["x-frame-options"], h["cache-control"], h["referrer-policy"]), ("SAMEORIGIN", "no-store", "no-referrer"))
         texte = corps.decode()
-        for interdit in ("<script", "alert(1)", "onload", "http-equiv", "<link", "javascript:", "<iframe", "<form", "pisteur.example/\""):
+        for interdit in ("<script", "alert(1)", "alert(4)", "onload", "http-equiv", "<link", "javascript:", "<iframe", "contenu du cadre",
+                         "<object", "<form", "pisteur.example/\""):
             self.assertNotIn(interdit, texte, interdit)
         self.assertIn('<img src="data:image/png;base64,', texte, "l'image jointe s'affiche (cid: devenu data:)")
         self.assertIn('<base target="_blank">', texte, "les liens s'ouvrent dans le navigateur")
         self.assertIn('<a href="https://www.uphf.fr/">site</a>', texte)
         self.assertIn('style="color:red"', texte, "la mise en page du mail reste")
+        self.assertIn("<style>p.note{color:#123456}</style>", texte, "ses styles d'en-tête aussi")
+        self.assertEqual((m["categorie"], m["classe_par"], m["images_distantes"]), ("universite", "pc", True))
         # la pièce jointe : téléchargée, jamais affichée
         code, h, contenu = self.srv.req("GET", piece["adresse"], jeton=None)
         self.assertEqual((code, contenu, h["content-type"]), (200, b"%PDF-1.4 sujet", "application/octet-stream"))
@@ -447,15 +465,12 @@ class TestEcrire(AvecBoites):
 
     def test_uphf_identifiant_d_envoi_et_copie_envoyee(self):
         r = self.reussir("ajouter", genre="uphf", adresse=UPHF, nom="Prénom Nom", motdepasse=MDP_UPHF, identifiant_envoi="12345")
-        # (le faux SMTP n'accepte pas l'accent : le mot de passe de l'essai d'envoi est en ASCII)
-        self.smtp.comptes["12345@uphf.fr"] = "ascii"
-        f = self.srv.faux / "trousseau.json"
-        tout = json.loads(f.read_text())
-        tout[f"service smoky quoi mail-motdepasse compte {r['id']}"]["secret"] = "ascii"
-        f.write_text(json.dumps(tout))
-        self.imap_uphf.comptes[UPHF] = "ascii"
+        self.assertEqual(self.etat()["comptes"][0]["envoi"], "12345@uphf.fr")
+        self.reussir("ajouter", genre="uphf", adresse=UPHF, nom="Prénom Nom", motdepasse=MDP_UPHF)
+        self.assertEqual(self.etat()["comptes"][0]["envoi"], "12345@uphf.fr", "mot de passe remis : le numéro ENT reste")
         self.reussir("envoyer", compte=r["id"], a="prof@uphf.fr", objet="Absence", texte="Bonjour")
         self.assertEqual(self.smtp.recus[0]["qui"], "12345@uphf.fr", "à l'UPHF, l'envoi se fait avec le numéro ENT")
+        self.assertEqual([a for v, a in self.smtp.journal if v == "AUTH"], ["PLAIN"], "mot de passe accentué : AUTH PLAIN en UTF-8")
         [copie] = self.imap_uphf.dossiers["Sent"]
         self.assertIn("\\Seen", copie.drapeaux)
         self.assertIn(b"Subject: Absence", copie.brut)
@@ -567,6 +582,49 @@ class TestOutlook(AvecBoites):
 
 
 class TestInstallation(unittest.TestCase):
+    def test_raccourcis_et_dock(self):
+        smoky = (RACINE / "usr/share/applications/smoky.desktop").read_text()
+        self.assertIn("[Desktop Action mail]\nName=Mail\nExec=/usr/bin/smoky --aller /mail\n", smoky)
+        self.assertIn("Actions=notes;agenda;mail;systeme;", smoky)
+        self.assertRegex(smoky, r"Keywords=[^\n]*;mail;", "chercher « mail » dans GNOME trouve l'appli Smoky")
+        ancien = (RACINE / "usr/share/applications/smoky-mail.desktop").read_text()
+        self.assertIn("Name=Smoky Mail (ancien)\n", ancien)
+        self.assertIn("Exec=/usr/bin/smoky-mail\n", ancien, "l'ancien reste lançable, sous le même nom de fichier")
+        self.assertNotIn("Email", ancien, "il ne se présente plus comme l'appli de mail")
+        source, reglages = RACINE.parent / "build_files/smoky.sh", RACINE / "usr/share/glib-2.0/schemas/zz1-z13os.gschema.override"
+        favoris = (source.read_text().split("FAVS=", 1)[1] if source.is_file() else reglages.read_text().split("favorite-apps=", 1)[1]).split("\n")[0]
+        self.assertIn("'smoky.desktop'", favoris)
+        self.assertNotIn("smoky-mail.desktop", favoris, "plus d'icône à part dans le dock par défaut")
+
+    def test_dock(self):
+        """L'icône de l'ancien Smoky Mail quitte le dock une fois ; Smoky prend sa place s'il n'y est pas."""
+        script = (RACINE / "usr/libexec/z13os/user-setup.sh").read_text()
+        debut = script.index('MARK="$HOME/.config/smoky/setup-mail-dans-smoky"')
+        bloc = script[debut:script.index("\nfi\n", debut) + 4]
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "bin").mkdir()
+            (d / "bin/dconf").write_text('#!/bin/bash\ncat "$HOME/dock"\n')
+            (d / "bin/gsettings").write_text('#!/bin/bash\nprintf %s "$4" > "$HOME/dock"\n')
+            for f in ("dconf", "gsettings"):
+                (d / "bin" / f).chmod(0o755)
+            for avant, apres in (("['smoky.desktop', 'z13-whatsapp.desktop', 'smoky-mail.desktop', 'z13-drive.desktop']",
+                                  "['smoky.desktop', 'z13-whatsapp.desktop', 'z13-drive.desktop']"),
+                                 ("['google-chrome.desktop', 'smoky-mail.desktop']", "['google-chrome.desktop', 'smoky.desktop']"),
+                                 ("['smoky-mail.desktop', 'smoky.desktop']", "['smoky.desktop']"),
+                                 ("['smoky-mail.desktop']", "['smoky.desktop']"),
+                                 ("['google-chrome.desktop']", "['google-chrome.desktop']")):
+                with self.subTest(avant=avant):
+                    (d / ".config/smoky/setup-mail-dans-smoky").unlink(missing_ok=True)
+                    (d / "dock").write_text(avant)
+                    env = {**os.environ, "HOME": str(d), "PATH": f"{d / 'bin'}:/usr/bin:/bin"}
+                    subprocess.run(["bash", "-c", bloc], env=env, check=True)
+                    self.assertEqual((d / "dock").read_text(), apres)
+                    self.assertTrue((d / ".config/smoky/setup-mail-dans-smoky").exists())
+                    (d / "dock").write_text("['smoky-mail.desktop']")
+                    subprocess.run(["bash", "-c", bloc], env=env, check=True)
+                    self.assertEqual((d / "dock").read_text(), "['smoky-mail.desktop']", "une seule fois : remis à la main, il reste")
+
     def test_releve_de_fond_installee(self):
         unites = RACINE / "usr/lib/systemd/user"
         service, minuteur = (unites / "smoky-courrier.service").read_text(), (unites / "smoky-courrier.timer").read_text()

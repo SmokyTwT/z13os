@@ -569,8 +569,8 @@ class TestDansLeNavigateur(unittest.TestCase):
     def test_anciennes_applis(self):
         self.ouvrir()
         nav = self.nav
-        nav.attendre("document.querySelectorAll('#rail a.ancienne').length === 2")
-        for refaite in ("agenda", "notes"):
+        nav.attendre("document.querySelectorAll('#rail a.ancienne').length === 1")
+        for refaite in ("agenda", "notes", "mail"):
             self.assertFalse(nav.evaluer(f"document.querySelector('#rail a[data-page={refaite}]').classList.contains('ancienne')"),
                              f"{refaite} est refait dans Smoky")
         self.srv.vider()
@@ -579,13 +579,15 @@ class TestDansLeNavigateur(unittest.TestCase):
         self.assertEqual(nav.evaluer("location.hash"), "#/aujourdhui", "on reste sur la page ; l'ancienne appli s'ouvre à part")
         nav.attendre("[...document.querySelectorAll('#annonces .annonce')].some((a) => a.textContent === \"Maison s'ouvre dans sa fenêtre.\")")
         self.srv.vider()
-        nav.cliquer("Ouvrir Mail")
-        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-mail"]])
-        for refaite in ("Ouvrir Agenda", "Ouvrir Notes"):
+        nav.cliquer("Ouvrir Maison")
+        self.assertEqual(self.srv.attendre_commandes(1), [["smoky-home"]])
+        for refaite in ("Ouvrir Agenda", "Ouvrir Notes", "Ouvrir Mail"):
             self.assertNotIn(refaite, nav.texte())
-        nav.cliquer("Notes", dans="document.querySelector('#rail')")
-        nav.attendre("location.hash === '#/notes' && document.querySelector('#page h1')?.textContent === 'notes'", quoi="les Notes s'ouvrent dans l'appli")
-        self.assertEqual(self.srv.commandes(), [["smoky-mail"]], "aucune ancienne appli lancée pour les Notes")
+        for page, titre in (("Notes", "notes"), ("Mail", "mail")):
+            nav.cliquer(page, dans="document.querySelector('#rail')")
+            nav.attendre(f"location.hash === '#/{titre}' && document.querySelector('#page h1')?.textContent === '{titre}'",
+                         quoi=f"{page} s'ouvre dans l'appli")
+        self.assertEqual(self.srv.commandes(), [["smoky-home"]], "aucune ancienne appli lancée pour les Notes ni le Mail")
         self.sans_souci()
 
     def test_sans_code_d_acces(self):
