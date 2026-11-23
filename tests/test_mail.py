@@ -553,8 +553,13 @@ class TestOutlook(AvecBoites):
             return any(d[1].get("grant_type") == "refresh_token" for d in self.ms.demandes[avant:])
         self.reussir("relever")
         attendre(renouvele, 10, 0.05)
-        self.reussir("relever")
-        self.assertEqual([c["probleme"] for c in self.releve()["comptes"]], [""])
+
+        # la première relève a pu partir avant que le faux serveur connaisse le nouveau jeton :
+        # on relève jusqu'à ce que le compte n'ait plus de problème (10 s au plus)
+        def sans_probleme():
+            self.reussir("relever")
+            return [c["probleme"] for c in self.releve()["comptes"]] == [""]
+        self.assertTrue(attendre(sans_probleme, 10, 0.3), self.releve()["comptes"])
         # l'envoi passe par STARTTLS puis XOAUTH2
         self.smtp_outlook.jetons["moi@outlook.fr"] = self.ms.jeton_acces
         self.reussir("envoyer", compte=c["id"], a="ami@gmail.com", objet="Test", texte="Salut")
