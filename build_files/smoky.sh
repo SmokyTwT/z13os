@@ -152,7 +152,8 @@ glib-compile-schemas /usr/share/glib-2.0/schemas
 # publics, on passe en zone « public » : rien n'est joignable depuis le réseau, sauf la
 # découverte locale (mDNS : Google Home, Chromecast).
 # Smoky Notes et Smoky Home (port 8123) ne sont donc accessibles que depuis ce PC.
-firewall-offline-cmd --set-default-zone=public
+# fedora-bootc est déjà en zone « public » (Silverblue ne l'était pas) : on ne la règle que si besoin
+[[ "$(firewall-offline-cmd --get-default-zone)" == public ]] || firewall-offline-cmd --set-default-zone=public
 # Avec --zone, l'option est --remove-service-from-zone (« --remove-service » appartient à un
 # autre mode de la commande : l'ancienne ligne échouait sans bruit et ssh restait autorisé).
 if firewall-offline-cmd --zone=public --query-service=ssh; then
