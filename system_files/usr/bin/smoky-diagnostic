@@ -2,6 +2,9 @@
 # smoky-diagnostic : l'état du PC en une page, à copier quand on demande de l'aide.
 #   smoky-diagnostic                       affiche le rapport
 #   smoky-diagnostic > ~/diagnostic.txt    l'enregistre dans un fichier
+#   smoky-diagnostic --energie [SECONDES]  mesure la consommation sur batterie (60 s par défaut) :
+#                                          autonomie, réglages qui comptent, ce qui travaille
+#   sudo smoky-diagnostic --energie-paquet repos du processeur entier (20 s), lisible par root seulement
 # Lecture seule : rien n'est modifié, aucun mot de passe n'est demandé. Avant l'affichage, sont
 # masqués : tout chemin dans ton dossier personnel (remplacé par « ~/… »), les adresses e-mail,
 # IP et matérielles (MAC), et tout ce qui ressemble à un code d'accès. Relis quand même le
@@ -123,6 +126,15 @@ for ligne in sys.stdin:
         continue
     print(m)' 2>/dev/null | sort | uniq -c | sort -rn | head -n 15
 }
+
+ENERGIE=/usr/libexec/smokyos/smoky-energie.py
+[ -f "$ENERGIE" ] || ENERGIE="$(dirname "$(readlink -f "$0")")/../libexec/smokyos/smoky-energie.py"   # dans le dépôt
+case "${1:-}" in
+  --energie) rapport() { python3 -I "$ENERGIE" "${2:-60}"; } ;;
+  --energie-paquet) rapport() { python3 -I "$ENERGIE" --paquet; } ;;
+  "") ;;
+  *) echo "Options : aucune, --energie [secondes] ou --energie-paquet (avec sudo)." >&2; exit 2 ;;
+esac
 
 # masque ce qui est personnel avant d'afficher
 rapport 2>&1 | sed -E \

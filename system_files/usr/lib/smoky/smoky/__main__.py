@@ -149,6 +149,10 @@ def construire(page, port=PORT, arret_auto=None, jeton=None, base=None, present=
     def systeme_etat(requete):
         return systeme.etat()
 
+    @appli.route("GET", "/api/systeme/batterie")
+    def systeme_batterie(requete):
+        return systeme.batterie()
+
     @appli.route("POST", "/api/systeme")
     def systeme_agir(requete):
         return systeme.agir(requete.json())

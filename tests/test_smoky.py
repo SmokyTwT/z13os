@@ -804,7 +804,8 @@ class TestSysteme(AvecServeur):
                                      "infos", "stockage"})
         self.assertEqual(etat["image"], "docker://exemple/smoky:essai")
         self.assertEqual(etat["maj"], {"prete": True, "en_cours": False, "resultat": ""})
-        self.assertEqual(etat["energie"], {"niveau": "76", "etat": "Discharging", "limite": "80", "profil": "balanced"})
+        self.assertEqual(etat["energie"], {"niveau": "76", "etat": "Discharging", "limite": "80", "profil": "balanced",
+                                           "watts": None, "restant": None, "plein": None, "a_la_limite": None})
         self.assertEqual(etat["carte_graphique"], {"mode": "Integrated", "mux": {"mux": 1, "interface": "asus-armoury", "intel_auto": True}})
         self.assertEqual(etat["adaptatif"], {"refresh": True, "tablet_mode": False, "vpn_auto": False, "tablet_open_notes": True})
         self.assertEqual(etat["maison"], {"jeton": False, "arriere_plan": False, "active": False})
@@ -1182,6 +1183,39 @@ class TestSysteme(AvecServeur):
         self.assertEqual(srv.agir("windows"), (404, {"erreur": "Windows introuvable sur ce PC."}))
         self.assertEqual(srv.commandes(), [])
 
+    def test_consommation_sur_batterie(self):
+        """Watts lissés sur les dernières minutes et autonomie qui en découle, sans lancer aucun programme."""
+        b = self.srv.batterie
+        fichiers = {"power_now": "9000000", "energy_now": "30000000", "energy_full": "55000000"}
+        for nom, valeur in fichiers.items():
+            (b / nom).write_text(valeur + "\n")
+        self.addCleanup(lambda: [(b / n).unlink(missing_ok=True) for n in fichiers])
+        self.addCleanup(lambda: (b / "status").write_text("Discharging\n"))
+        self.srv.vider()
+        # 30 Wh à 9 W : 3 h 20 ; pleine (55 Wh) : 6 h 06 ; jusqu'à la limite de 80 % (44 Wh) : 4 h 53
+        self.assertEqual(self.srv.json("GET", "/api/systeme/batterie"),
+                         (200, {"niveau": "76", "etat": "Discharging", "limite": "80", "watts": 9.0, "restant": 200, "plein": 366, "a_la_limite": 293}))
+        (b / "power_now").write_text("11000000\n")
+        self.assertEqual(self.srv.json("GET", "/api/systeme/batterie")[1]["watts"], 10.0, "moyenne des lectures récentes")
+        (b / "charge_control_end_threshold").write_text("100\n")
+        self.addCleanup(lambda: (b / "charge_control_end_threshold").write_text("80\n"))
+        self.assertIsNone(self.srv.json("GET", "/api/systeme/batterie")[1]["a_la_limite"], "limite à 100 % : rien à ajouter")
+        (b / "status").write_text("Charging\n")
+        r = self.srv.json("GET", "/api/systeme/batterie")[1]
+        self.assertEqual((r["watts"], r["restant"], r["plein"]), (None, None, None), "branché : pas d'estimation")
+        (b / "status").write_text("Discharging\n")
+        self.assertEqual(self.srv.json("GET", "/api/systeme/batterie")[1]["watts"], 11.0, "rebranché puis débranché : les anciennes lectures sont oubliées")
+        self.assertEqual(self.srv.commandes(), [], "lecture de fichiers seulement : rafraîchie souvent, elle ne coûte rien")
+        # batterie qui compte en µAh (courant et tension) plutôt qu'en µWh
+        for nom in fichiers:
+            (b / nom).unlink()
+        for nom, valeur in (("current_now", "1000000"), ("voltage_now", "15000000"), ("charge_now", "2000000"),
+                            ("charge_full", "3700000"), ("voltage_min_design", "15000000")):
+            (b / nom).write_text(valeur + "\n")
+            self.addCleanup((b / nom).unlink, missing_ok=True)
+        r = self.srv.json("GET", "/api/systeme/batterie")[1]
+        self.assertEqual((r["restant"], r["plein"]), (int(30 / r["watts"] * 60), int(55.5 / r["watts"] * 60)))
+
     def test_ouvrir_les_anciennes_applis(self):
         # « notes » : le bouton « Ouvrir l'ancien Smoky Notes » (carnets d'avant) ; le mail est refait, sans retour à l'ancien
         for quoi, programme in (("notes", "smoky-notes"), ("maison", "smoky-home")):
@@ -1206,7 +1240,9 @@ class TestSystemeSansOutils(unittest.TestCase):
         srv = Serveur(preparer=preparer)
         self.addCleanup(srv.stop)
         etat = srv.etat()
-        self.assertEqual(etat["energie"], {"niveau": "?", "etat": "?", "limite": "?", "profil": "?"})
+        self.assertEqual(etat["energie"], {"niveau": "?", "etat": "?", "limite": "?", "profil": "?",
+                                           "watts": None, "restant": None, "plein": None, "a_la_limite": None})
+        self.assertEqual(srv.json("GET", "/api/systeme/batterie")[1]["watts"], None)
         self.assertEqual(etat["carte_graphique"], {"mode": "?", "mux": {}})
         self.assertEqual((etat["image"], etat["maj"]["prete"], etat["windows"], etat["demarrage_securise"]), ("", False, False, ""))
         self.assertEqual((etat["cours"], etat["vpn"], etat["sauvegarde"]), ({"connected": False}, {"configure": False, "actif": False}, {}))

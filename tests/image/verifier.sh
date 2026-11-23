@@ -205,6 +205,12 @@ if udevadm verify --help >/dev/null 2>&1; then
 fi
 verifie "aucun autre réglage ne fixe vm.swappiness" bash -c '! grep -rqsE "^\s*vm\.(swappiness|page-cluster)" /usr/lib/sysctl.d /etc/sysctl.d /etc/sysctl.conf'
 
+titre "Énergie"
+verifie "moins de réveils au repos (chien de garde NMI coupé, écritures groupées)" grep -q '^kernel.nmi_watchdog = 0' /usr/lib/sysctl.d/61-smokyos-energie.conf
+verifie "aucun autre réglage ne rallume le chien de garde NMI" bash -c '! grep -rqsE "^\s*kernel\.nmi_watchdog\s*=\s*1" /usr/lib/sysctl.d /etc/sysctl.d /etc/sysctl.conf'
+verifie "mesure d'énergie utilisable (smoky-diagnostic --energie)" bash -c 'smoky-diagnostic --energie 2 | grep -qE "Pas de batterie trouvée|^moyenne"'
+verifie "profils d'énergie de Fedora présents (tuned + tuned-ppd)" bash -c 'rpm -q tuned tuned-ppd >/dev/null && test -f /usr/lib/tuned/profiles/balanced-battery/tuned.conf'
+
 titre "Travaux de démarrage faits une fois par image"
 for u in fedora-atomic-desktop-appstream-cache-refresh fedora-atomic-desktop-mandb-update; do
   if [ -f "/usr/lib/systemd/system/$u.service" ]; then

@@ -472,6 +472,30 @@ class TestDansLeNavigateur(unittest.TestCase):
         nav.attendre("document.querySelector('[aria-label=\"Écran à 120 Hz sur secteur, 60 Hz sur batterie\"]').getAttribute('aria-checked') === 'false'")
         self.sans_souci()
 
+    def test_systeme_consommation_et_autonomie(self):
+        b = self.srv.batterie
+        fichiers = {"power_now": "9000000", "energy_now": "30000000", "energy_full": "55000000"}
+        for nom, valeur in fichiers.items():
+            (b / nom).write_text(valeur + "\n")
+        self.addCleanup(lambda: [(b / n).unlink(missing_ok=True) for n in fichiers])
+        self.ouvrir("&a=/systeme/energie")
+        nav = self.nav
+        nav.attendre("document.querySelector('.section .intro')?.textContent === 'Sur batterie : 9 W en ce moment, environ 3 h 20 restantes.'",
+                     quoi="la consommation et le temps restant")
+        aide = nav.evaluer("[...document.querySelectorAll('.rangee')].find((r) => r.textContent.startsWith('Autonomie à ce rythme')).querySelector('.aide').textContent")
+        self.assertEqual(aide, "Batterie pleine : environ 6 h 06. Chargée jusqu'à 80 % : environ 4 h 53. "
+                               "Pour une longue journée, « Charger à 100 % » avant de partir.")
+        nav.capture("systeme-autonomie")
+        # rafraîchie toute seule (lecture légère, toutes les 15 s) : le PC consomme plus, l'estimation suit
+        self.srv.vider()
+        (b / "power_now").write_text("21000000\n")
+        nav.attendre("/Sur batterie : (1[0-9]|2[01]) W en ce moment/.test(document.querySelector('.section .intro').textContent) &&"
+                     " !document.querySelector('.section .intro').textContent.startsWith('Sur batterie : 9 W')", delai=25,
+                     quoi="la consommation se met à jour sans recharger la page")
+        self.assertEqual([c for c in self.srv.commandes() if c[0] not in ("python3",)], [],
+                         "la mise à jour de la batterie ne lance aucun programme")
+        self.sans_souci()
+
     def test_systeme_toutes_les_sections(self):
         self.ouvrir("&a=/systeme/maj")
         nav = self.nav

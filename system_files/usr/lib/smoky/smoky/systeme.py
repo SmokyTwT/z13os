@@ -12,6 +12,7 @@ import re
 import shutil
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -174,6 +175,47 @@ def _json(texte):
         return {}
 
 
+class Consommation:
+    """Ce que le PC consomme sur batterie, lissé sur les 3 dernières minutes de lectures, et
+    l'autonomie qui en découle. Lecture de fichiers du noyau seulement : aucun programme lancé."""
+    FENETRE = 180
+
+    def __init__(self):
+        self.points = deque()                              # (instant, watts), seulement sur batterie
+
+    @staticmethod
+    def _nombre(nom):
+        v = lire(BATTERIE / nom, "")
+        return int(v) if v.isdigit() else None
+
+    def mesure(self):
+        n = self._nombre
+        puissance = n("power_now")                          # µW
+        if puissance is None and n("current_now") is not None and n("voltage_now"):
+            puissance = n("current_now") * n("voltage_now") // 1_000_000
+        energie, pleine = n("energy_now"), n("energy_full")  # µWh
+        if energie is None and n("charge_now") is not None:  # certaines batteries comptent en µAh
+            tension = n("voltage_min_design") or n("voltage_now") or 0
+            energie = n("charge_now") * tension // 1_000_000
+            pleine = (n("charge_full") or 0) * tension // 1_000_000 or None
+        maintenant = time.monotonic()
+        if lire(BATTERIE / "status", "") != "Discharging" or not puissance:
+            self.points.clear()                            # branché : rien à estimer
+            return {"watts": None, "restant": None, "plein": None, "a_la_limite": None}
+        self.points.append((maintenant, puissance / 1e6))
+        while self.points and maintenant - self.points[0][0] > self.FENETRE:
+            self.points.popleft()
+        watts = sum(w for _t, w in self.points) / len(self.points)
+        if watts < 0.5:
+            return {"watts": None, "restant": None, "plein": None, "a_la_limite": None}
+        minutes = lambda wh: int(wh / watts * 60) if wh else None   # noqa: E731
+        limite = n("charge_control_end_threshold")
+        return {"watts": round(watts, 1),
+                "restant": minutes(energie / 1e6 if energie else None),
+                "plein": minutes(pleine / 1e6 if pleine else None),
+                "a_la_limite": minutes(pleine / 1e6 * limite / 100 if pleine and limite and limite < 100 else None)}
+
+
 class Systeme:
     """État et actions. Les lectures lentes sont gardées en mémoire quelques dizaines de secondes."""
 
@@ -188,6 +230,7 @@ class Systeme:
         self._securise = []
         self._gardes = {}                                   # nom → (instant, valeur) des lectures lentes
         self._bassin = ThreadPoolExecutor(max_workers=8)
+        self.consommation = Consommation()
 
     # --- lectures ---
     def _garde(self, nom, duree, lecture):
@@ -287,8 +330,7 @@ class Systeme:
         return {
             "image": image,
             "maj": {"prete": prete, **self.maj},
-            "energie": {"niveau": lire(BATTERIE / "capacity", "?"), "etat": lire(BATTERIE / "status", "?"),
-                        "limite": lire(BATTERIE / "charge_control_end_threshold", "?"), "profil": r["profil"] or "?"},
+            "energie": {**self.batterie(), "profil": r["profil"] or "?"},
             "carte_graphique": {"mode": r["mode_graphique"] or "?", "mux": r["mux"]},
             "adaptatif": charger(ADAPTATIF, ADAPTATIF_DEFAUT),
             "maison": {"jeton": MAISON_JETON.exists(), "arriere_plan": MAISON_FOND.exists(), "active": r["maison"] == "active"},
@@ -302,6 +344,11 @@ class Systeme:
             "infos": self.infos(),
             "stockage": r["stockage"],
         }
+
+    def batterie(self):
+        """Niveau, état, limite et consommation : de quoi rafraîchir la section Énergie souvent, sans rien lancer."""
+        return {"niveau": lire(BATTERIE / "capacity", "?"), "etat": lire(BATTERIE / "status", "?"),
+                "limite": lire(BATTERIE / "charge_control_end_threshold", "?"), **self.consommation.mesure()}
 
     def resume(self):
         """Quelques chiffres pour la page Aujourd'hui (lecture de fichiers seulement : instantané)."""
