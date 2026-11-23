@@ -129,8 +129,9 @@ for ligne in sys.stdin:
 
 ENERGIE=/usr/libexec/smokyos/smoky-energie.py
 [ -f "$ENERGIE" ] || ENERGIE="$(dirname "$(readlink -f "$0")")/../libexec/smokyos/smoky-energie.py"   # dans le dépôt
+SECONDES=${2:-60}            # durée de la mesure d'énergie (les arguments du script, pas de la fonction)
 case "${1:-}" in
-  --energie) rapport() { python3 -I "$ENERGIE" "${2:-60}"; } ;;
+  --energie) rapport() { python3 -I "$ENERGIE" "$SECONDES"; } ;;
   --energie-paquet) rapport() { python3 -I "$ENERGIE" --paquet; } ;;
   "") ;;
   *) echo "Options : aucune, --energie [secondes] ou --energie-paquet (avec sudo)." >&2; exit 2 ;;

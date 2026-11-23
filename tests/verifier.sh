@@ -244,7 +244,8 @@ printf 'Discharging\n' > "$b/status"; echo 9000000 > "$b/power_now"; echo 300000
 echo 55000000 > "$b/energy_full"; echo 55 > "$b/capacity"; echo 60 > "$b/charge_control_end_threshold"
 energie=$(SMOKY_BATTERIE="$b" HOME=/var/home/camille bash system_files/usr/bin/smoky-diagnostic --energie 2 2>&1)
 rm -rf "$b"
-if printf '%s\n' "$energie" | grep -q '^moyenne : 9,0 W' && printf '%s\n' "$energie" | grep -q 'batterie pleine (100 %) : environ 6 h 06 ; chargée jusqu.à 60 % : environ 3 h 40' \
+if printf '%s\n' "$energie" | grep -q '^Mesure pendant 2 s' && printf '%s\n' "$energie" | grep -q '^moyenne : 9,0 W' \
+   && printf '%s\n' "$energie" | grep -q 'batterie pleine (100 %) : environ 6 h 06 ; chargée jusqu.à 60 % : environ 3 h 40' \
    && printf '%s\n' "$energie" | grep -q '^== Ce qui a travaillé'; then
   ok "mesure d'énergie (--energie) : consommation, autonomie, ce qui travaille"
 else
