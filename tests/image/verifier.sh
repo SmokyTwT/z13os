@@ -28,7 +28,7 @@ verifie "adresse Moodle enregistrée" grep -q '^https://' /etc/smokyos/moodle-ur
 titre "Paquets"
 for p in ffmpeg intel-media-driver asusctl supergfxctl thermald rclone zenity poppler-utils libsecret efibootmgr \
          google-chrome-stable gtk-update-icon-cache python3-pillow librsvg2-tools plymouth plymouth-plugin-script \
-         iwlwifi-mvm-firmware alsa-sof-firmware NetworkManager-wifi firewalld pipewire wireplumber bluez flatpak \
+         iwlwifi-mvm-firmware nvidia-gpu-firmware alsa-sof-firmware NetworkManager-wifi firewalld pipewire wireplumber bluez flatpak \
          labwc greetd greetd-selinux gtk4-layer-shell python3-gobject python3-pam swayidle swaylock wlr-randr \
          xdg-desktop-portal-wlr gnome-keyring-pam power-profiles-daemon upower iio-sensor-proxy nautilus ptyxis; do
   verifie "paquet $p installé" rpm -q "$p"

@@ -38,6 +38,9 @@ PAQUETS=(
   # --- Matériel du Z13 --------------------------------------------------------
   # microprogrammes absents de fedora-bootc : Wi-Fi AX210, son Intel (SOF) ; pilotes rares
   iwlwifi-mvm-firmware alsa-sof-firmware alsa-ucm kernel-modules-extra
+  # microprogramme de la carte NVIDIA : sans lui, le pilote nouveau ne la prend pas en charge et elle
+  # resterait allumée (vérifié le 15/11 sur le PC : avec lui, elle dort en D3cold au repos)
+  nvidia-gpu-firmware
   # décodage vidéo matériel Intel
   intel-media-driver libva-utils
   # ASUS ROG (limite de charge, carte graphique), température, capteurs (rotation, lumière)
