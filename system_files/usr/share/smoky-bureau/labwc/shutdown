@@ -1,0 +1,2 @@
+# Smoky OS — à la fermeture de la session : arrête proprement le bureau Smoky
+systemctl --user stop smoky-bureau-session.target

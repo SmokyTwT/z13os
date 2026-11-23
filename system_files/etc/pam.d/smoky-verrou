@@ -1,0 +1,4 @@
+#%PAM-1.0
+# Smoky OS — écran de verrouillage : même vérification du mot de passe qu'à la connexion
+auth       include      system-auth
+account    include      system-auth

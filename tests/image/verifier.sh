@@ -27,15 +27,15 @@ verifie "adresse Moodle enregistrée" grep -q '^https://' /etc/smokyos/moodle-ur
 
 titre "Paquets"
 for p in ffmpeg intel-media-driver asusctl supergfxctl thermald rclone zenity poppler-utils libsecret efibootmgr \
-         google-chrome-stable gtk-update-icon-cache python3-pillow librsvg2-tools gnome-shell-extension-user-theme \
-         plymouth-plugin-script; do
+         google-chrome-stable gtk-update-icon-cache python3-pillow librsvg2-tools plymouth plymouth-plugin-script \
+         iwlwifi-mvm-firmware alsa-sof-firmware NetworkManager-wifi firewalld pipewire wireplumber bluez flatpak \
+         labwc greetd greetd-selinux gtk4-layer-shell python3-gobject python3-pam swayidle swaylock wlr-randr \
+         xdg-desktop-portal-wlr gnome-keyring-pam power-profiles-daemon upower iio-sensor-proxy nautilus ptyxis; do
   verifie "paquet $p installé" rpm -q "$p"
 done
-for p in firefox gnome-tour glib2-devel; do
+# plus de GNOME Shell ni de GDM ; un seul gestionnaire de profils d'énergie (décision 4)
+for p in firefox gnome-tour glib2-devel gdm gnome-shell tuned tuned-ppd; do
   if rpm -q "$p" >/dev/null 2>&1; then echec "paquet $p encore présent"; else ok "paquet $p absent"; fi
-done
-for p in dash-to-dock blur-my-shell appindicator caffeine; do
-  rpm -q "gnome-shell-extension-$p" >/dev/null 2>&1 && ok "extension $p installée" || attention "extension $p absente des dépôts Fedora"
 done
 
 titre "Démarrage"
@@ -64,23 +64,23 @@ done
 verifie "thème Plymouth par défaut : smoky" bash -c '[ "$(plymouth-set-default-theme)" = smoky ]'
 
 titre "Écran de connexion"
-GR=/usr/share/gnome-shell/gnome-shell-theme.gresource
-gresource() { /usr/libexec/smokyos/outils/gresource "$@"; }      # outil gardé dans le socle
-export -f gresource
-verifie "fond Smoky dans le thème de connexion" bash -c "gresource list $GR | grep -q smoky-login.jpg"
-sans_style=0
-for css in $(gresource list "$GR" 2>/dev/null | grep '\.css$'); do
-  # grep -c lit tout (pas de « tuyau fermé » compté comme un échec, contrairement à grep -q)
-  [ "$(gresource extract "$GR" "$css" 2>/dev/null | grep -c 'smoky-login.jpg')" -ge 1 ] || sans_style=$((sans_style + 1))
+verifie "greetd lance l'écran de connexion Smoky" grep -q '^command = "/usr/libexec/smokyos/smoky-connexion.sh"' /etc/greetd/config.toml
+verifie "écran de connexion sous le compte greetd" grep -q '^user = "greetd"' /etc/greetd/config.toml
+verifie "compte greetd présent" getent passwd greetd
+verifie "connexion : le trousseau est déverrouillé par le mot de passe" grep -q 'pam_gnome_keyring.so' /etc/pam.d/greetd
+verifie "verrouillage : vérification PAM dédiée" grep -q '^auth .*include .*system-auth' /etc/pam.d/smoky-verrou
+for f in /usr/libexec/smokyos/smoky-connexion.sh /usr/bin/smoky-session /usr/bin/smoky-bureau-cmd \
+         /usr/libexec/smokyos/smoky-bureau.py /usr/libexec/smokyos/smoky-verrou.py /usr/libexec/smokyos/smoky-verrou.sh \
+         /usr/libexec/smokyos/smoky-connexion.py /usr/libexec/smokyos/smoky-adaptive.py; do
+  verifie "$(basename "$f") exécutable" test -x "$f"
 done
-[ "$sans_style" -eq 0 ] && ok "style Smoky ajouté à chaque feuille du thème de connexion" || echec "style Smoky absent de $sans_style feuille(s) du thème de connexion"
-nb=$(gresource list "$GR" 2>/dev/null | wc -l)
-nb_css=$(gresource list "$GR" 2>/dev/null | grep -c '\.css$')
-[ "$nb" -ge 5 ] && [ "$nb_css" -ge 1 ] && ok "thème de connexion lisible ($nb fichiers dont $nb_css feuilles de style)" || echec "thème de connexion incomplet ($nb fichiers, $nb_css feuilles de style)"
+verifie "session Smoky déclarée" grep -q '^Exec=/usr/bin/smoky-session' /usr/share/wayland-sessions/smoky.desktop
+verifie "démarrage en mode graphique" bash -c '[ "$(systemctl get-default)" = graphical.target ]'
 
 titre "Services"
 for u in supergfxd.service thermald.service fstrim.timer z13-firstboot.service smoky-focus-cleanup.service \
-         smoky-gpu.service rpm-ostreed-automatic.timer smoky-flatpak-update.timer; do
+         smoky-gpu.service rpm-ostreed-automatic.timer smoky-flatpak-update.timer greetd.service \
+         power-profiles-daemon.service smoky-asusd-profils.service firewalld.service bluetooth.service; do
   verifie "$u activé" systemctl is-enabled "$u"
 done
 for u in smoky-autoicons.path smoky-autoicons.service smoky-adaptive.service smoky-mail.timer \
@@ -88,7 +88,13 @@ for u in smoky-autoicons.path smoky-autoicons.service smoky-adaptive.service smo
   verifie "$u activé (session)" systemctl --global is-enabled "$u"
 done
 verifie "Moodle en pause : plus de vérification toutes les 2 h" bash -c '[ -f /usr/share/smokyos/moodle-en-pause ] && ! systemctl --global is-enabled smoky-moodle.timer >/dev/null 2>&1'
-verifie "ModemManager désactivé" bash -c '[ "$(systemctl is-enabled ModemManager.service 2>/dev/null)" = masked ]'
+# fedora-bootc active des services de serveur : rien n'écoute sur le réseau, pas de redémarrage tout seul
+for u in sshd.service bootc-fetch-apply-updates.timer; do
+  verifie "$u coupé" bash -c "[ \"\$(systemctl is-enabled $u 2>/dev/null)\" = masked ]"
+done
+for u in sssd.service systemd-homed.service; do
+  verifie "$u désactivé" bash -c "! systemctl is-enabled $u >/dev/null 2>&1"
+done
 verifie "mises à jour automatiques préparées (stage)" grep -q '^AutomaticUpdatePolicy=stage' /etc/rpm-ostreed.conf
 verifie "pare-feu en zone public" bash -c '[ "$(firewall-offline-cmd --get-default-zone)" = public ]'
 if firewall-offline-cmd --zone=public --query-service=ssh >/dev/null 2>&1; then echec "ssh ouvert dans le pare-feu"; else ok "ssh fermé dans le pare-feu"; fi
@@ -142,25 +148,26 @@ nb=$(ls /usr/share/icons/Smoky-icons/apps/256/*.png 2>/dev/null | wc -l)
 [ "$nb" -ge 10 ] && ok "icônes Smoky générées ($nb)" || echec "icônes Smoky générées : $nb (10 attendues au moins)"
 verifie "réglages GNOME par défaut de Smoky OS présents" grep -q "^icon-theme='Smoky-icons'" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override
 verifie "réglages GNOME compilés après ceux de Smoky OS" bash -c '[ -s /usr/share/glib-2.0/schemas/gschemas.compiled ] && ! [ /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override -nt /usr/share/glib-2.0/schemas/gschemas.compiled ]'
-verifie "dock : applis Smoky dans les favoris par défaut (Smoky en tête)" grep -q "favorite-apps=\['smoky.desktop', 'google-chrome.desktop'" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override
-verifie "dock : plus d'icône à part pour l'ancien Smoky Notes" bash -c '! grep -q "smoky-notes.desktop" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override'
+verifie "dock Smoky par défaut : Smoky puis Chrome en tête" python3 -c 'import json, sys; d = json.load(open("/usr/share/smoky-bureau/dock.json"))["dock"]; sys.exit(0 if d[:2] == ["smoky.desktop", "google-chrome.desktop"] and "smoky-notes.desktop" not in d else 1)'
 avert=$(glib-compile-schemas --strict --dry-run /usr/share/glib-2.0/schemas 2>&1 | grep -i 'z13os' || true)
 [ -z "$avert" ] && ok "tous les réglages par défaut de Smoky OS existent encore dans GNOME" || { attention "réglages par défaut ignorés par GNOME :"; printf '%s\n' "$avert" | sed 's/^/          /'; }
 
-titre "Extensions GNOME Shell"
-version=$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
-if [ -n "$version" ]; then
-  for m in /usr/share/gnome-shell/extensions/smoky-*@smokyos/metadata.json; do
-    nom=$(basename "$(dirname "$m")")
-    if python3 -c 'import json, sys; sys.exit(0 if sys.argv[2] in json.load(open(sys.argv[1]))["shell-version"] else 1)' "$m" "$version"; then
-      ok "$nom accepte GNOME $version"
-    else
-      echec "$nom ne déclare pas GNOME $version (l'extension serait désactivée)"
-    fi
-  done
-else
-  echec "version de GNOME Shell introuvable"
-fi
+titre "Bureau Smoky"
+verifie "le bureau Smoky se charge (GTK 4, layer-shell, verrouillage, PAM)" python3 -I -c '
+import sys; sys.path.insert(0, "/usr/lib/smoky")
+import smokybureau.bureau, smokybureau.verrou, smokybureau.connexion, smokybureau.energie, smokybureau.cmd, pam'
+verifie "modules du bureau précompilés" bash -c 'ls /usr/lib/smoky/smokybureau/__pycache__/bureau.*.pyc >/dev/null'
+for f in /usr/share/smoky-bureau/labwc/rc.xml /usr/share/smoky-bureau/labwc/menu.xml /usr/share/smoky-bureau/connexion/rc.xml; do
+  verifie "$(basename "$(dirname "$f")")/$(basename "$f") lisible" python3 -c 'import sys, xml.etree.ElementTree as E; E.parse(sys.argv[1])' "$f"
+done
+verifie "thème des fenêtres Smoky" test -f /usr/share/themes/Smoky/labwc/themerc
+verifie "style du bureau" test -s /usr/share/smoky-bureau/bureau.css
+verifie "police des titres (Comfortaa)" bash -c 'fc-list | grep -qi comfortaa'
+verifie "asusd ne change plus le profil d'énergie (réglage forcé à chaque démarrage)" grep -q 'change_platform_profile_on_battery' /usr/lib/systemd/system/smoky-asusd-profils.service
+unites_session=(/usr/lib/systemd/user/smoky-bureau*.service /usr/lib/systemd/user/smoky-bureau-session.target \
+                /usr/lib/systemd/user/smoky-veille.service /usr/lib/systemd/user/smoky-verrou.service)
+erreurs=$(systemd-analyze --user verify --recursive-errors=no "${unites_session[@]}" 2>&1 | grep -E 'smoky-' | grep -viE 'is not executable|not found in path' || true)
+[ -z "$erreurs" ] && ok "unités de session du bureau sans erreur" || { echec "unités de session du bureau :"; printf '%s\n' "$erreurs" | sed 's/^/          /'; }
 
 titre "Règles des images bootc"
 if command -v bootc >/dev/null 2>&1; then

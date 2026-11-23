@@ -1,0 +1,10 @@
+[Unit]
+Description=Smoky OS - bureau Smoky (session labwc)
+Documentation=file:///usr/share/doc/smokyos/refonte/README.md
+# Active graphical-session.target : les services qui en dépendent (smoky-adaptive…) démarrent avec
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target
+Wants=smoky-bureau.service smoky-veille.service xdg-desktop-portal.service
+# applis lancées à la connexion (dossier autostart : configuration de ton compte, etc.)
+Wants=xdg-desktop-autostart.target

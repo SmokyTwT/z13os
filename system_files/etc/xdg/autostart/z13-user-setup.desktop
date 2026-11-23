@@ -3,4 +3,3 @@ Type=Application
 Name=Smoky OS - configuration utilisateur
 Exec=/usr/libexec/z13os/user-setup.sh
 NoDisplay=true
-X-GNOME-Autostart-Phase=Applications

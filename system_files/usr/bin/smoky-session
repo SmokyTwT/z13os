@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+# Smoky OS — ta session (lancée par l'écran de connexion) : prépare la configuration de labwc dans
+# la mémoire vive (elle suit donc toujours l'image), puis lance labwc. Le bureau Smoky (barre,
+# dock…) démarre ensuite par systemd : voir /usr/share/smoky-bureau/labwc/autostart.
+. /usr/libexec/smokyos/smoky-clavier.sh
+export XDG_CURRENT_DESKTOP=Smoky:wlroots XDG_SESSION_DESKTOP=smoky XDG_SESSION_TYPE=wayland
+export XCURSOR_THEME=Smoky-cursors XCURSOR_SIZE=32
+export MOZ_ENABLE_WAYLAND=1 QT_QPA_PLATFORM="wayland;xcb" SDL_VIDEODRIVER="wayland,x11" _JAVA_AWT_WM_NONREPARENTING=1
+CONF="${XDG_RUNTIME_DIR:?}/smoky-labwc"
+rm -rf "$CONF" && cp -r /usr/share/smoky-bureau/labwc "$CONF"
+exec labwc -C "$CONF"

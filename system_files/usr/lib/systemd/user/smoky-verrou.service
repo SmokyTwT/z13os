@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS - écran de verrouillage
+PartOf=graphical-session.target
+
+[Service]
+# prêt (« READY ») seulement une fois l'écran réellement verrouillé : la mise en veille attend
+Type=notify
+NotifyAccess=all
+ExecStart=/usr/libexec/smokyos/smoky-verrou.sh
+TimeoutStartSec=15
+Restart=no
+Slice=session.slice

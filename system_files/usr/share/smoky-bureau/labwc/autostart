@@ -1,0 +1,6 @@
+# Smoky OS — au lancement de labwc : donne les variables de l'affichage à systemd et au bus de
+# session, puis démarre le bureau Smoky (barre, dock, énergie, veille…) comme services systemd :
+# un élément qui plante est relancé seul, sans fermer tes fenêtres.
+dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
+  XCURSOR_THEME XCURSOR_SIZE XKB_DEFAULT_LAYOUT XKB_DEFAULT_VARIANT LABWC_PID MOZ_ENABLE_WAYLAND QT_QPA_PLATFORM
+systemctl --user start smoky-bureau-session.target &

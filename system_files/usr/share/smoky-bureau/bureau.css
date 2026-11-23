@@ -1,0 +1,176 @@
+/* Smoky OS — style du bureau (barre, dock, lanceur, réglages rapides, bulles, notifications,
+   verrouillage, connexion). Mêmes couleurs que l'appli Smoky : suie, fumée, argent, lueur ;
+   la braise (#ff8f85) seulement pour l'urgent. Aucun flou calculé en direct : autonomie. */
+
+window.smoky-fond, window.smoky-dock-fenetre, window.smoky-poignee, window.smoky-lanceur,
+window.smoky-panneau-fenetre, window.smoky-bulle-fenetre, window.smoky-notifs-fenetre,
+window.smoky-verrou, window.smoky-connexion {
+  background: transparent;
+}
+
+* { font-family: "Adwaita Sans", "Cantarell", sans-serif; }
+
+/* --- barre ------------------------------------------------------------------------- */
+window.smoky-barre {
+  background: rgba(9, 9, 10, 0.80);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #f3f3f6;
+}
+.barre-bouton {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 9px;
+  padding: 3px 12px;
+  margin: 3px 2px;
+  min-height: 26px;
+  color: #f3f3f6;
+}
+.barre-bouton:hover { background: rgba(255, 255, 255, 0.07); }
+.barre-bouton:active { background: rgba(255, 255, 255, 0.12); }
+.marque { font-family: "Comfortaa", "Adwaita Sans", sans-serif; font-weight: 700; font-size: 13px; }
+.horloge label { font-family: "Comfortaa", "Adwaita Sans", sans-serif; font-weight: 700; font-size: 13px; }
+.titre-fenetre { color: #7c7c86; font-size: 12px; margin-left: 4px; }
+.batterie { font-size: 12px; font-feature-settings: "tnum"; }
+.faible { color: #ff8f85; }
+
+/* --- dock ---------------------------------------------------------------------------- */
+.dock {
+  background: rgba(19, 19, 21, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 22px;
+  padding: 8px 10px 3px 10px;
+}
+.dock-bouton {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 15px;
+  padding: 4px 5px 2px 5px;
+}
+.dock-bouton:hover { background: rgba(255, 255, 255, 0.08); }
+.dock-bouton:active { background: rgba(255, 255, 255, 0.14); }
+.dock-point { min-width: 5px; min-height: 5px; border-radius: 3px; background: transparent; }
+.dock-point.ouvert { background: #f3f3f6; }
+.dock-separateur { background: rgba(255, 255, 255, 0.12); margin: 10px 5px 12px 5px; min-width: 1px; }
+.menu-dock contents { background: #18181a; border-radius: 14px; padding: 6px; }
+.menu-entree {
+  background: transparent; border: none; box-shadow: none; color: #f3f3f6;
+  border-radius: 9px; padding: 8px 14px; min-height: 30px;
+}
+.menu-entree:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* --- lanceur --------------------------------------------------------------------------- */
+.voile { background: rgba(9, 9, 10, 0.88); }
+.lanceur { margin-top: 96px; }
+.recherche {
+  font-size: 18px;
+  min-height: 46px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f3f3f6;
+  padding: 0 14px;
+}
+.lanceur-appli {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 18px;
+  padding: 14px 6px 10px 6px;
+  color: #b6b7c2;
+  min-width: 112px;
+}
+.lanceur-appli:hover, .lanceur-appli:focus { background: rgba(255, 255, 255, 0.07); color: #f3f3f6; }
+
+/* --- réglages rapides ---------------------------------------------------------------- */
+.panneau {
+  margin: 44px 8px 0 0;
+  background: #131315;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  padding: 18px;
+  min-width: 372px;
+  color: #f3f3f6;
+}
+.panneau-batterie { font-family: "Comfortaa", "Adwaita Sans", sans-serif; font-size: 13px; font-weight: 700; }
+.profil, .bascule, .action {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  border-radius: 13px;
+  color: #b6b7c2;
+  min-height: 44px;
+}
+.profil:hover, .bascule:hover, .action:hover { background: rgba(255, 255, 255, 0.09); color: #f3f3f6; }
+.profil:checked, .bascule:checked { background: #e4e4ea; color: #0e0e10; }
+.bascule { padding: 6px 12px; }
+.action { padding: 8px 2px 6px 2px; }
+.action-texte { font-size: 11px; }
+.curseur scale trough { background: rgba(255, 255, 255, 0.10); border-radius: 6px; min-height: 8px; }
+.curseur scale highlight { background: #f3f3f6; border-radius: 6px; }
+.curseur scale slider { background: #f3f3f6; min-width: 20px; min-height: 20px; border-radius: 10px; }
+
+/* --- bulle (son, luminosité) -------------------------------------------------------------- */
+.bulle {
+  background: rgba(19, 19, 21, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  padding: 14px 20px;
+  color: #f3f3f6;
+}
+.bulle levelbar block.filled { background: #f3f3f6; border-radius: 4px; }
+.bulle levelbar block.empty { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
+.bulle levelbar trough { min-height: 6px; }
+.bulle-texte { font-feature-settings: "tnum"; color: #b6b7c2; }
+
+/* --- notifications --------------------------------------------------------------------- */
+.notif {
+  background: #131315;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 17px;
+  padding: 12px 14px;
+  min-width: 340px;
+  color: #f3f3f6;
+}
+.notif.urgente { border-color: #ff8f85; }
+.notif-titre { font-weight: 700; }
+.notif-corps { color: #b6b7c2; }
+.notif-fermer { background: transparent; border: none; box-shadow: none; min-width: 24px; min-height: 24px; padding: 0; color: #7c7c86; }
+.notif-action { background: rgba(255, 255, 255, 0.07); border: none; border-radius: 10px; color: #f3f3f6; min-height: 32px; }
+
+/* --- verrouillage et connexion ---------------------------------------------------------- */
+.verrou-voile { background: rgba(9, 9, 10, 0.55); }
+.verrou { color: #f3f3f6; }
+.verrou-heure {
+  font-family: "Comfortaa", "Adwaita Sans", sans-serif;
+  font-size: 104px;
+  font-weight: 700;
+  letter-spacing: -3px;
+}
+.verrou-date { font-size: 19px; color: #b6b7c2; }
+.verrou-etat { font-size: 13px; color: #7c7c86; }
+.verrou-nom { font-size: 18px; font-weight: 700; }
+.avatar {
+  font-family: "Comfortaa", "Adwaita Sans", sans-serif;
+  font-size: 34px;
+  font-weight: 700;
+  min-width: 84px;
+  min-height: 84px;
+  border-radius: 42px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  margin-top: 26px;
+}
+.verrou-mdp {
+  min-height: 46px;
+  border-radius: 23px;
+  background: rgba(19, 19, 21, 0.86);
+  color: #f3f3f6;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 0 18px;
+  margin-top: 16px;
+}
+.verrou-message { color: #ff8f85; min-height: 20px; }
+.connexion-actions { margin: 26px; }
+.connexion-actions .action { padding: 10px 18px; background: rgba(19, 19, 21, 0.78); }

@@ -20,7 +20,9 @@ IMAGE="${1:?usage : demarrer.sh IMAGE [dossier]}"
 T="${2:-/tmp/smoky-vm}"
 ATTENTE="${SMOKY_ATTENTE_DEMARRAGE:-600}"        # secondes au plus pour atteindre l'écran de connexion
 ECHEC='Kernel panic|emergency mode|Reached target emergency|dracut-emergency|Failed to mount /sysroot|ostree-prepare-root.*(failed|error)'
-GDM_KO='gdm\.service: (Failed|Main process exited)|Failed to start gdm\.service'
+# écran de connexion : GDM (images d'avant la refonte) ou greetd + écran de connexion Smoky
+GDM_KO='(gdm|greetd)\.service: (Failed|Main process exited)|Failed to start (gdm|greetd)\.service'
+AFFICHE='Started gdm\.service|écran de connexion Smoky affiché'
 QEMU=""
 
 mkdir -p "$T"
@@ -51,7 +53,8 @@ echo "SMOKY-MESURE-DEBUT $n"
 echo "== durée"; systemd-analyze time 2>&1
 echo "== services les plus longs à démarrer"; systemd-analyze blame 2>&1 | grep -v '\.device$' | sed -n '1,25p'
 echo "== chaîne critique (ce qui retarde la fin du démarrage)"; systemd-analyze critical-chain graphical.target 2>&1 | sed -n '4,22p'
-echo "== chaîne critique de l'écran de connexion"; systemd-analyze critical-chain gdm.service 2>&1 | sed -n '4,16p'
+echo "== chaîne critique de l'écran de connexion"; systemd-analyze critical-chain display-manager.service 2>&1 | sed -n '4,16p'
+echo "== écran de connexion Smoky"; pgrep -a -u greetd 2>&1 | cut -c1-150 | head -5
 echo "== services qui tournent"; systemctl list-units --type=service --state=running --no-legend --plain 2>&1 | awk '{print $1}' | sort | tr '\n' ' '; echo
 echo "== services en échec"; systemctl list-units --failed --no-legend --plain 2>&1 | awk '{print $1}' | tr '\n' ' '; echo
 echo "== mémoire (Mo)"; free -m 2>&1
@@ -139,8 +142,8 @@ mesures() {
   [ -s "$sortie" ] || return 0
   {
     echo "== écran de connexion (secondes depuis le lancement du noyau)"
-    echo "lancé $(instant 'systemd\[1\]: Started gdm\.service' "$2")"
-    echo "affiché $(instant 'systemd\[[0-9]+\]: Started org\.gnome\.Shell@[a-z0-9]+\.service' "$2")"
+    echo "lancé $(instant 'systemd\[1\]: Started (gdm|greetd)\.service' "$2")"
+    echo "affiché $(instant 'systemd\[[0-9]+\]: Started org\.gnome\.Shell@[a-z0-9]+\.service|écran de connexion Smoky affiché' "$2")"
     echo "== arrêt"
     echo "durée ${ARRET[$1]}"
     # ce qui a refusé de s'arrêter à temps (attendu jusqu'au délai, puis tué)
@@ -242,15 +245,16 @@ gpu_ok() {
 
 case "${ETAT[1]}" in
   graphique)
-    if ! grep -qaE 'Started gdm\.service' "$PROPRE"; then
-      echo "RÉSULTAT : le système démarre (${DUREE[1]} s) mais l'écran de connexion (GDM) n'apparaît pas dans le journal."
+    if ! grep -qaE "$AFFICHE" "$PROPRE"; then
+      echo "RÉSULTAT : le système démarre (${DUREE[1]} s) mais l'écran de connexion n'apparaît pas dans le journal."
+      grep -aE 'greetd|labwc|smoky-connexion|smokybureau' "$PROPRE" | tail -n 25
     elif ! gpu_ok "$PROPRE"; then
       echo "RÉSULTAT : le système démarre (${DUREE[1]} s), mais le service de la carte graphique (smoky-gpu) n'a pas tourné comme prévu."
       grep -aE 'smoky-gpu|smokygpu' "$PROPRE" | tail -n 20
     elif [ -n "${SMOKY_RELIRE:-}" ]; then
       echo "RÉSULTAT : l'image démarre jusqu'à l'écran de connexion (journal rejoué)."
       exit 0
-    elif [ "${ETAT[2]}" = graphique ] && grep -qaE 'Started gdm\.service' "$T/serie-2.txt" && gpu_ok "$T/serie-2.txt"; then
+    elif [ "${ETAT[2]}" = graphique ] && grep -qaE "$AFFICHE" "$T/serie-2.txt" && gpu_ok "$T/serie-2.txt"; then
       echo "RÉSULTAT : l'image démarre deux fois de suite jusqu'à l'écran de connexion (${DUREE[1]} s, puis ${DUREE[2]} s)."
       exit 0
     else
@@ -258,7 +262,7 @@ case "${ETAT[1]}" in
       PROPRE="$T/serie-2.txt"
     fi
     ;;
-  gdm)    echo "RÉSULTAT : le système démarre mais l'écran de connexion (GDM) plante." ;;
+  gdm)    echo "RÉSULTAT : le système démarre mais l'écran de connexion plante." ;;
   echec)  echo "RÉSULTAT : le démarrage a échoué (mode de secours ou erreur du noyau)." ;;
   arret)  echo "RÉSULTAT : la machine virtuelle s'est arrêtée avant la fin du démarrage." ;;
   *)      echo "RÉSULTAT : toujours pas d'écran de connexion après ${ATTENTE} s." ;;

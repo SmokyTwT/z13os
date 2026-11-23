@@ -79,7 +79,10 @@ while read -r f; do
 done < <(git ls-files 'system_files/usr/lib/systemd/*' 'system_files/etc/containers/systemd/*')
 # chaque service activé à la construction existe (dans le dépôt, ou fourni par un paquet connu)
 for u in $(grep -E '^(systemctl| )' build_files/smoky.sh | grep -oE '[A-Za-z0-9@_-]+\.(service|timer|path)' | sort -u); do
-  case "$u" in supergfxd.service|thermald.service|fstrim.timer|rpm-ostreed-automatic.timer|ModemManager.service) continue ;; esac
+  # fournis par des paquets (Fedora, bootc), ou coupés exprès (services de serveur de fedora-bootc)
+  case "$u" in supergfxd.service|thermald.service|fstrim.timer|rpm-ostreed-automatic.timer|ModemManager.service|\
+    greetd.service|power-profiles-daemon.service|firewalld.service|bluetooth.service|sshd.service|sssd.service|\
+    systemd-homed.service|systemd-homed-activate.service|bootc-fetch-apply-updates.service|bootc-fetch-apply-updates.timer) continue ;; esac
   [ -f "system_files/usr/lib/systemd/system/$u" ] || [ -f "system_files/usr/lib/systemd/user/$u" ] || { echec "smoky.sh active $u, absent du dépôt"; ko=1; }
 done
 [ "$ko" -eq 0 ] && ok "fichiers lancés par les services"
@@ -123,6 +126,12 @@ if sortie=$(python3 tests/test_notes.py 2>&1); then
   ok "notes : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
 else
   echec "tests des notes"; printf '%s\n' "$sortie" | tail -40
+fi
+# bureau Smoky (refonte) : client Wayland maison, greetd, dock, fréquence de l'écran, batterie
+if sortie=$(python3 tests/test_bureau.py 2>&1); then
+  ok "bureau : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"
+else
+  echec "tests du bureau"; printf '%s\n' "$sortie" | tail -40
 fi
 if sortie=$(python3 tests/test_mail.py 2>&1); then
   if printf '%s\n' "$sortie" | grep -q 'skipped='; then

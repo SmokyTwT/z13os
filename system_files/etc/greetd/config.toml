@@ -1,0 +1,8 @@
+# Smoky OS — écran de connexion : greetd lance labwc avec l'écran de connexion Smoky.
+# Après le mot de passe, greetd ouvre ta session (/usr/bin/smoky-session).
+[terminal]
+vt = 1
+
+[default_session]
+command = "/usr/libexec/smokyos/smoky-connexion.sh"
+user = "greetd"

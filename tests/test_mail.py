@@ -591,9 +591,15 @@ class TestInstallation(unittest.TestCase):
         self.assertIn("Name=Smoky Mail (ancien)\n", ancien)
         self.assertIn("Exec=/usr/bin/smoky-mail\n", ancien, "l'ancien reste lançable, sous le même nom de fichier")
         self.assertNotIn("Email", ancien, "il ne se présente plus comme l'appli de mail")
-        source, reglages = RACINE.parent / "build_files/smoky.sh", RACINE / "usr/share/glib-2.0/schemas/zz1-z13os.gschema.override"
-        favoris = (source.read_text().split("FAVS=", 1)[1] if source.is_file() else reglages.read_text().split("favorite-apps=", 1)[1]).split("\n")[0]
-        self.assertIn("'smoky.desktop'", favoris)
+        # dock Smoky par défaut : construit par build_files/smoky.sh (dépôt), écrit dans dock.json (image)
+        source, image = RACINE.parent / "build_files/smoky.sh", RACINE / "usr/share/smoky-bureau/dock.json"
+        if source.is_file():
+            import re
+            favoris = " ".join(re.findall(r"DOCK\+?=\(([^)]*)\)", source.read_text())).split()
+        else:
+            import json
+            favoris = json.loads(image.read_text())["dock"]
+        self.assertEqual(favoris[0], "smoky.desktop")
         self.assertNotIn("smoky-mail.desktop", favoris, "plus d'icône à part dans le dock par défaut")
 
     def test_dock(self):

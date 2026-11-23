@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- Smoky OS — labwc pour l'écran de connexion : une seule fenêtre (elle se met en plein écran), pas de menu -->
+<labwc_config>
+  <core><decoration>client</decoration></core>
+  <theme><name>Smoky</name></theme>
+  <keyboard><default/></keyboard>
+  <mouse><context name="Root"></context></mouse>
+  <touch mapToOutput="eDP-1" mouseEmulation="no"/>
+  <libinput><device category="touchpad"><tap>yes</tap><naturalScroll>yes</naturalScroll></device></libinput>
+</labwc_config>

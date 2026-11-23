@@ -1,0 +1,17 @@
+[Unit]
+Description=Smoky OS - inactivité : verrouiller, puis veille sur batterie
+PartOf=graphical-session.target
+After=smoky-bureau.service
+
+[Service]
+# 5 min sans rien toucher : verrouillage, puis écran éteint 30 s après ; 15 min : veille si le PC est sur batterie (smoky-bureau-cmd
+# vérifie). Avant une mise en veille : verrouillage. Une vidéo ou une visio empêche tout cela
+# (les applis le demandent au moteur d'affichage).
+ExecStart=/usr/bin/swayidle -w \
+  timeout 300 'smoky-bureau-cmd verrouiller' \
+  timeout 330 'smoky-bureau-cmd ecran eteindre' resume 'smoky-bureau-cmd ecran allumer' \
+  timeout 900 'smoky-bureau-cmd veille-si-batterie' \
+  before-sleep 'smoky-bureau-cmd verrouiller'
+Restart=on-failure
+RestartSec=2
+Slice=session.slice

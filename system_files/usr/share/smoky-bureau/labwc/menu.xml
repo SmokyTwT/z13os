@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Smoky OS — menu d'un clic droit (ou appui long) sur le fond d'écran : la sortie de secours
+     si la barre ou le dock ne répondaient plus. -->
+<openbox_menu>
+  <menu id="root-menu" label="Smoky">
+    <item label="Applications"><action name="Execute" command="smoky-bureau-cmd lanceur"/></item>
+    <item label="Fichiers"><action name="Execute" command="nautilus --new-window"/></item>
+    <item label="Terminal"><action name="Execute" command="ptyxis --new-window"/></item>
+    <separator/>
+    <item label="Relancer le bureau"><action name="Execute" command="systemctl --user restart smoky-bureau.service"/></item>
+    <item label="Verrouiller"><action name="Execute" command="smoky-bureau-cmd verrouiller"/></item>
+    <item label="Se déconnecter"><action name="Exit"/></item>
+  </menu>
+</openbox_menu>

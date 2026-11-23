@@ -22,7 +22,7 @@ chmod 755 /usr/bin/smoky /usr/bin/smoky-* /usr/bin/z13-notes-setup /usr/lib/smok
 # /usr est en lecture seule sur le PC : sans cela, Python recompilerait l'appli à chaque
 # ouverture. « checked-hash » : la validité se vérifie au contenu, pas à la date des
 # fichiers (les dates sont remises à zéro quand l'image est installée).
-python3 -m compileall -q --invalidation-mode checked-hash /usr/lib/smoky/smoky
+python3 -m compileall -q --invalidation-mode checked-hash /usr/lib/smoky/smoky /usr/lib/smoky/smokybureau
 
 # --- Bibliothèques PDF (pdf.js, pdf-lib) : rangées avec l'appli Smoky, copiées pour l'ancien Smoky
 # Notes qui reste disponible (même contenu : le système de fichiers de l'image ne le stocke qu'une fois)
@@ -89,12 +89,18 @@ make_webapp drive   "Google Drive" "https://drive.google.com"         google-dri
 make_webapp spotify "Spotify"      "https://open.spotify.com"         smokyos-spotify "AudioVideo;Audio;Music;Player;"
 make_webapp whatsapp "WhatsApp"    "https://web.whatsapp.com"         smokyos-whatsapp "Network;InstantMessaging;Chat;"
 make_webapp claude  "Claude"       "https://claude.ai"                claude         "Office;Education;" solo
-FAVS="'smoky.desktop', 'google-chrome.desktop', 'z13-netflix.desktop', 'z13-disney.desktop', 'z13-prime.desktop', 'z13-tf1.desktop', 'z13-m6.desktop', 'z13-spotify.desktop', 'z13-whatsapp.desktop'"
+# Dock Smoky par défaut (mêmes applis, même ordre qu'avant) ; un dock déjà personnalisé sous GNOME
+# est repris tel quel à la première connexion (migration faite par smoky-bureau)
+DOCK=(smoky.desktop google-chrome.desktop z13-netflix.desktop z13-disney.desktop z13-prime.desktop
+      z13-tf1.desktop z13-m6.desktop z13-spotify.desktop z13-whatsapp.desktop)
 if [[ -n "$MOODLE_URL" ]]; then
   make_webapp moodle "Moodle" "$MOODLE_URL" smokyos-moodle "Education;"
-  FAVS+=", 'z13-moodle.desktop'"
+  DOCK+=(z13-moodle.desktop)
 fi
-FAVS+=", 'z13-drive.desktop', 'z13-claude.desktop', 'smoky-home.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Ptyxis.desktop'"
+DOCK+=(z13-drive.desktop z13-claude.desktop smoky-home.desktop org.gnome.Nautilus.desktop org.gnome.Ptyxis.desktop)
+mkdir -p /usr/share/smoky-bureau
+python3 -c 'import json, sys; print(json.dumps({"dock": sys.argv[1:]}, indent=1))' "${DOCK[@]}" \
+  > /usr/share/smoky-bureau/dock.json
 
 # Index des applis par type de lien ou de fichier. Les paquets le recalculent à leur
 # installation, mais ils sont installés dans le socle, avant que les raccourcis Smoky
@@ -113,18 +119,11 @@ python3 /usr/libexec/smokyos/smoky-autoicons.py --system /usr/share/icons/Smoky-
 gtk-update-icon-cache -f /usr/share/icons/Smoky-icons || true
 gtk-update-icon-cache -f /usr/share/icons/hicolor || true
 
-# --- Réglages GNOME par défaut (tactile / tablette + look) --------------------
+# --- Réglages lus par les applis GTK (thème sombre, icônes, curseur) ----------------------
+# Plus de GNOME Shell : seuls restent les réglages que les applis elles-mêmes lisent. Le fond
+# d'écran choisi auparavant (org.gnome.desktop.background) est repris par le bureau Smoky.
 cat > /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override <<EOF
-[org.gnome.mutter]
-experimental-features=['scale-monitor-framebuffer', 'xwayland-native-scaling']
-
-[org.gnome.desktop.peripherals.touchpad]
-tap-to-click=true
-natural-scroll=true
-disable-while-typing=true
-
 [org.gnome.desktop.interface]
-show-battery-percentage=true
 cursor-size=32
 icon-theme='Smoky-icons'
 cursor-theme='Smoky-cursors'
@@ -140,62 +139,8 @@ picture-uri='file:///usr/share/backgrounds/z13os/smokyos.jpg'
 picture-uri-dark='file:///usr/share/backgrounds/z13os/smokyos.jpg'
 picture-options='zoom'
 
-[org.gnome.desktop.screensaver]
-picture-uri='file:///usr/share/backgrounds/z13os/smokyos.jpg'
-
-[org.gnome.shell.extensions.dash-to-dock]
-dock-position='BOTTOM'
-dock-fixed=false
-intellihide=true
-extend-height=false
-dash-max-icon-size=52
-show-apps-at-top=false
-show-trash=false
-show-mounts=false
-running-indicator-style='DOTS'
-custom-theme-customize-running-dots=true
-custom-theme-running-dots-color='#ffffff'
-transparency-mode='DEFAULT'
-apply-custom-theme=false
-custom-theme-shrink=true
-click-action='minimize-or-previews'
-
-[org.gnome.shell.extensions.blur-my-shell.panel]
-blur=true
-static-blur=true
-
-[org.gnome.shell.extensions.blur-my-shell.dash-to-dock]
-blur=true
-static-blur=true
-
-[org.gnome.shell.extensions.blur-my-shell.overview]
-blur=true
-
-[org.gnome.shell.extensions.blur-my-shell.appfolder]
-blur=true
-
-[org.gnome.shell.extensions.blur-my-shell.applications]
-blur=false
-
-[org.gnome.settings-daemon.plugins.power]
-ambient-enabled=true
-
-[org.gnome.desktop.session]
-idle-delay=uint32 300
-
 [org.gnome.desktop.search-providers]
-# GNOME Logiciels resterait ensuite en mémoire (250 Mo) ; il s'ouvre toujours normalement
 disabled=['org.gnome.Software.desktop']
-
-[org.gnome.desktop.notifications]
-show-in-lock-screen=false
-
-[org.gnome.shell]
-favorite-apps=[${FAVS}]
-enabled-extensions=['dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'appindicatorsupport@rgcjonas.gmail.com', 'user-theme@gnome-shell-extensions.gcampax.github.com', 'caffeine@patapon.info', 'smoky-maximize@smokyos', 'smoky-home@smokyos', 'smoky-tablet@smokyos', 'smoky-lockinfo@smokyos']
-
-[org.gnome.shell.extensions.user-theme]
-name='Smoky'
 
 [org.gnome.Ptyxis.Profile]
 palette='smoky'
@@ -217,33 +162,11 @@ if firewall-offline-cmd --zone=public --query-service=ssh; then
   echo "ERREUR : ssh est encore autorisé dans le pare-feu"; exit 1
 fi
 
-# --- Écran de connexion Smoky (GDM) ----------------------------------------------
-# L'écran de connexion n'utilise pas les thèmes utilisateur : on ajoute le fond « smoky »
-# et le style néon (usr/share/smokyos/login-smoky.css) dans le thème intégré de GNOME Shell.
-# gresource et glib-compile-resources viennent du socle (10-paquets.sh) : rien à installer ici.
-OUTILS=/usr/libexec/smokyos/outils
-GR=/usr/share/gnome-shell/gnome-shell-theme.gresource
-if [[ -f "$GR" ]]; then
-  GW=$(mktemp -d)
-  PREFIX=/org/gnome/shell/theme
-  for r in $("$OUTILS/gresource" list "$GR"); do
-    [[ "$r" == "$PREFIX"/* ]] || { echo "ressource inattendue : $r"; exit 1; }
-    mkdir -p "$GW$(dirname "$r")"
-    "$OUTILS/gresource" extract "$GR" "$r" > "$GW$r"
-  done
-  cp /usr/share/backgrounds/z13os/smokyos.jpg "$GW$PREFIX/smoky-login.jpg"
-  for css in "$GW$PREFIX"/*.css; do cat /usr/share/smokyos/login-smoky.css >> "$css"; done
-  {
-    echo '<?xml version="1.0" encoding="UTF-8"?>'
-    echo "<gresources><gresource prefix=\"$PREFIX\">"
-    (cd "$GW$PREFIX" && find . -type f | sed 's|^\./||' | sort | sed 's|.*|<file>&</file>|')
-    echo '</gresource></gresources>'
-  } > "$GW/theme.xml"
-  "$OUTILS/glib-compile-resources" --sourcedir="$GW$PREFIX" --target="$GR" "$GW/theme.xml"
-  "$OUTILS/gresource" list "$GR" | grep -c smoky-login.jpg >/dev/null    # -c : lit tout, pas de tuyau fermé
-  rm -rf "$GW"
-else
-  echo "AVERTISSEMENT : thème GNOME Shell introuvable, écran de connexion non personnalisé"
+# --- Police des titres Smoky (Comfortaa) ------------------------------------------------
+# Paquet Fedora si le socle l'a trouvé, sinon celle de l'appli Smoky (WOFF2, lue par FreeType)
+if ! fc-list | grep -qi comfortaa; then
+  install -Dm644 /usr/share/smoky/polices/comfortaa.woff2 /usr/share/fonts/smoky/comfortaa.woff2
+  fc-cache -f /usr/share/fonts/smoky
 fi
 
 # --- Services ----------------------------------------------------------------
@@ -252,7 +175,20 @@ systemctl --global enable smoky-autoicons.path smoky-autoicons.service smoky-ada
 systemctl --global disable smoky-moodle.timer 2>/dev/null || true
 systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-firstboot.service smoky-focus-cleanup.service smoky-gpu.service \
-  rpm-ostreed-automatic.timer smoky-flatpak-update.timer
+  rpm-ostreed-automatic.timer smoky-flatpak-update.timer \
+  greetd.service power-profiles-daemon.service smoky-asusd-profils.service firewalld.service \
+  bluetooth.service cups.socket
+# Écran de connexion : celui de Smoky (greetd), démarrage en mode graphique
+systemctl set-default graphical.target
+
+# Ce que fedora-bootc active pour des serveurs, et qui n'a rien à faire sur ce PC :
+#  - sshd écouterait sur le réseau (règle : rien d'accessible depuis le réseau) ;
+#  - bootc-fetch-apply-updates redémarrerait le PC tout seul pour appliquer une mise à jour
+#    (on garde « téléchargée en arrière-plan, appliquée au prochain redémarrage ») ;
+#  - sssd et systemd-homed (comptes d'entreprise, dossiers chiffrés portables) : inutiles.
+systemctl disable sshd.service sssd.service systemd-homed.service systemd-homed-activate.service \
+  bootc-fetch-apply-updates.timer 2>/dev/null || true
+systemctl mask bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service sshd.service 2>/dev/null || true
 
 # --- Autonomie ----------------------------------------------------------------------------------
 # Pas de modem 4G/5G sur le Z13 : ModemManager ne sert à rien

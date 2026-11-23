@@ -2,6 +2,10 @@
 # Socle 1/3 — dépôts et paquets.
 # Tout ce qui passe par dnf est ici, et seulement ici : la base des paquets (RPM) ne change
 # donc qu'avec le socle, jamais avec une simple mise à jour des fichiers Smoky.
+#
+# Smoky OS refait de zéro : on part de fedora-bootc, l'image minimale de Fedora (sans bureau),
+# et on n'ajoute que ce qui sert. Le bureau est celui de Smoky (labwc + smoky-bureau), pas GNOME.
+# Les choix sont expliqués dans docs/refonte/decisions.md.
 set -euxo pipefail
 
 FEDORA_VER="$(rpm -E %fedora)"
@@ -31,48 +35,66 @@ dnf -y install --allowerasing ffmpeg
 # Chrome s'installe dans /opt, qui est /var/opt sur une image atomique : le dossier doit exister
 mkdir -p /var/opt
 PAQUETS=(
+  # --- Matériel du Z13 --------------------------------------------------------
+  # microprogrammes absents de fedora-bootc : Wi-Fi AX210, son Intel (SOF) ; pilotes rares
+  iwlwifi-mvm-firmware alsa-sof-firmware alsa-ucm kernel-modules-extra
   # décodage vidéo matériel Intel
   intel-media-driver libva-utils
-  # support ASUS ROG + énergie (pas d'interface ROG Control Center : Smoky Center fait la même
-  # chose sans tourner en arrière-plan)
-  asusctl supergfxctl thermald
-  # synchro des notes avec Google Drive
-  rclone zenity
-  # Smoky Moodle (import des PDF de cours, échéances) : pdfinfo + trousseau GNOME
-  poppler-utils libsecret
-  # redémarrer sur Windows depuis Smoky Center (double démarrage)
-  efibootmgr
-  google-chrome-stable
-  # icônes Smoky (smoky-autoicons) et thème du centre de contrôle
-  gtk-update-icon-cache python3-pillow librsvg2-tools gnome-shell-extension-user-theme
+  # ASUS ROG (limite de charge, carte graphique), température, capteurs (rotation, lumière)
+  asusctl supergfxctl thermald iio-sensor-proxy
+  # un seul gestionnaire de profils d'énergie (décision 4) + état de la batterie
+  power-profiles-daemon upower
+  # mises à jour de firmware, mesures d'énergie (powertop sans --auto-tune), diagnostic
+  fwupd powertop iw pciutils usbutils
+  # mémoire compressée (comme avant)
+  zram-generator-defaults
   # écran de démarrage Smoky (Plymouth)
-  plymouth-plugin-script
-  # gresource + glib-compile-resources (thème de l'écran de connexion) : gardés à part, puis paquet retiré
-  glib2-devel
+  plymouth plymouth-plugin-script
+
+  # --- Réseau, son, Bluetooth, impression -------------------------------------------
+  NetworkManager-wifi NetworkManager-bluetooth NetworkManager-openvpn NetworkManager-openconnect
+  firewalld nss-mdns
+  pipewire pipewire-pulseaudio pipewire-alsa wireplumber
+  bluez cups system-config-printer
+
+  # --- Bureau Smoky -----------------------------------------------------------
+  # moteur d'affichage, connexion (avec sa règle SELinux), applis X11 anciennes
+  labwc greetd greetd-selinux xorg-x11-server-Xwayland
+  # le bureau lui-même est écrit en Python + GTK 4 (barre, dock, connexion, verrouillage)
+  gtk4 gtk4-layer-shell python3-gobject python3-pam
+  # inactivité, verrouillage de secours, éclairage du soir, écran (fréquence, rotation),
+  # captures d'écran, presse-papiers, lecteurs multimédia
+  swayidle swaylock wlsunset wlr-randr grim slurp wl-clipboard playerctl libnotify
+  # partage d'écran en visio et sélecteur de fichiers pour les applis
+  xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk
+  # trousseau (mots de passe de Mail : jamais dans un fichier), réglages GTK
+  gnome-keyring gnome-keyring-pam dconf gsettings-desktop-schemas at-spi2-core
+  xdg-user-dirs xdg-utils
+  # langue française
+  glibc-langpack-fr hunspell-fr
+  # polices et icônes de base
+  adwaita-sans-fonts adwaita-mono-fonts adwaita-icon-theme google-noto-color-emoji-fonts liberation-fonts
+
+  # --- Applis ----------------------------------------------------------------
+  # Fichiers, Terminal, texte, images, PDF, calculatrice ; réglages avancés (Wi-Fi
+  # d'entreprise comme eduroam, Bluetooth, son) ; logithèque pour les applis Flatpak
+  nautilus gvfs gvfs-mtp ptyxis gnome-text-editor loupe papers gnome-calculator
+  nm-connection-editor blueman pavucontrol gnome-software flatpak
+  google-chrome-stable
+
+  # --- Outils déjà utilisés par Smoky --------------------------------------------
+  # synchro des notes avec Google Drive ; import des PDF ; trousseau ; redémarrer sur Windows
+  rclone zenity poppler-utils libsecret efibootmgr
+  # icônes Smoky (smoky-autoicons)
+  gtk-update-icon-cache python3-pillow librsvg2-tools
 )
 dnf -y install "${PAQUETS[@]}"
 
-# Look Smoky : dock, flou statique (calculé une fois, quasi gratuit), zone de notification,
-# caffeine (empêche la veille d'un clic : cours en visio, lecture). Une extension absente des
-# dépôts ne bloque pas la construction : elle est signalée.
-EXTENSIONS=(dash-to-dock blur-my-shell appindicator caffeine)
-dnf -y install --skip-unavailable --skip-broken "${EXTENSIONS[@]/#/gnome-shell-extension-}"
-for ext in "${EXTENSIONS[@]}"; do
-  rpm -q "gnome-shell-extension-$ext" >/dev/null || echo "AVERTISSEMENT : extension $ext indisponible"
-done
-
-# --- Outils de construction gardés pour l'image finale ---------------------------
-# Le thème de l'écran de connexion est recompilé à chaque image (smoky.sh). On garde les deux
-# seuls programmes nécessaires (lire et écrire un fichier .gresource), pour que l'image finale
-# n'ait jamais à installer de paquet.
-for outil in gresource glib-compile-resources; do
-  install -Dm755 "/usr/bin/$outil" "/usr/libexec/smokyos/outils/$outil"
-done
-dnf -y remove glib2-devel
-/usr/libexec/smokyos/outils/gresource list /usr/share/gnome-shell/gnome-shell-theme.gresource >/dev/null
-
-# --- Allègement : Firefox fait doublon avec Chrome, la visite guidée ne sert qu'une fois
-dnf -y remove firefox firefox-langpacks gnome-tour || true
+# Police des titres Smoky (Comfortaa) : paquet Fedora s'il existe ; sinon smoky.sh installe celle
+# de l'appli Smoky. Ne bloque pas la construction.
+dnf -y install --skip-unavailable aajohan-comfortaa-fonts || true
+# Rien n'est désinstallé de fedora-bootc : sssd, par exemple, est référencé par la configuration
+# PAM de Fedora. Les services inutiles sont seulement coupés (smoky.sh).
 
 # --- Google Chrome : déplacé de /opt vers /usr (image atomique) -------------------
 mv /var/opt/google /usr/lib/google

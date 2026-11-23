@@ -401,14 +401,19 @@ class TestInstallation(unittest.TestCase):
         ancien = (RACINE / "usr/share/applications/smoky-notes.desktop").read_text()
         self.assertIn("Name=Smoky Notes (ancien)\n", ancien)
         self.assertIn("Exec=/usr/bin/smoky-notes\n", ancien, "l'ancien reste lançable (carnets d'avant), sous le même nom de fichier")
-        # dock par défaut : construit par build_files/smoky.sh (dépôt), écrit dans les réglages GNOME (image)
-        source, reglages = RACINE.parent / "build_files/smoky.sh", RACINE / "usr/share/glib-2.0/schemas/zz1-z13os.gschema.override"
-        favoris = (source.read_text().split("FAVS=", 1)[1] if source.is_file() else reglages.read_text().split("favorite-apps=", 1)[1]).split("\n")[0]
-        self.assertIn("'smoky.desktop'", favoris)
+        # dock Smoky par défaut : construit par build_files/smoky.sh (dépôt), écrit dans dock.json (image)
+        source, image = RACINE.parent / "build_files/smoky.sh", RACINE / "usr/share/smoky-bureau/dock.json"
+        if source.is_file():
+            import re
+            favoris = " ".join(re.findall(r"DOCK\+?=\(([^)]*)\)", source.read_text())).split()
+        else:
+            import json
+            favoris = json.loads(image.read_text())["dock"]
+        self.assertEqual(favoris[0], "smoky.desktop")
         self.assertNotIn("smoky-notes.desktop", favoris, "plus d'icône à part dans le dock par défaut")
 
     def test_mode_tablette_ouvre_les_nouvelles_notes(self):
-        adaptatif = (RACINE / "usr/libexec/smokyos/smoky-adaptive.py").read_text()
+        adaptatif = (RACINE / "usr/lib/smoky/smokybureau/energie.py").read_text()     # service smoky-adaptive
         self.assertIn('subprocess.Popen(["/usr/bin/smoky", "--aller", "/notes"])', adaptatif)
         self.assertNotIn("/usr/bin/smoky-notes", adaptatif)
 

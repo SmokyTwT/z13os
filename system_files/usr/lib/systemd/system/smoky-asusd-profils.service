@@ -1,0 +1,16 @@
+[Unit]
+Description=Smoky OS - asusd ne change plus le profil d'énergie (power-profiles-daemon s'en charge)
+Documentation=file:///usr/share/doc/smokyos/refonte/decisions.md
+# Deux gestionnaires qui changent le profil en même temps se le disputent (manuel d'asusctl,
+# issue #724) : c'est ce qui laissait le PC en « Performance » sur batterie. Avant chaque
+# démarrage d'asusd, ses trois réglages de profil sont remis à « false » s'ils ne le sont pas.
+# La limite de charge et la carte graphique restent gérées par asusd.
+Before=asusd.service
+ConditionPathExists=/etc/asusd/asusd.ron
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sed -i -E 's/^([[:space:]]*)(change_platform_profile_on_ac|change_platform_profile_on_battery|platform_profile_linked_epp):[[:space:]]*true,/\1\2: false,/' /etc/asusd/asusd.ron
+
+[Install]
+WantedBy=multi-user.target

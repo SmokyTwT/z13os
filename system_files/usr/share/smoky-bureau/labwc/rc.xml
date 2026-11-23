@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<!-- Smoky OS — labwc, le moteur d'affichage du bureau Smoky.
+     Ce fichier est recopié dans la mémoire vive à chaque connexion (smoky-session) : il suit
+     toujours l'image. Les raccourcis passent par smoky-bureau-cmd (bureau Smoky). -->
+<labwc_config>
+  <core>
+    <decoration>server</decoration>
+    <gap>0</gap>
+    <adaptiveSync>no</adaptiveSync>
+    <allowTearing>no</allowTearing>
+  </core>
+
+  <placement><policy>center</policy></placement>
+
+  <theme>
+    <name>Smoky</name>
+    <cornerRadius>10</cornerRadius>
+    <titlebar><layout>close,iconify,max:</layout><showTitle>yes</showTitle></titlebar>
+    <dropShadows>no</dropShadows>
+    <font place="ActiveWindow" name="Adwaita Sans" size="11" weight="bold"/>
+    <font place="InactiveWindow" name="Adwaita Sans" size="11"/>
+    <font place="MenuItem" name="Adwaita Sans" size="11"/>
+    <font place="OnScreenDisplay" name="Adwaita Sans" size="11"/>
+  </theme>
+
+  <windowSwitcher show="yes" preview="no" outlines="yes">
+    <fields><field content="icon" width="8%"/><field content="title" width="92%"/></fields>
+  </windowSwitcher>
+
+  <focus><followMouse>no</followMouse><raiseOnFocus>no</raiseOnFocus></focus>
+  <snapping><range>10</range><topMaximize>yes</topMaximize></snapping>
+
+  <keyboard>
+    <repeatRate>30</repeatRate>
+    <repeatDelay>400</repeatDelay>
+    <!-- touche Windows seule : le lanceur ; avec une flèche : moitié d'écran, plein écran -->
+    <keybind key="Super_L" onRelease="yes"><action name="Execute" command="smoky-bureau-cmd lanceur"/></keybind>
+    <keybind key="W-Left"><action name="SnapToEdge" direction="left"/></keybind>
+    <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
+    <keybind key="W-Up"><action name="Maximize"/></keybind>
+    <keybind key="W-Down"><action name="UnMaximize"/></keybind>
+    <keybind key="W-h"><action name="Iconify"/></keybind>
+    <keybind key="W-q"><action name="Close"/></keybind>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="A-S-Tab"><action name="PreviousWindow"/></keybind>
+    <keybind key="W-l"><action name="Execute" command="smoky-bureau-cmd verrouiller"/></keybind>
+    <keybind key="W-e"><action name="Execute" command="nautilus --new-window"/></keybind>
+    <keybind key="C-A-t"><action name="Execute" command="ptyxis --new-window"/></keybind>
+    <keybind key="Print"><action name="Execute" command="smoky-bureau-cmd capture"/></keybind>
+    <keybind key="S-Print"><action name="Execute" command="smoky-bureau-cmd capture zone"/></keybind>
+    <!-- touches du clavier du Z13 : son, luminosité (avec bulle), lecture -->
+    <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="smoky-bureau-cmd volume plus"/></keybind>
+    <keybind key="XF86AudioLowerVolume"><action name="Execute" command="smoky-bureau-cmd volume moins"/></keybind>
+    <keybind key="XF86AudioMute"><action name="Execute" command="smoky-bureau-cmd volume muet"/></keybind>
+    <keybind key="XF86AudioMicMute"><action name="Execute" command="smoky-bureau-cmd micro muet"/></keybind>
+    <keybind key="XF86MonBrightnessUp"><action name="Execute" command="smoky-bureau-cmd luminosite plus"/></keybind>
+    <keybind key="XF86MonBrightnessDown"><action name="Execute" command="smoky-bureau-cmd luminosite moins"/></keybind>
+    <keybind key="XF86AudioPlay"><action name="Execute" command="playerctl play-pause"/></keybind>
+    <keybind key="XF86AudioNext"><action name="Execute" command="playerctl next"/></keybind>
+    <keybind key="XF86AudioPrev"><action name="Execute" command="playerctl previous"/></keybind>
+  </keyboard>
+
+  <mouse>
+    <default/>
+    <!-- clic droit ou appui long sur le fond : menu de secours (menu.xml) -->
+    <context name="Root">
+      <mousebind button="Right" action="Press"><action name="ShowMenu" menu="root-menu"/></mousebind>
+      <mousebind button="Left" action="Press"/>
+      <mousebind button="Middle" action="Press"/>
+    </context>
+  </mouse>
+
+  <!-- écran tactile et stylet suivent l'écran intégré (rotation comprise) ; les applis reçoivent
+       le vrai tactile (zoom à deux doigts dans Chrome) -->
+  <touch mapToOutput="eDP-1" mouseEmulation="no"/>
+  <tablet mapToOutput="eDP-1"/>
+
+  <libinput>
+    <device category="touchpad">
+      <tap>yes</tap>
+      <naturalScroll>yes</naturalScroll>
+      <disableWhileTyping>yes</disableWhileTyping>
+    </device>
+  </libinput>
+
+  <!-- comme avant : chaque fenêtre d'application s'ouvre en grand (pas les boîtes de dialogue) ;
+       quelques petits outils gardent leur taille -->
+  <windowRules>
+    <windowRule identifier="*" type="normal"><action name="Maximize"/></windowRule>
+    <windowRule identifier="org.gnome.Calculator"><action name="UnMaximize"/></windowRule>
+    <windowRule identifier="org.pulseaudio.pavucontrol"><action name="UnMaximize"/></windowRule>
+    <windowRule identifier="blueman-manager"><action name="UnMaximize"/></windowRule>
+    <windowRule identifier="nm-connection-editor"><action name="UnMaximize"/></windowRule>
+    <windowRule identifier="zenity"><action name="UnMaximize"/></windowRule>
+    <windowRule identifier="smoky-*" serverDecoration="no"/>
+  </windowRules>
+</labwc_config>

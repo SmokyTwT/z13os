@@ -1,0 +1,9 @@
+#!/usr/bin/python3 -I
+"""smoky-bureau-cmd — commandes du bureau Smoky (raccourcis clavier, veille). Voir smokybureau/cmd.py."""
+import os
+import sys
+
+sys.path.insert(0, os.environ.get("SMOKY_LIB", "/usr/lib/smoky"))
+from smokybureau.cmd import main  # noqa: E402
+
+sys.exit(main())

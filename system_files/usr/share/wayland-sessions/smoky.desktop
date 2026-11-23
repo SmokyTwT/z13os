@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Smoky
+Comment=Le bureau de Smoky OS
+Exec=/usr/bin/smoky-session
+Type=Application
+DesktopNames=Smoky;wlroots

@@ -1,4 +1,4 @@
-# Smoky OS — image système (Fedora Silverblue atomique) pour ROG Flow Z13 GZ301ZE
+# Smoky OS — image système (Fedora bootc atomique, bureau Smoky) pour ROG Flow Z13 GZ301ZE
 #
 # Image finale = socle (Containerfile.socle : Fedora, paquets, thèmes tiers, démarrage)
 #              + fichiers Smoky (system_files/) + réglages (build_files/smoky.sh).
