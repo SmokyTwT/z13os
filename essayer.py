@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Braise — essai dans une machine virtuelle (QEMU + firmware UEFI OVMF), sans écran :
-démarre Braise, prend des captures, tape des commandes comme sur un clavier AZERTY."""
+"""Smoky OS 100 % maison — essai dans une machine virtuelle (QEMU + firmware UEFI OVMF), sans écran :
+démarre l'OS, prend des captures, tape des commandes comme sur un clavier AZERTY."""
 import json, os, shutil, socket, subprocess, sys, time
 
 ICI = os.path.dirname(os.path.abspath(__file__))
-T = "/tmp/braise-essai"
+T = "/tmp/smokyos-essai"
 shutil.rmtree(T, ignore_errors=True); os.makedirs(T)
 shutil.copy("/usr/share/OVMF/OVMF_VARS_4M.fd", f"{T}/vars.fd")
 qemu = subprocess.Popen([
     "qemu-system-x86_64", "-machine", "q35", "-m", "1024", "-display", "none", "-net", "none",
     "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
     "-drive", f"if=pflash,format=raw,file={T}/vars.fd",
-    "-drive", f"format=raw,snapshot=on,file={ICI}/construit/braise.img",   # copie jetable : l image reste intacte
+    "-drive", f"format=raw,snapshot=on,file={ICI}/construit/smokyos.img",   # copie jetable : l image reste intacte
     "-device", "virtio-vga", "-qmp", f"unix:{T}/qmp.sock,server,nowait", "-serial", f"file:{T}/serie.txt"])
 s = socket.socket(socket.AF_UNIX)
 for _ in range(100):

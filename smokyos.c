@@ -1,11 +1,11 @@
-/* Braise 0.1 — un système d'exploitation écrit de zéro, pour toi.
+/* Smoky OS 100 % maison, version 0.1 — un système d'exploitation écrit de zéro, pour toi.
  *
  * Aucun Linux, aucune bibliothèque : ce fichier, uefi.h (écrit d'après la spécification) et le
- * compilateur. Braise démarre directement par le firmware UEFI du PC, dessine lui-même tout ce
+ * compilateur. Il démarre directement par le firmware UEFI du PC, dessine lui-même tout ce
  * que tu vois (y compris sa police, faite de traits sur une grille), lit le clavier et tient un
  * petit carnet de commandes. Le firmware ne sert qu'à démarrer, au clavier et à l'heure.
  *
- * Sécurité de ton PC : Braise n'a AUCUN pilote de disque et n'appelle jamais les fonctions
+ * Sécurité de ton PC : il n'a AUCUN pilote de disque et n'appelle jamais les fonctions
  * d'écriture du firmware (variables EFI). Il ne peut ni lire ni modifier Windows ou Smoky OS.
  */
 #include "uefi.h"
@@ -85,14 +85,14 @@ static void bloc(float x, float y, float w, float h, float r, u32 c, float a) {
     }
 }
 
-/* --- Police Braise : chaque signe est fait de traits sur une grille 4 × 8 -------------------------
+/* --- Police Smoky : chaque signe est fait de traits sur une grille 4 × 8 -------------------------
  * Un trait = suite de points « xy » (chiffres) ; traits séparés par une espace. Ligne de base à 6,
- * hauteur des minuscules à 2, jambages jusqu'à 8. Dessinée pour Braise, elle s'agrandit sans perte. */
+ * hauteur des minuscules à 2, jambages jusqu'à 8. Dessinée pour cet OS, elle s'agrandit sans perte. */
 static const char *GLYPHES[128] = {
   [' '] = "", ['.'] = "2626", [','] = "2617", [':'] = "2222 2626", [';'] = "2222 2617", ['!'] = "2024 2626",
   ['?'] = "011030414224 2626", ['-'] = "1333", ['+'] = "1333 2224", ['='] = "1232 1434", ['/'] = "4006",
   ['('] = "30212536", [')'] = "10212516", ['\''] = "2022", ['"'] = "1012 3032", ['<'] = "311335",
-  ['>'] = "113315", ['_'] = "0747", ['%'] = "4006 1010 3636", ['*'] = "2125 1234 1432", ['#'] = "1115 3135 0232 0434",
+  ['>'] = "113315", ['_'] = "0747", ['%'] = "4006 0010110100 3545463635", ['*'] = "2125 1234 1432", ['#'] = "1115 3135 0232 0434",
   ['0'] = "103041453616050110 1531", ['1'] = "112026 1636", ['2'] = "01103041420646",
   ['3'] = "01103041423313 334445361605", ['4'] = "36300444", ['5'] = "400003334445361605",
   ['6'] = "4130100105163645443303", ['7'] = "004016", ['8'] = "13020110304142331304051636454433",
@@ -350,7 +350,7 @@ static void memoire(char *d) {
   }
 }
 
-static int executer(void) {                                 /* renvoie 1 pour quitter Braise */
+static int executer(void) {                                 /* renvoie 1 pour quitter */
   char ligne[160] = "> ";
   char *p = fin(ligne);
   for (int i = 0; i < nb_saisie && p < ligne + 150; i++) {
@@ -372,7 +372,7 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     noter("ecran       la définition de l'écran", 0xb6b7c2);
     noter("clavier     AZERTY ou QWERTY", 0xb6b7c2);
     noter("effacer     vide le carnet", 0xb6b7c2);
-    noter("apropos     ce qu'est Braise", 0xb6b7c2);
+    noter("apropos     ce qu'est cet OS", 0xb6b7c2);
     noter("redemarrer, eteindre, quitter (retour au firmware)", 0xb6b7c2);
   } else if (egal(s, n, "heure")) {
     EFI_TIME t; char d[96], x[8];
@@ -397,7 +397,7 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   } else if (egal(s, n, "effacer")) {
     nb_lignes = 0;
   } else if (egal(s, n, "apropos") || egal(s, n, "à-propos")) {
-    noter("Braise 0.1 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
+    noter("Smoky OS 100 % maison 0.1 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
     noter("Démarrage UEFI, affichage, police en traits, clavier, carnet.", 0xb6b7c2);
     noter("Aucun pilote de disque : il ne peut pas toucher à tes systèmes.", 0xb6b7c2);
   } else if (egal(s, n, "redemarrer") || egal(s, n, "redémarrer")) {
@@ -444,12 +444,12 @@ static int choisir_ecran(void) {
   return 1;
 }
 
-EFI_STATUS efi_main(EFI_HANDLE image_braise, EFI_SYSTEM_TABLE *st) {
-  (void)image_braise;
+EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
+  (void)image_os;
   ST = st; BS = st->demarrage; RT = st->execution;
   BS->chien_de_garde(0, 0, 0, 0);                    /* sinon le firmware redémarre le PC après 5 min */
   if (!choisir_ecran()) {
-    st->sortie->ecrire(st->sortie, (CHAR16 *)u"Braise : pas d'ecran graphique utilisable.\r\n");
+    st->sortie->ecrire(st->sortie, (CHAR16 *)u"Smoky OS : pas d'ecran graphique utilisable.\r\n");
     return 1;
   }
   st->sortie->curseur_visible(st->sortie, 0);
@@ -457,16 +457,16 @@ EFI_STATUS efi_main(EFI_HANDLE image_braise, EFI_SYSTEM_TABLE *st) {
       EFI_ERREUR(BS->allouer(EFI_MEMOIRE_DONNEES_CHARGEUR, (UINTN)L * H * 4, (void **)&image)))
     return 1;
   dessiner_fond();
-  float x = ecrire(44 * U, 74 * U, 44 * U, .55f, 0xff8f85, "braise");
+  float x = ecrire(44 * U, 74 * U, 44 * U, .55f, 0xff8f85, "smoky os");
   ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.1");
-  ecrire(44 * U, 108 * U, 17 * U, .4f, 0xb6b7c2, "ton OS, écrit de zéro");
+  ecrire(44 * U, 108 * U, 17 * U, .4f, 0xb6b7c2, "100 % maison, écrit de zéro");
   ecrire(44 * U, H - 40 * U, 15 * U, .38f, 0x7c7c86,
-         "Braise n'a aucun pilote de disque : Windows et Smoky OS ne peuvent pas être touchés.");
+         "Aucun pilote de disque : ton Windows et ton Smoky OS de tous les jours ne peuvent pas être touchés.");
   memcpy(fond, image, (UINTN)L * H * 4);
   montrer(0, 0, L, H);
   CW = 1080 * U; CH = 760 * U; CX = (L - CW) / 2; CY = 170 * U;
   if (CW > L - 40) { CW = L - 40; CX = 20; }
-  noter("Bonjour ! Braise a démarré tout seul, sans Linux.", 0xf3f3f6);
+  noter("Bonjour ! Smoky OS a démarré tout seul, sans Linux.", 0xf3f3f6);
   noter("Tape « aide » pour voir ce qu'il sait faire.", 0xb6b7c2);
   dessiner_carnet();
   dessiner_heure(1);

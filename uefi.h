@@ -1,6 +1,6 @@
-/* Braise — définitions UEFI écrites à la main d'après la spécification UEFI 2.10.
- * Seulement ce dont Braise se sert. Volontairement ABSENTS : tout ce qui touche aux disques
- * (Block I/O, systèmes de fichiers) et l'écriture des variables du firmware : Braise ne peut
+/* Smoky OS 100 % maison — définitions UEFI écrites à la main d'après la spécification UEFI 2.10.
+ * Seulement ce dont l'OS se sert. Volontairement ABSENTS : tout ce qui touche aux disques
+ * (Block I/O, systèmes de fichiers) et l'écriture des variables du firmware : l'OS ne peut
  * donc ni lire ni écrire un disque, ni changer un réglage du PC.
  * Compilé pour la cible x86_64-unknown-windows : la convention d'appel est déjà celle d'UEFI. */
 #pragma once
@@ -55,7 +55,7 @@ typedef struct {
   EFI_STATUS (*lire_heure)(EFI_TIME *, void *);
   void *ecrire_heure, *lire_reveil, *ecrire_reveil, *carte_virtuelle, *convertir_pointeur;
   void *lire_variable, *variable_suivante;
-  void *ecrire_variable;              /* jamais appelée par Braise */
+  void *ecrire_variable;              /* jamais appelée */
   void *compteur_haut;
   void (*redemarrer)(u32 type, EFI_STATUS statut, UINTN taille, void *donnees);
 } EFI_RUNTIME_SERVICES;
