@@ -66,7 +66,7 @@ ko=0
 while read -r f; do
   grep -q '^\[Desktop Entry\]' "$f" && grep -q '^Exec=' "$f" || { echec "raccourci incomplet : $f"; ko=1; }
   exe=$(sed -n 's/^Exec=\([^ ]*\).*/\1/p' "$f" | head -1)
-  case "$exe" in /usr/bin/smoky-*|/usr/bin/z13-*|/usr/libexec/*) [ -f "system_files$exe" ] || { echec "$f lance $exe, absent du dépôt"; ko=1; } ;; esac
+  case "$exe" in /usr/bin/smoky-*|/usr/bin/z13-*|/usr/libexec/smokyos/*|/usr/libexec/z13os/*) [ -f "system_files$exe" ] || { echec "$f lance $exe, absent du dépôt"; ko=1; } ;; esac
 done < <(git ls-files 'system_files/usr/share/applications/*.desktop' 'system_files/etc/xdg/autostart/*.desktop')
 [ "$ko" -eq 0 ] && ok "raccourcis (.desktop)"
 
@@ -74,7 +74,7 @@ etape "Services"
 ko=0
 while read -r f; do
   while read -r exe; do
-    case "$exe" in /usr/libexec/*|/usr/bin/smoky-*|/usr/bin/z13-*) [ -f "system_files$exe" ] || { echec "$f lance $exe, absent du dépôt"; ko=1; } ;; esac
+    case "$exe" in /usr/libexec/smokyos/*|/usr/libexec/z13os/*|/usr/bin/smoky-*|/usr/bin/z13-*) [ -f "system_files$exe" ] || { echec "$f lance $exe, absent du dépôt"; ko=1; } ;; esac
   done < <(sed -n 's/^Exec[A-Za-z]*=[-+!@:]*\([^ ]*\).*/\1/p' "$f"; sed -n 's/^Exec[A-Za-z]*=.*python3 \([^ ]*\).*/\1/p' "$f")
 done < <(git ls-files 'system_files/usr/lib/systemd/*' 'system_files/etc/containers/systemd/*')
 # chaque service activé à la construction existe (dans le dépôt, ou fourni par un paquet connu)
