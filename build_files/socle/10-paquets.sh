@@ -83,6 +83,8 @@ PAQUETS=(
   # d'entreprise comme eduroam, Bluetooth, son) ; logithèque pour les applis Flatpak
   nautilus gvfs gvfs-mtp ptyxis gnome-text-editor loupe papers gnome-calculator
   nm-connection-editor blueman pavucontrol gnome-software flatpak mate-polkit
+  # clavier à l'écran (Stevia, celui de Phosh : s'affiche seul dans un champ de texte en mode tablette)
+  stevia
   google-chrome-stable
 
   # --- Outils déjà utilisés par Smoky --------------------------------------------

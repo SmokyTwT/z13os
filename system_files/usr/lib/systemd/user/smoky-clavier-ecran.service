@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS - clavier à l'écran (Stevia), affiché en mode tablette
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Il n'apparaît que si le mode tablette est actif (smoky-adaptive règle
+# org.gnome.desktop.a11y.applications screen-keyboard-enabled), dans un champ de texte.
+ExecStart=/usr/bin/sh -c 'exec "$(command -v stevia || command -v phosh-osk-stevia)"'
+Restart=on-failure
+RestartSec=3
+Slice=session.slice

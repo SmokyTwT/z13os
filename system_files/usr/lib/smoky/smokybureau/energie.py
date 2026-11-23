@@ -17,7 +17,7 @@ import threading
 from gi.repository import Gio, GLib
 
 from . import commun
-from .ecran import choisir_frequence
+from .ecran import choisir_frequence, ecran_integre
 
 DEFAUTS = {"refresh": True, "tablet_mode": False, "vpn_auto": False, "tablet_open_notes": True,
            "economie_batterie": True, "luminosite_batterie": True, "maison_batterie": True}
@@ -50,11 +50,58 @@ class Adaptation:
         self.systeme.signal_subscribe("org.freedesktop.NetworkManager", "org.freedesktop.NetworkManager",
                                       "StateChanged", "/org/freedesktop/NetworkManager", None,
                                       Gio.DBusSignalFlags.NONE, self.reseau_change)
+        self.capteur = False
+        self.appliquer_tablette()
         self.verifier()
+
+    # --- mode tablette : clavier à l'écran (Stevia) et rotation de l'écran ----------------------
+    ROTATIONS = {"normal": "normal", "left-up": "90", "right-up": "270", "bottom-up": "180"}
+
+    def appliquer_tablette(self):
+        tablette = bool(self.conf.get("tablet_mode"))
+        commun.commande("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled",
+                        "true" if tablette else "false")
+        if tablette and not self.capteur:
+            try:
+                self.systeme.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy", "net.hadess.SensorProxy",
+                                       "ClaimAccelerometer", None, None, Gio.DBusCallFlags.NONE, 3000, None)
+                self.capteur = True
+                self.abonnement = self.systeme.signal_subscribe(
+                    "net.hadess.SensorProxy", "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                    "/net/hadess/SensorProxy", None, Gio.DBusSignalFlags.NONE, lambda *a: self.tourner())
+                self.tourner()
+            except GLib.Error:
+                pass                                  # pas d'accéléromètre (machine virtuelle…)
+        elif not tablette and self.capteur:
+            self.systeme.signal_unsubscribe(self.abonnement)
+            try:
+                self.systeme.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy", "net.hadess.SensorProxy",
+                                       "ReleaseAccelerometer", None, None, Gio.DBusCallFlags.NONE, 3000, None)
+            except GLib.Error:
+                pass
+            self.capteur = False
+            self.tourner("normal")
+
+    def tourner(self, sens=None):
+        if sens is None:
+            try:
+                v = self.systeme.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy",
+                                           "org.freedesktop.DBus.Properties", "Get",
+                                           GLib.Variant("(ss)", ("net.hadess.SensorProxy", "AccelerometerOrientation")),
+                                           None, Gio.DBusCallFlags.NONE, 3000, None)
+                sens = v.unpack()[0]
+            except GLib.Error:
+                return
+        transformation = self.ROTATIONS.get(sens)
+        e = ecran_integre()
+        if transformation and e:
+            commun.commande("wlr-randr", "--output", e[0], "--transform", transformation)
 
     def relire(self):
         tablette_avant = bool(self.conf.get("tablet_mode"))
         self.conf = commun.lire_json(commun.ADAPTIVE, DEFAUTS)
+        if bool(self.conf.get("tablet_mode")) != tablette_avant:
+            self.appliquer_tablette()
         if self.conf.get("tablet_mode") and not tablette_avant and self.conf.get("tablet_open_notes"):
             threading.Thread(target=self.proposer_notes, daemon=True).start()
         if self.batterie is not None and self.conf.get("refresh"):
