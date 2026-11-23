@@ -30,7 +30,8 @@ for p in ffmpeg intel-media-driver asusctl supergfxctl thermald rclone zenity po
          google-chrome-stable gtk-update-icon-cache python3-pillow librsvg2-tools plymouth plymouth-plugin-script \
          iwlwifi-mvm-firmware nvidia-gpu-firmware alsa-sof-firmware NetworkManager-wifi firewalld pipewire wireplumber bluez flatpak \
          labwc greetd greetd-selinux gtk4-layer-shell python3-gobject python3-pam swayidle swaylock wlr-randr \
-         xdg-desktop-portal-wlr gnome-keyring-pam power-profiles-daemon upower iio-sensor-proxy nautilus ptyxis; do
+         xdg-desktop-portal-wlr gnome-keyring-pam power-profiles-daemon upower iio-sensor-proxy nautilus ptyxis \
+         mate-polkit wlsunset blueman nm-connection-editor; do
   verifie "paquet $p installé" rpm -q "$p"
 done
 # plus de GNOME Shell ni de GDM ; un seul gestionnaire de profils d'énergie (décision 4)
@@ -161,11 +162,13 @@ for f in /usr/share/smoky-bureau/labwc/rc.xml /usr/share/smoky-bureau/labwc/menu
   verifie "$(basename "$(dirname "$f")")/$(basename "$f") lisible" python3 -c 'import sys, xml.etree.ElementTree as E; E.parse(sys.argv[1])' "$f"
 done
 verifie "thème des fenêtres Smoky" test -f /usr/share/themes/Smoky/labwc/themerc
+verifie "agent polkit présent" test -x /usr/libexec/polkit-mate-authentication-agent-1
 verifie "style du bureau" test -s /usr/share/smoky-bureau/bureau.css
 verifie "police des titres (Comfortaa)" bash -c 'fc-list | grep -qi comfortaa'
 verifie "asusd ne change plus le profil d'énergie (réglage forcé à chaque démarrage)" grep -q 'change_platform_profile_on_battery' /usr/lib/systemd/system/smoky-asusd-profils.service
 unites_session=(/usr/lib/systemd/user/smoky-bureau*.service /usr/lib/systemd/user/smoky-bureau-session.target \
-                /usr/lib/systemd/user/smoky-veille.service /usr/lib/systemd/user/smoky-verrou.service)
+                /usr/lib/systemd/user/smoky-veille.service /usr/lib/systemd/user/smoky-verrou.service \
+                /usr/lib/systemd/user/smoky-nuit.service /usr/lib/systemd/user/smoky-autorisation.service)
 erreurs=$(systemd-analyze --user verify --recursive-errors=no "${unites_session[@]}" 2>&1 | grep -E 'smoky-' | grep -viE 'is not executable|not found in path' || true)
 [ -z "$erreurs" ] && ok "unités de session du bureau sans erreur" || { echec "unités de session du bureau :"; printf '%s\n' "$erreurs" | sed 's/^/          /'; }
 

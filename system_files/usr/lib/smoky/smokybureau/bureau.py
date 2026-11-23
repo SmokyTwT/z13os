@@ -8,6 +8,7 @@ import ctypes
 import json
 import os
 import subprocess
+import threading
 import time
 import unicodedata
 
@@ -26,7 +27,7 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 from gi.repository import Gtk4LayerShell as LS  # noqa: E402
 
-from . import commun, wayland  # noqa: E402
+from . import commun, reseau, wayland  # noqa: E402
 
 JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
 MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
@@ -156,6 +157,8 @@ class Bureau(Gtk.Application):
         GLib.timeout_add_seconds(30, self.tic_batterie)
         self.tic_batterie()
         self.surveiller_reseau()
+        if commun.lire_json(commun.BUREAU, {}).get("nuit"):
+            subprocess.Popen(["systemctl", "--user", "start", "smoky-nuit.service"])
         Gio.bus_own_name(Gio.BusType.SESSION, "fr.smoky.Bureau", Gio.BusNameOwnerFlags.NONE,
                          self.bus_obtenu, None, lambda *a: print("nom D-Bus perdu", flush=True))
         Gio.bus_own_name(Gio.BusType.SESSION, "org.freedesktop.Notifications",
@@ -522,7 +525,37 @@ class Bureau(Gtk.Application):
         self.bascule_eveil = self.bascule(bascules, 0, 1, "weather-clear-night-symbolic", "Ne pas mettre en veille",
                                           self.basculer_eveil)
         self.bascule_tablette = self.bascule(bascules, 1, 1, "input-tablet-symbolic", "Tablette", self.basculer_tablette)
+        self.bascule_bluetooth = self.bascule(bascules, 0, 2, "bluetooth-active-symbolic", "Bluetooth", self.basculer_bluetooth)
+        self.bascule_nuit = self.bascule(bascules, 1, 2, "night-light-symbolic", "Éclairage du soir", self.basculer_nuit)
         p.append(bascules)
+        liens = Gtk.Box(spacing=6, homogeneous=True)
+        b_wifi = Gtk.Button(label="Réseaux Wi-Fi", css_classes=["lien"])
+        b_wifi.connect("clicked", lambda *a: self.ouvrir_wifi())
+        b_bt = Gtk.Button(label="Appareils Bluetooth", css_classes=["lien"])
+        b_bt.connect("clicked", lambda *a: (self.panneau.set_visible(False), subprocess.Popen(["blueman-manager"])))
+        liens.append(b_wifi)
+        liens.append(b_bt)
+        p.append(liens)
+        self.zone_wifi = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.NONE)
+        boite_wifi = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.etat_wifi = Gtk.Label(css_classes=["wifi-etat"], xalign=0)
+        boite_wifi.append(self.etat_wifi)
+        defile = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, propagate_natural_height=True,
+                                    max_content_height=250)
+        self.liste_wifi = Gtk.ListBox(css_classes=["liste-wifi"], selection_mode=Gtk.SelectionMode.NONE)
+        defile.set_child(self.liste_wifi)
+        boite_wifi.append(defile)
+        self.ligne_mdp = Gtk.Box(spacing=6, visible=False)
+        self.mdp_wifi = Gtk.PasswordEntry(placeholder_text="Mot de passe du Wi-Fi", show_peek_icon=True, hexpand=True)
+        self.mdp_wifi.connect("activate", lambda *a: self.connecter_reseau())
+        ok = Gtk.Button(label="Se connecter", css_classes=["lien"])
+        ok.connect("clicked", lambda *a: self.connecter_reseau())
+        self.ligne_mdp.append(self.mdp_wifi)
+        self.ligne_mdp.append(ok)
+        boite_wifi.append(self.ligne_mdp)
+        self.zone_wifi.set_child(boite_wifi)
+        p.append(self.zone_wifi)
+        self.reseau_choisi = None
         actions = Gtk.Box(css_classes=["actions"], homogeneous=True, spacing=6)
         for nom_icone, texte, action, confirmer in (
                 ("system-lock-screen-symbolic", "Verrouiller", self.verrouiller, False),
@@ -610,6 +643,10 @@ class Bureau(Gtk.Application):
         self.poser(self.bascule_charge, (commun.CONFIG / "charge-once").exists())
         self.poser(self.bascule_eveil, commun.commande("systemctl", "--user", "is-active", "smoky-veille.service").strip() != "active")
         self.poser(self.bascule_tablette, commun.lire_json(commun.ADAPTIVE, {}).get("tablet_mode"))
+        self.poser(self.bascule_bluetooth, "true" in commun.commande(
+            "busctl", "get-property", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Powered", delai=3))
+        self.poser(self.bascule_nuit, commun.commande("systemctl", "--user", "is-active", "smoky-nuit.service").strip() == "active")
+        self.zone_wifi.set_reveal_child(False)
         self.panneau.present()
 
     def action_panneau(self, action, confirmer, etiquette, texte):
@@ -665,6 +702,81 @@ class Bureau(Gtk.Application):
             avant = marque.read_text().strip() if marque.exists() else "80"
             commun.commande("asusctl", "battery", "limit", avant) or commun.commande("asusctl", "-c", avant)
             marque.unlink(missing_ok=True)
+
+    def basculer_bluetooth(self, actif):
+        commun.commande("busctl", "set-property", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1",
+                        "Powered", "b", "true" if actif else "false")
+
+    def basculer_nuit(self, actif):
+        commun.commande("systemctl", "--user", "start" if actif else "stop", "smoky-nuit.service")
+        reglages = commun.lire_json(commun.BUREAU, {})
+        reglages["nuit"] = bool(actif)
+        commun.ecrire_json(commun.BUREAU, reglages)
+
+    # --- Wi-Fi : liste des réseaux, connexion (le travail de nmcli se fait hors de l'affichage) --------
+    def ouvrir_wifi(self):
+        visible = not self.zone_wifi.get_reveal_child()
+        self.zone_wifi.set_reveal_child(visible)
+        if visible:
+            self.etat_wifi.set_label("Recherche des réseaux…")
+            self.ligne_mdp.set_visible(False)
+            threading.Thread(target=lambda: GLib.idle_add(self.remplir_wifi, reseau.reseaux(True)), daemon=True).start()
+
+    def remplir_wifi(self, liste):
+        while (enfant := self.liste_wifi.get_first_child()):
+            self.liste_wifi.remove(enfant)
+        self.etat_wifi.set_label("" if liste else "Aucun réseau Wi-Fi en vue.")
+        for r in liste[:14]:
+            ligne = Gtk.Button(css_classes=["reseau"] + (["actif"] if r["actif"] else []))
+            boite = Gtk.Box(spacing=8)
+            barres = "▂▄▆█"[:max(1, min(4, round(r["signal"] / 25)))]
+            boite.append(Gtk.Label(label=barres, css_classes=["signal"], width_chars=4, xalign=0))
+            boite.append(Gtk.Label(label=r["nom"], hexpand=True, xalign=0, ellipsize=Pango.EllipsizeMode.END))
+            if r["actif"]:
+                boite.append(Gtk.Label(label="connecté", css_classes=["wifi-etat"]))
+            elif r["securite"] and r["securite"] != "--":
+                boite.append(icone("network-wireless-encrypted-symbolic", 14))
+            ligne.set_child(boite)
+            ligne.connect("clicked", lambda _b, r=r: self.choisir_reseau(r))
+            self.liste_wifi.append(ligne)
+        return False
+
+    def choisir_reseau(self, r):
+        if r["actif"]:
+            return
+        self.reseau_choisi = r
+        if r["entreprise"] and not r["connu"]:      # eduroam et autres réseaux d'entreprise
+            self.panneau.set_visible(False)
+            subprocess.Popen(["nm-connection-editor", "--create", "--type=802-11-wireless"])
+        elif r["connu"] or not r["securite"] or r["securite"] == "--":
+            self.connecter_reseau()
+        else:
+            self.etat_wifi.set_label(f"Mot de passe pour « {r['nom']} »")
+            self.ligne_mdp.set_visible(True)
+            self.mdp_wifi.set_text("")
+            self.mdp_wifi.grab_focus()
+
+    def connecter_reseau(self):
+        r = self.reseau_choisi
+        if not r:
+            return
+        mot_de_passe = self.mdp_wifi.get_text() if self.ligne_mdp.get_visible() else None
+        self.mdp_wifi.set_text("")
+        self.etat_wifi.set_label(f"Connexion à « {r['nom']} »…")
+
+        def travail():
+            erreur = reseau.connecter(r, mot_de_passe)
+            GLib.idle_add(self.reseau_connecte, r, erreur)
+        threading.Thread(target=travail, daemon=True).start()
+
+    def reseau_connecte(self, r, erreur):
+        if erreur:
+            self.etat_wifi.set_label(erreur)
+        else:
+            self.etat_wifi.set_label(f"Connecté à « {r['nom']} ».")
+            self.ligne_mdp.set_visible(False)
+            self.maj_reseau()
+        return False
 
     def basculer_eveil(self, actif):
         commun.commande("systemctl", "--user", "stop" if actif else "start", "smoky-veille.service")

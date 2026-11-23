@@ -1,0 +1,12 @@
+[Unit]
+Description=Smoky OS - fenêtre de mot de passe administrateur (polkit)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Agent polkit éprouvé (MATE) en attendant celui de Smoky : il demande ton mot de passe quand une
+# action en a besoin (ouvrir la partition Windows, installer une appli pour tous…)
+ExecStart=/usr/libexec/polkit-mate-authentication-agent-1
+Restart=on-failure
+RestartSec=2
+Slice=session.slice

@@ -5,6 +5,6 @@ Documentation=file:///usr/share/doc/smokyos/refonte/README.md
 BindsTo=graphical-session.target
 Wants=graphical-session-pre.target
 After=graphical-session-pre.target
-Wants=smoky-bureau.service smoky-veille.service xdg-desktop-portal.service
+Wants=smoky-bureau.service smoky-veille.service smoky-autorisation.service xdg-desktop-portal.service
 # applis lancées à la connexion (dossier autostart : configuration de ton compte, etc.)
 Wants=xdg-desktop-autostart.target

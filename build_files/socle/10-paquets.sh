@@ -82,7 +82,7 @@ PAQUETS=(
   # Fichiers, Terminal, texte, images, PDF, calculatrice ; réglages avancés (Wi-Fi
   # d'entreprise comme eduroam, Bluetooth, son) ; logithèque pour les applis Flatpak
   nautilus gvfs gvfs-mtp ptyxis gnome-text-editor loupe papers gnome-calculator
-  nm-connection-editor blueman pavucontrol gnome-software flatpak
+  nm-connection-editor blueman pavucontrol gnome-software flatpak mate-polkit
   google-chrome-stable
 
   # --- Outils déjà utilisés par Smoky --------------------------------------------

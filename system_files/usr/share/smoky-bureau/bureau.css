@@ -174,3 +174,19 @@ window.smoky-barre {
 .verrou-message { color: #ff8f85; min-height: 20px; }
 .connexion-actions { margin: 26px; }
 .connexion-actions .action { padding: 10px 18px; background: rgba(19, 19, 21, 0.78); }
+
+/* --- réglages rapides : Wi-Fi et liens ------------------------------------------------------- */
+.lien {
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.06); box-shadow: none;
+  border-radius: 12px; color: #b6b7c2; min-height: 36px;
+}
+.lien:hover { background: rgba(255, 255, 255, 0.09); color: #f3f3f6; }
+.liste-wifi { background: transparent; }
+.reseau {
+  background: transparent; border: none; box-shadow: none; border-radius: 10px;
+  color: #b6b7c2; padding: 6px 10px; min-height: 36px;
+}
+.reseau:hover { background: rgba(255, 255, 255, 0.07); color: #f3f3f6; }
+.reseau.actif { color: #f3f3f6; font-weight: 700; }
+.signal { font-family: monospace; color: #7c7c86; }
+.wifi-etat { color: #7c7c86; font-size: 12px; }

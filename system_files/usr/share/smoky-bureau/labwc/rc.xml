@@ -50,12 +50,12 @@
     <keybind key="Print"><action name="Execute" command="smoky-bureau-cmd capture"/></keybind>
     <keybind key="S-Print"><action name="Execute" command="smoky-bureau-cmd capture zone"/></keybind>
     <!-- touches du clavier du Z13 : son, luminosité (avec bulle), lecture -->
-    <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="smoky-bureau-cmd volume plus"/></keybind>
-    <keybind key="XF86AudioLowerVolume"><action name="Execute" command="smoky-bureau-cmd volume moins"/></keybind>
-    <keybind key="XF86AudioMute"><action name="Execute" command="smoky-bureau-cmd volume muet"/></keybind>
-    <keybind key="XF86AudioMicMute"><action name="Execute" command="smoky-bureau-cmd micro muet"/></keybind>
-    <keybind key="XF86MonBrightnessUp"><action name="Execute" command="smoky-bureau-cmd luminosite plus"/></keybind>
-    <keybind key="XF86MonBrightnessDown"><action name="Execute" command="smoky-bureau-cmd luminosite moins"/></keybind>
+    <keybind key="XF86AudioRaiseVolume" allowWhenLocked="yes"><action name="Execute" command="smoky-bureau-cmd volume plus"/></keybind>
+    <keybind key="XF86AudioLowerVolume" allowWhenLocked="yes"><action name="Execute" command="smoky-bureau-cmd volume moins"/></keybind>
+    <keybind key="XF86AudioMute" allowWhenLocked="yes"><action name="Execute" command="smoky-bureau-cmd volume muet"/></keybind>
+    <keybind key="XF86AudioMicMute" allowWhenLocked="yes"><action name="Execute" command="smoky-bureau-cmd micro muet"/></keybind>
+    <keybind key="XF86MonBrightnessUp" allowWhenLocked="yes"><action name="Execute" command="smoky-bureau-cmd luminosite plus"/></keybind>
+    <keybind key="XF86MonBrightnessDown" allowWhenLocked="yes"><action name="Execute" command="smoky-bureau-cmd luminosite moins"/></keybind>
     <keybind key="XF86AudioPlay"><action name="Execute" command="playerctl play-pause"/></keybind>
     <keybind key="XF86AudioNext"><action name="Execute" command="playerctl next"/></keybind>
     <keybind key="XF86AudioPrev"><action name="Execute" command="playerctl previous"/></keybind>

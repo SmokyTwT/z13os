@@ -20,7 +20,7 @@ from unittest import mock
 RACINE = Path(__file__).resolve().parent.parent / "system_files"
 sys.path.insert(0, str(RACINE / "usr/lib/smoky"))
 
-from smokybureau import commun, ecran, greetd, wayland  # noqa: E402
+from smokybureau import commun, ecran, greetd, reseau, wayland  # noqa: E402
 
 
 def chaine(s):
@@ -233,6 +233,38 @@ class TestFrequence(unittest.TestCase):
     def test_ecran_introuvable(self):
         self.assertEqual(self.appels(True, sorties=[{"name": "HDMI-A-1", "enabled": False, "modes": []},
                                                     {"name": "DP-1", "enabled": False, "modes": []}]), [])
+
+
+class TestWifi(unittest.TestCase):
+    LISTE = ("*:Bbox-03D5DF02:82:WPA2\n:Study Aulnoy\\: invités:64:\n:eduroam:71:WPA2 802.1X\n"
+             ":Bbox-03D5DF02:40:WPA2\n::30:WPA2\n:All Suites:55:--\n")
+
+    def faux(self, *args, **_):
+        if "list" in args:
+            return self.LISTE
+        return "Bbox-03D5DF02:802-11-wireless\neduroam:802-11-wireless\nSmoky VPN:vpn\n"
+
+    def test_liste_triee_et_dedoublonnee(self):
+        with mock.patch.object(commun, "commande", side_effect=self.faux):
+            liste = reseau.reseaux()
+        self.assertEqual([r["nom"] for r in liste], ["Bbox-03D5DF02", "eduroam", "Study Aulnoy: invités", "All Suites"],
+                         "réseau actif d'abord, puis le plus fort ; un seul par nom ; réseaux sans nom ignorés")
+        self.assertTrue(liste[0]["actif"] and liste[0]["connu"])
+        self.assertTrue(liste[1]["entreprise"] and liste[1]["connu"])
+        self.assertFalse(liste[2]["connu"])
+
+    def test_mot_de_passe_jamais_sur_la_ligne_de_commande(self):
+        appels = []
+
+        def faux_run(args, **kw):
+            appels.append((args, kw.get("input")))
+            return mock.Mock(returncode=0, stderr="")
+        with mock.patch.object(reseau.subprocess, "run", side_effect=faux_run):
+            self.assertIsNone(reseau.connecter({"nom": "Maison", "connu": False}, "secret-123"))
+        args, entree = appels[0]
+        self.assertNotIn("secret-123", " ".join(args))
+        self.assertEqual(entree, "secret-123\n")
+        self.assertIn("--ask", args)
 
 
 class TestBatterie(unittest.TestCase):
