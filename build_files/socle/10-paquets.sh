@@ -99,9 +99,14 @@ dnf -y install --skip-unavailable aajohan-comfortaa-fonts || true
 # Rien n'est désinstallé de fedora-bootc : sssd, par exemple, est référencé par la configuration
 # PAM de Fedora. Les services inutiles sont seulement coupés (smoky.sh).
 
-# --- Google Chrome : déplacé de /opt vers /usr (image atomique) -------------------
-mv /var/opt/google /usr/lib/google
-printf 'd /var/opt 0755 root root -\nL /var/opt/google - - - - /usr/lib/google\n' > /usr/lib/tmpfiles.d/z13os-chrome.conf
+# --- Google Chrome ------------------------------------------------------------------
+# Silverblue : /opt pointe vers /var/opt (hors de l'image) → on range Chrome dans /usr.
+# fedora-bootc : /opt est un vrai dossier de l'image (en lecture seule sur le PC) → rien à faire.
+if [[ -d /var/opt/google ]]; then
+  mv /var/opt/google /usr/lib/google
+  printf 'd /var/opt 0755 root root -\nL /var/opt/google - - - - /usr/lib/google\n' > /usr/lib/tmpfiles.d/z13os-chrome.conf
+fi
+test -x /usr/bin/google-chrome-stable
 
 # --- Ménage ------------------------------------------------------------------
 dnf clean all
