@@ -22,29 +22,12 @@ jobs:
             grep -qx "$p" /tmp/base.txt && echo "base : $p" || echo "absent : $p"
           done
           echo "== services activés"; systemctl list-unit-files --state=enabled --no-legend | awk '{print $1}' | tr '\n' ' '; echo
-      - name: Paquets disponibles
+      - name: Claviers à l'écran
         run: |
-          for p in labwc cage greetd greetd-selinux gtk4-layer-shell gtk4 python3-gobject squeekboard wvkbd \
-                   swayidle swaylock wlsunset wlr-randr grim slurp wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr \
-                   xdg-desktop-portal-gtk iio-sensor-proxy power-profiles-daemon tuned-ppd gnome-keyring gnome-keyring-pam \
-                   nautilus ptyxis nm-connection-editor blueman pavucontrol mate-polkit lxpolkit polkit-gnome xfce-polkit \
-                   python3-pam python3-pywayland gnome-software gnome-text-editor loupe papers gnome-calculator \
-                   adwaita-sans-fonts google-noto-color-emoji-fonts cups system-config-printer fwupd thermald xorg-x11-server-Xwayland \
-                   gvfs gvfs-mtp udisks2 brightnessctl playerctl libnotify zenity rclone gsettings-desktop-schemas \
-                   adwaita-icon-theme gnome-themes-extra NetworkManager-openvpn NetworkManager-openconnect \
-                   alsa-ucm sof-firmware intel-media-driver xdg-user-dirs xdg-utils dbus-x11 at-spi2-core; do
+          for p in phosh-osk-stevia phosh-osk-stub stevia maliit-keyboard maliit-framework wvkbd squeekboard onboard \
+                   libxkbcommon-tools xkeyboard-config labwc; do
             v=$(dnf -q repoquery --latest-limit 1 --qf '%{VERSION}-%{RELEASE}' "$p" 2>/dev/null | head -1)
-            printf '%-32s %s\n' "$p" "${v:-INTROUVABLE}"
+            printf '%-24s %s\n' "$p" "${v:-INTROUVABLE}"
           done
-      - name: Fichiers utiles
-        run: |
-          dnf -q repoquery -l polkit-libs polkit 2>/dev/null | grep -i -E 'typelib|agent-helper' || true
-          dnf -q repoquery -l gtk4-layer-shell 2>/dev/null | grep -i typelib || true
-          dnf -q repoquery -l greetd 2>/dev/null | grep -E 'etc/|systemd' || true
-          dnf -q repoquery -l labwc 2>/dev/null | grep -E 'etc/|share/(labwc|doc)' | head -20 || true
-          dnf -q repoquery --requires squeekboard 2>/dev/null | tr '\n' ' '; echo
-          mkdir -p /tmp/x && cd /tmp/x && dnf -q download greetd labwc >/dev/null 2>&1 && for r in *.rpm; do rpm2cpio "$r" | cpio -idm --quiet; done
-          for f in etc/pam.d/greetd etc/greetd/config.toml usr/lib/systemd/system/greetd.service etc/xdg/labwc/environment etc/xdg/labwc/autostart; do
-            [ -f "$f" ] && { echo "===== $f"; cat "$f"; }
-          done
-          ls usr/share/doc/labwc 2>/dev/null | head
+          dnf -q repoquery --requires phosh-osk-stevia 2>/dev/null | tr '\n' ' '; echo
+          dnf -q repoquery -l phosh-osk-stevia 2>/dev/null | grep -E 'bin/|desktop|systemd' | head
