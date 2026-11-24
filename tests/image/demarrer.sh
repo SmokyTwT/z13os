@@ -61,11 +61,52 @@ echo "== mémoire (Mo)"; free -m 2>&1
 echo "== processus les plus gros (Mo)"; ps -eo rss,comm --sort=-rss | awk 'NR>1 && NR<=26 {printf "%7.1f %s\n", $1/1024, $2}'
 echo "== nombre de processus"; ps -e --no-headers | wc -l
 echo "== mémoire compressée"; sysctl vm.swappiness vm.page-cluster 2>&1 | tr '\n' ' '; echo; swapon --show=NAME,SIZE --noheadings 2>&1 | tr '\n' ' '; echo
+if [ "$n" = 2 ] && systemctl is-active -q greetd.service && [ -s /var/lib/smoky-mesure-mdp ]; then
+  # Bureau Smoky : on se connecte vraiment, comme l'écran de connexion (protocole de greetd),
+  # puis on regarde si labwc et le bureau Smoky tournent dans la session du compte d'essai
+  echo "== connexion au bureau Smoky (compte essai)"
+  python3 - <<'PY' 2>&1
+import json, socket, struct, subprocess
+mdp = open("/var/lib/smoky-mesure-mdp").read().strip()
+pid = subprocess.run(["pgrep", "-u", "greetd", "-f", "smoky-connexion.py"], capture_output=True, text=True).stdout.split()
+env = open(f"/proc/{pid[0]}/environ", "rb").read().split(b"\0")
+chemin = [e.split(b"=", 1)[1].decode() for e in env if e.startswith(b"GREETD_SOCK=")][0]
+s = socket.socket(socket.AF_UNIX)
+s.connect(chemin)
+def lire(n):
+    d = b""
+    while len(d) < n:
+        d += s.recv(n - len(d))
+    return d
+def envoyer(m):
+    c = json.dumps(m).encode()
+    s.sendall(struct.pack("=I", len(c)) + c)
+    return json.loads(lire(struct.unpack("=I", lire(4))[0]))
+r = envoyer({"type": "create_session", "username": "essai"})
+while r.get("type") == "auth_message":
+    r = envoyer({"type": "post_auth_message_response",
+                 "response": mdp if r.get("auth_message_type") in ("secret", "visible") else None})
+print("mot de passe :", r.get("type"), r.get("description", ""))
+if r.get("type") == "success":
+    print("ouverture :", envoyer({"type": "start_session", "cmd": ["/usr/bin/smoky-session"], "env": []}).get("type"))
+PY
+  pkill -u greetd -f smoky-connexion.py     # greetd ouvre la session quand l'écran de connexion se ferme
+  sleep 25
+  echo "== processus de la session"; pgrep -a -u essai 2>&1 | cut -c1-120 | head -25
+  if pgrep -u essai -x labwc >/dev/null && pgrep -u essai -f smoky-bureau.py >/dev/null; then
+    echo "SMOKY-SESSION ok"
+  else
+    echo "SMOKY-SESSION absente"
+  fi
+  echo "== erreurs de la session"; journalctl -b _UID=1000 -p warning --no-pager -o cat 2>&1 | grep -v -i 'egl\|mesa' | tail -20
+fi
 echo "SMOKY-MESURE-FIN $n"
 if [ "$n" = 1 ]; then
   # un compte ordinaire, comme sur un vrai PC : au second démarrage, l'écran de connexion
-  # affiche la liste des comptes au lieu de l'assistant de première installation
-  useradd -m -u 1000 -c "Essai" essai 2>&1 && echo "essai:$(head -c 18 /dev/urandom | base64)" | chpasswd 2>&1
+  # affiche la liste des comptes (et le bureau Smoky est essayé avec ce compte)
+  mdp=$(head -c 18 /dev/urandom | base64)
+  useradd -m -u 1000 -c "Essai" essai 2>&1 && echo "essai:$mdp" | chpasswd 2>&1
+  (umask 077; printf '%s\n' "$mdp" > /var/lib/smoky-mesure-mdp)
 fi
 touch /var/lib/smoky-mesure
 sleep 2
@@ -245,6 +286,11 @@ gpu_ok() {
 
 case "${ETAT[1]}" in
   graphique)
+    if grep -qa 'SMOKY-SESSION absente' "$T/serie-2.txt"; then
+      echo "RÉSULTAT : l'écran de connexion s'affiche, mais le bureau Smoky ne démarre pas après la connexion."
+      sed -n '/connexion au bureau Smoky/,/SMOKY-MESURE-FIN/p' "$T/serie-2.txt" | sed -E 's/^\[[ 0-9.]+\] smoky-mesure\[[0-9]+\]: ?//' | tail -n 50
+      exit 1
+    fi
     if ! grep -qaE "$AFFICHE" "$PROPRE"; then
       echo "RÉSULTAT : le système démarre (${DUREE[1]} s) mais l'écran de connexion n'apparaît pas dans le journal."
       grep -aE 'greetd|labwc|smoky-connexion|smokybureau' "$PROPRE" | tail -n 25
@@ -255,7 +301,9 @@ case "${ETAT[1]}" in
       echo "RÉSULTAT : l'image démarre jusqu'à l'écran de connexion (journal rejoué)."
       exit 0
     elif [ "${ETAT[2]}" = graphique ] && grep -qaE "$AFFICHE" "$T/serie-2.txt" && gpu_ok "$T/serie-2.txt"; then
-      echo "RÉSULTAT : l'image démarre deux fois de suite jusqu'à l'écran de connexion (${DUREE[1]} s, puis ${DUREE[2]} s)."
+      session=""
+      grep -qa 'SMOKY-SESSION ok' "$T/serie-2.txt" && session=", et le bureau Smoky s'ouvre après la connexion"
+      echo "RÉSULTAT : l'image démarre deux fois de suite jusqu'à l'écran de connexion (${DUREE[1]} s, puis ${DUREE[2]} s)$session."
       exit 0
     else
       echo "RÉSULTAT : le premier démarrage réussit (${DUREE[1]} s), mais pas le second (état : ${ETAT[2]})."
