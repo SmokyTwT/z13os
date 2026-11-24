@@ -31,8 +31,8 @@ firmware lui sert uniquement à démarrer et, pour `eteindre`, à couper le cour
 ## Construire et essayer
 
 ```bash
-./construire.sh      # → construit/esp/EFI/BOOT/BOOTX64.EFI et construit/smokyos.img
-./essayer.py         # machine virtuelle QEMU + firmware OVMF, captures dans /tmp/smokyos-essai
+./construire.sh      # → construit/esp/EFI/BOOT/BOOTX64.EFI et construit/smokyos.img (clé USB : GPT + partition EFI)
+./essayer.py         # machine virtuelle QEMU + firmware OVMF, démarrage depuis une clé USB virtuelle
 ```
 
 Pour l'essayer sur le Z13, il faudra une clé USB et couper Secure Boot le temps de l'essai, parce

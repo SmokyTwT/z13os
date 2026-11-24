@@ -11,10 +11,13 @@ clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -f
   -c noyau.c -o construit/noyau.o
 lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:construit/esp/EFI/BOOT/BOOTX64.EFI construit/smokyos.o construit/noyau.o
 ls -l construit/esp/EFI/BOOT/BOOTX64.EFI
-# Image de clé USB / de machine virtuelle : une partition FAT (EFI) qui contient EFI/BOOT/BOOTX64.EFI
+# Image de clé USB : table de partitions GPT avec une seule partition EFI (FAT32) qui contient
+# EFI/BOOT/BOOTX64.EFI. C'est ce que le firmware du Z13 sait démarrer depuis une clé.
 rm -f construit/smokyos.img
-dd if=/dev/zero of=construit/smokyos.img bs=1M count=34 status=none
-mkfs.fat -F 32 -n SMOKYOS construit/smokyos.img >/dev/null
-mmd -i construit/smokyos.img ::/EFI ::/EFI/BOOT
-mcopy -i construit/smokyos.img construit/esp/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-echo "image : construit/smokyos.img"
+dd if=/dev/zero of=construit/smokyos.img bs=1M count=64 status=none
+printf 'label: gpt\nstart=2048, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="SMOKYOS"\n' \
+  | sfdisk --quiet construit/smokyos.img
+mformat -i construit/smokyos.img@@1M -F -v SMOKYOS ::
+mmd -i construit/smokyos.img@@1M ::/EFI ::/EFI/BOOT
+mcopy -i construit/smokyos.img@@1M construit/esp/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+echo "image de clé USB : construit/smokyos.img"

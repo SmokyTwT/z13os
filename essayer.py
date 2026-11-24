@@ -11,7 +11,9 @@ qemu = subprocess.Popen([
     "qemu-system-x86_64", "-machine", "q35", "-m", "1024", "-display", "none", "-net", "none",
     "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
     "-drive", f"if=pflash,format=raw,file={T}/vars.fd",
-    "-drive", f"format=raw,snapshot=on,file={ICI}/construit/smokyos.img",   # copie jetable : l image reste intacte
+    # démarrage depuis une clé USB virtuelle (copie jetable : l'image reste intacte)
+    "-device", "qemu-xhci", "-drive", f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img",
+    "-device", "usb-storage,drive=cle",
     "-device", "virtio-vga", "-qmp", f"unix:{T}/qmp.sock,server,nowait", "-serial", f"file:{T}/serie.txt"])
 s = socket.socket(socket.AF_UNIX)
 for _ in range(100):
