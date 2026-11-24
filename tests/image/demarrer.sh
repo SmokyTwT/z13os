@@ -115,6 +115,16 @@ PY
   else
     echo "SMOKY-SESSION absente"
   fi
+  # clavier à l'écran : son service répond sur le bus de la session (montrer puis ranger)
+  bus="env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+  if pgrep -u essai -f smoky-clavier-ecran.py >/dev/null \
+     && runuser -u essai -- $bus /usr/bin/smoky-bureau-cmd clavier montrer \
+     && runuser -u essai -- $bus /usr/bin/smoky-bureau-cmd clavier cacher; then
+    echo "SMOKY-CLAVIER ok"
+  else
+    echo "SMOKY-CLAVIER absent"
+    journalctl -b _UID=1000 -o cat --no-pager 2>&1 | grep -i clavier | tail -5
+  fi
   echo "== erreurs de la session"; journalctl -b _UID=1000 -p warning --no-pager -o cat 2>&1 | grep -v -i 'egl\|mesa' | tail -20
 fi
 echo "SMOKY-MESURE-FIN $n"
@@ -322,6 +332,12 @@ case "${ETAT[1]}" in
     elif [ "${ETAT[2]}" = graphique ] && grep -qaE "$AFFICHE" "$T/serie-2.txt" && gpu_ok "$T/serie-2.txt"; then
       session=""
       grep -qa 'SMOKY-SESSION ok' "$T/serie-2.txt" && session=", et le bureau Smoky s'ouvre après la connexion"
+      # clavier à l'écran de la session : signalé (sans bloquer la publication) s'il ne répond pas
+      if grep -qa 'SMOKY-CLAVIER ok' "$T/serie-2.txt"; then
+        session="$session ; le clavier à l'écran répond"
+      elif grep -qa 'SMOKY-CLAVIER absent' "$T/serie-2.txt"; then
+        echo "::warning::le clavier à l'écran de la session ne répond pas"
+      fi
       # bouton Windows de l'écran de connexion : signalé (sans bloquer la publication) s'il ne passe pas
       if grep -qa 'SMOKY-WINDOWS ok' "$T/serie-2.txt"; then
         session="$session ; le bouton Windows de l'écran de connexion répond"

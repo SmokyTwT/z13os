@@ -8,6 +8,8 @@ L'apparence se vérifie à part (essai visuel sans écran) et le démarrage en m
 """
 import json
 import os
+import ctypes
+import ctypes.util
 import socket
 import struct
 import sys
@@ -30,6 +32,16 @@ def chaine(s):
 
 def message(oid, numero, args=b""):
     return struct.pack("=II", oid, ((8 + len(args)) << 16) | numero) + args
+
+
+def lire_messages_de(donnees):
+    sortie = []
+    while len(donnees) >= 8:
+        oid, mot = struct.unpack_from("=II", donnees)
+        taille = mot >> 16
+        sortie.append((oid, mot & 0xFFFF, donnees[8:taille]))
+        donnees = donnees[taille:]
+    return sortie
 
 
 def lire_messages(sock):
@@ -344,6 +356,103 @@ B: KEY=80000000000000 0 0 0 1500b00000c00 4000000000300000 0
         self.assertEqual(commun.claviers_physiques(branche), ["ASUSTeK Computer Inc. N-KEY Device Keyboard"])
         blocs = branche.split("\n\n")
         self.assertEqual(commun.claviers_physiques(blocs[0] + "\n\n" + blocs[2]), [], "boutons seuls : pas un clavier")
+
+
+class TestClavierSession(unittest.TestCase):
+    """Clavier à l'écran de la session : couches, disposition (keymap), protocole Wayland."""
+
+    def test_couches(self):
+        envoyables = set(commun.caracteres_session())
+        manque = [chr(c) for c in range(32, 127) if chr(c) not in envoyables]
+        self.assertEqual(manque, [], "tout l'ASCII s'envoie depuis le clavier de la session")
+        for nom, rangees in commun.COUCHES_SESSION.items():
+            toutes = " ".join(rangees).split(" ")
+            for indispensable in ("⌫", "⏎", "espace", "⌄"):
+                self.assertIn(indispensable, toutes, nom)
+        etat, envoi = commun.touche_session(("abc", False), "⇧")
+        self.assertEqual((etat, envoi), (("ABC", False), None))
+        self.assertEqual(commun.touche_session(etat, "A"), (("abc", False), "A"))
+        self.assertEqual(commun.touche_session(etat, "espace")[1], " ")
+        self.assertEqual(commun.touche_session(etat, "⌫")[1], "⌫")
+        self.assertEqual(commun.touche_session(etat, "⌄")[1], "cacher")
+
+    @unittest.skipUnless(ctypes.util.find_library("xkbcommon"), "libxkbcommon absent")
+    def test_keymap_chaque_caractere_revient(self):
+        texte, codes = commun.keymap_clavier(commun.caracteres_session())
+        xkb = ctypes.CDLL(ctypes.util.find_library("xkbcommon"))
+        xkb.xkb_context_new.restype = ctypes.c_void_p
+        xkb.xkb_keymap_new_from_string.restype = ctypes.c_void_p
+        xkb.xkb_keymap_new_from_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+        xkb.xkb_state_new.restype = ctypes.c_void_p
+        xkb.xkb_state_new.argtypes = [ctypes.c_void_p]
+        xkb.xkb_state_key_get_one_sym.restype = ctypes.c_uint32
+        xkb.xkb_state_key_get_one_sym.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        xkb.xkb_state_key_get_utf8.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_size_t]
+        contexte = xkb.xkb_context_new(0)
+        keymap = xkb.xkb_keymap_new_from_string(contexte, texte.encode(), 1, 0)
+        self.assertTrue(keymap, "la disposition se compile (libxkbcommon)")
+        etat = xkb.xkb_state_new(keymap)
+        speciaux = {"⌫": 0xFF08, "⏎": 0xFF0D, "⇥": 0xFF09, "←": 0xFF51, "→": 0xFF53}
+        for c, code in codes.items():
+            if c in speciaux:
+                self.assertEqual(xkb.xkb_state_key_get_one_sym(etat, code + 8), speciaux[c], c)
+                continue
+            tampon = ctypes.create_string_buffer(16)
+            xkb.xkb_state_key_get_utf8(etat, code + 8, tampon, 16)
+            self.assertEqual(tampon.value.decode(), c, f"code {code}")
+
+    def test_protocole(self):
+        texte, codes = commun.keymap_clavier(commun.caracteres_session())
+        with tempfile.TemporaryDirectory() as d:
+            chemin = os.path.join(d, "wayland-test")
+            serveur = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            serveur.bind(chemin)
+            serveur.listen(1)
+            champs = []
+            client = wayland.ClientClavier(texte, quand_saisie=champs.append, prise=chemin)
+            cote, _ = serveur.accept()
+            cote.settimeout(1)
+            try:
+                registre = struct.unpack("=I", lire_messages(cote)[0][2])[0]
+                annonces = [("wl_seat", 8), ("wl_output", 4), ("zwp_input_method_manager_v2", 1),
+                            ("zwp_virtual_keyboard_manager_v1", 1)]
+                cote.sendall(b"".join(message(registre, 0, struct.pack("=I", i) + chaine(nom) + struct.pack("=I", v))
+                                      for i, (nom, v) in enumerate(annonces, 1)))
+                for _ in range(5):
+                    client.lire()
+                donnees, fds, _, _ = socket.recv_fds(cote, 65536, 4)
+                recus = lire_messages_de(donnees)
+                liens = [m for m in recus if m[0] == registre]
+                noms = [m[2][8:8 + struct.unpack_from("=I", m[2], 4)[0] - 1].decode() for m in liens]
+                self.assertEqual(noms, ["wl_seat", "zwp_input_method_manager_v2", "zwp_virtual_keyboard_manager_v1"],
+                                 "pas d'écran ni de liste des fenêtres pour le clavier")
+                ident = {nom: struct.unpack_from("=I", m[2], len(m[2]) - 4)[0] for nom, m in zip(noms, liens)}
+                siege, gestion_saisie, gestion_clavier = (ident["wl_seat"], ident["zwp_input_method_manager_v2"],
+                                                          ident["zwp_virtual_keyboard_manager_v1"])
+                cree = [m for m in recus if m[0] == gestion_clavier][0]
+                clavier = struct.unpack("=II", cree[2])[1]
+                self.assertEqual(struct.unpack("=I", cree[2][:4])[0], siege)
+                keymap = [m for m in recus if m[0] == clavier and m[1] == 0][0]
+                format_, taille = struct.unpack("=II", keymap[2])
+                self.assertEqual(len(fds), 1, "la disposition part avec son descripteur de fichier")
+                self.assertEqual((format_, taille), (1, len(texte.encode()) + 1))
+                with os.fdopen(fds[0], "rb") as f:
+                    self.assertEqual(f.read(), texte.encode() + b"\0")
+                saisie = struct.unpack("=II", [m for m in recus if m[0] == gestion_saisie][0][2])[1]
+                self.assertTrue(client.taper(codes["é"]))
+                touches = [struct.unpack("=III", m[2]) for m in lire_messages(cote) if m[0] == clavier and m[1] == 1]
+                self.assertEqual([(k, e) for _t, k, e in touches], [(codes["é"], 1), (codes["é"], 0)])
+                for evenements, attendu in (([0, 5], [True]), ([1, 5], [True, False]), ([0, 1, 5], [True, False])):
+                    cote.sendall(b"".join(message(saisie, n) for n in evenements))
+                    client.lire()
+                    self.assertEqual(champs, attendu, f"événements {evenements}")
+                cote.sendall(message(saisie, 6))
+                client.lire()
+                self.assertIn((saisie, 6, b""), lire_messages(cote), "méthode de saisie prise ailleurs : objet rendu")
+            finally:
+                cote.close()
+                client.sock.close()
+                serveur.close()
 
 
 class TestGrubenv(unittest.TestCase):

@@ -7,7 +7,7 @@ complète, et la version précédente reste dans le menu de démarrage en cas de
 ## Ce qu'il y a dedans
 | Besoin | Solution |
 |---|---|
-| Tactile, stylet, mode tablette | Bureau Smoky sur labwc : vrai tactile dans les applis (zoom à deux doigts), stylet relié à l'écran, mode tablette (réglages rapides) avec rotation de l'écran ; clavier à l'écran dès que le clavier est détaché, et clavier tactile intégré à l'écran de connexion et au verrouillage |
+| Tactile, stylet, mode tablette | Bureau Smoky sur labwc : vrai tactile dans les applis (zoom à deux doigts), stylet relié à l'écran, mode tablette (réglages rapides) avec rotation de l'écran ; clavier à l'écran Smoky (bouton de la barre, et tout seul dans les champs de texte clavier détaché), et clavier tactile intégré à l'écran de connexion et au verrouillage |
 | Chrome | Google Chrome, réglé pour Wayland et le décodage vidéo par la puce Intel |
 | Netflix, Disney+, Prime Video, TF1+, M6+, Spotify, WhatsApp | Applis web dans le dock (il n'existe pas d'appli WhatsApp officielle pour Linux) |
 | Maison | **Smoky Home** : robot Xiaomi X20 Max avec la carte, lumières Tapo, Google Home Mini et Nest Hub (Home Assistant + dreame-vacuum + Xiaomi Home, versions figées) |

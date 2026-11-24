@@ -100,7 +100,7 @@ class Adaptation:
         if reponse.strip() == "ouvrir":
             subprocess.Popen(["xdg-open", PORTAIL_ESSAI])
 
-    # --- mode tablette : clavier à l'écran (Stevia) et rotation de l'écran ----------------------
+    # --- mode tablette : clavier à l'écran (smoky-clavier-ecran) et rotation de l'écran ---------
     ROTATIONS = {"normal": "normal", "left-up": "90", "right-up": "270", "bottom-up": "180"}
 
     @staticmethod
@@ -121,7 +121,8 @@ class Adaptation:
         return False
 
     def appliquer_clavier_ecran(self):
-        """Clavier à l'écran (Stevia) dans les champs de texte : en mode tablette, ou clavier détaché."""
+        """Clavier à l'écran tout seul dans les champs de texte : en mode tablette, ou clavier détaché
+        (le bouton de la barre apparaît aussi : il sert dans Chrome, qui ne signale pas ses champs)."""
         actif = bool(self.conf.get("tablet_mode")) or not self.clavier_branche
         commun.commande("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled",
                         "true" if actif else "false")

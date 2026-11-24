@@ -214,9 +214,17 @@ class Bureau(Gtk.Application):
             etat.append(x)
         droite.set_child(etat)
         droite.connect("clicked", lambda *a: self.basculer_panneau())
+        # clavier à l'écran : visible en mode tablette ou clavier détaché (appliquer_bouton_clavier)
+        self.bouton_clavier = Gtk.Button(css_classes=["barre-bouton"], tooltip_text="Clavier à l'écran",
+                                         visible=False, can_focus=False, focus_on_click=False)
+        self.bouton_clavier.set_child(icone("input-keyboard-symbolic"))
+        self.bouton_clavier.connect("clicked", lambda *a: self.basculer_clavier())
+        fin = Gtk.Box(spacing=2)
+        fin.append(self.bouton_clavier)
+        fin.append(droite)
         boite.set_start_widget(gauche)
         boite.set_center_widget(self.horloge)
-        boite.set_end_widget(droite)
+        boite.set_end_widget(fin)
         w.set_child(boite)
         w.present()
 
@@ -1033,6 +1041,7 @@ class Bureau(Gtk.Application):
             "org.gnome.shell.extensions.dash-to-dock": {"dash-max-icon-size": self.maj_dock,
                                                         "dock-fixed": self.maj_dock},
             "org.gnome.desktop.sound": {"allow-volume-above-100-percent": self.appliquer_volume_max},
+            "org.gnome.desktop.a11y.applications": {"screen-keyboard-enabled": self.appliquer_bouton_clavier},
         }
         for schema, cles in suivis.items():
             if source is None or source.lookup(schema, True) is None:
@@ -1042,8 +1051,20 @@ class Bureau(Gtk.Application):
                 if r.props.settings_schema.has_key(cle):
                     r.connect(f"changed::{cle}", lambda *a, f=rappel: f())
         for f in (self.appliquer_nuit, self.appliquer_bulles, self.appliquer_pourcentage, self.appliquer_coin,
-                  self.appliquer_volume_max):
+                  self.appliquer_volume_max, self.appliquer_bouton_clavier):
             f()
+
+    def appliquer_bouton_clavier(self):
+        self.bouton_clavier.set_visible(
+            self.reglage("org.gnome.desktop.a11y.applications", "screen-keyboard-enabled", False))
+
+    def basculer_clavier(self):
+        """Montre ou range le clavier à l'écran (service smoky-clavier-ecran, actions sur le bus)."""
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+            Gio.DBusActionGroup.get(bus, "fr.smoky.Clavier", "/fr/smoky/Clavier").activate_action("basculer", None)
+        except GLib.Error as e:
+            print("clavier à l'écran injoignable :", e.message, flush=True)
 
     def appliquer_nuit(self):
         actif = self.reglage("org.gnome.settings-daemon.plugins.color", "night-light-enabled", False)

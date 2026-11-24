@@ -286,3 +286,70 @@ def claviers_physiques(texte=None):
         except ValueError:
             pass
     return noms
+
+
+# --- clavier à l'écran de la session (clavier_ecran.py) ------------------------------------------
+# Mêmes couches que celui de la connexion, plus ce qui sert en écrivant : virgule sous la main,
+# flèches, tabulation, et ⌄ pour le ranger.
+COUCHES_SESSION = {
+    "abc": ["a z e r t y u i o p", "q s d f g h j k l m", "⇧ w x c v b n ' ⌫", "123 àé , espace . ⏎ ⌄"],
+    "ABC": ["A Z E R T Y U I O P", "Q S D F G H J K L M", "⇧ W X C V B N ' ⌫", "123 àé , espace . ⏎ ⌄"],
+    "123": ["1 2 3 4 5 6 7 8 9 0", "@ # & _ - ( ) = % +", "#+= ! ? ; : / * \" ⌫", "abc ← espace → . ⏎ ⌄"],
+    "#+=": ["[ ] { } < > ^ ~ ` |", "\\ $ € £ § ° µ ² « »", "123 ⇥ ' ! ? ; : ⌫", "abc ← espace → . ⏎ ⌄"],
+    "àé": ["é è ê ë à â ç ù û ü", "ô î ï œ æ É È À Ç Ê", "Ô Î Û Ë Ï Ü Œ Æ ⌫", "abc 123 , espace . ⏎ ⌄"],
+}
+TOUCHES_ENVOYEES = {"⌫": "BackSpace", "⏎": "Return", "⇥": "Tab", "←": "Left", "→": "Right", " ": "space"}
+TOUCHES_A_REPETER = {"⌫", "←", "→"}
+
+
+def touche_session(etat, touche):
+    """Un appui sur le clavier de la session → (nouvel état, à envoyer) ; à envoyer est un
+    caractère, une touche de TOUCHES_ENVOYEES, « cacher », ou None (changement de couche)."""
+    if touche == "⌄":
+        return etat, "cacher"
+    if touche in TOUCHES_ENVOYEES:
+        return etat, touche
+    texte, etat, _ = touche_clavier("", etat, touche)
+    return etat, (texte or None)
+
+
+def caracteres_session():
+    """Tout ce que le clavier de la session peut envoyer, dans l'ordre des couches."""
+    vus = []
+    for rangees in COUCHES_SESSION.values():
+        for t in " ".join(rangees).split(" "):
+            c = " " if t == "espace" else t
+            if (c in TOUCHES_ENVOYEES or c not in TOUCHES_SPECIALES | {"⌄"}) and c not in vus:
+                vus.append(c)
+    return vus
+
+
+def keymap_clavier(caracteres):
+    """Disposition XKB « un code par caractère » (comme wtype) : le moteur d'affichage la passe
+    à l'appli, qui retrouve le caractère quelle que soit la disposition du vrai clavier.
+    Renvoie (texte de la keymap, {caractère: code evdev}) ; code XKB = code evdev + 8."""
+    symboles, codes = [], {}
+    for c in caracteres:
+        if c in codes:
+            continue
+        if c in TOUCHES_ENVOYEES:
+            sym = TOUCHES_ENVOYEES[c]
+        elif c.isascii() and c.isalnum():
+            sym = c                                  # a…z, A…Z, 0…9 : leur propre nom
+        else:
+            sym = f"U{ord(c):04X}"                   # le reste par son point de code Unicode
+        symboles.append(sym)
+        codes[c] = len(symboles)
+    if len(symboles) > 247:                          # codes XKB jusqu'à 255
+        raise ValueError("trop de caractères pour une seule disposition")
+    texte = ("xkb_keymap {\n"
+             "xkb_keycodes \"smoky\" {\n  minimum = 8;\n"
+             f"  maximum = {len(symboles) + 8};\n"
+             + "".join(f"  <K{i}> = {i + 8};\n" for i in range(1, len(symboles) + 1)) +
+             "};\n"
+             "xkb_types \"smoky\" { include \"complete\" };\n"
+             "xkb_compatibility \"smoky\" { include \"complete\" };\n"
+             "xkb_symbols \"smoky\" {\n"
+             + "".join(f"  key <K{i}> {{ [ {s} ] }};\n" for i, s in enumerate(symboles, 1)) +
+             "};\n};\n")
+    return texte, codes

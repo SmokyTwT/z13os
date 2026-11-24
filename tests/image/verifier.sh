@@ -31,7 +31,7 @@ for p in ffmpeg intel-media-driver asusctl supergfxctl thermald rclone zenity po
          iwlwifi-mvm-firmware nvidia-gpu-firmware alsa-sof-firmware NetworkManager-wifi firewalld pipewire wireplumber bluez flatpak \
          labwc greetd greetd-selinux gtk4-layer-shell python3-gobject python3-pam swayidle swaylock wlr-randr \
          xdg-desktop-portal-wlr gnome-keyring-pam power-profiles-daemon upower iio-sensor-proxy nautilus ptyxis \
-         mate-polkit wlsunset blueman nm-connection-editor stevia; do
+         mate-polkit wlsunset blueman nm-connection-editor; do
   verifie "paquet $p installé" rpm -q "$p"
 done
 # plus de GNOME Shell ni de GDM ; un seul gestionnaire de profils d'énergie (décision 4)
@@ -162,7 +162,7 @@ avert=$(glib-compile-schemas --strict --dry-run /usr/share/glib-2.0/schemas 2>&1
 titre "Bureau Smoky"
 verifie "le bureau Smoky se charge (GTK 4, layer-shell, verrouillage, PAM)" python3 -I -c '
 import sys; sys.path.insert(0, "/usr/lib/smoky")
-import smokybureau.bureau, smokybureau.verrou, smokybureau.connexion, smokybureau.clavier, smokybureau.energie, smokybureau.cmd, pam'
+import smokybureau.bureau, smokybureau.verrou, smokybureau.connexion, smokybureau.clavier, smokybureau.clavier_ecran, smokybureau.energie, smokybureau.cmd, pam'
 verifie "modules du bureau précompilés" bash -c 'ls /usr/lib/smoky/smokybureau/__pycache__/bureau.*.pyc >/dev/null'
 for f in /usr/share/smoky-bureau/labwc/rc.xml /usr/share/smoky-bureau/labwc/menu.xml /usr/share/smoky-bureau/connexion/rc.xml; do
   verifie "$(basename "$(dirname "$f")")/$(basename "$f") lisible" python3 -c 'import sys, xml.etree.ElementTree as E; E.parse(sys.argv[1])' "$f"
@@ -172,7 +172,17 @@ verifie "agent polkit présent" test -x /usr/libexec/polkit-mate-authentication-
 for f in blueman.desktop geoclue-demo-agent.desktop; do
   [ -f "/etc/xdg/autostart/$f" ] && verifie "$f ne se lance pas à la connexion" grep -q '^Hidden=true' "/etc/xdg/autostart/$f"
 done
-verifie "clavier à l'écran présent" bash -c 'command -v stevia || command -v phosh-osk-stevia'
+verifie "clavier à l'écran Smoky présent (sans Stevia)" bash -c 'test -x /usr/libexec/smokyos/smoky-clavier-ecran.py && ! rpm -q stevia >/dev/null'
+verifie "clavier à l'écran : disposition maison acceptée par libxkbcommon" python3 -I -c '
+import ctypes, ctypes.util, sys
+sys.path.insert(0, "/usr/lib/smoky")
+from smokybureau import commun
+texte, codes = commun.keymap_clavier(commun.caracteres_session())
+xkb = ctypes.CDLL(ctypes.util.find_library("xkbcommon"))
+xkb.xkb_context_new.restype = ctypes.c_void_p
+xkb.xkb_keymap_new_from_string.restype = ctypes.c_void_p
+xkb.xkb_keymap_new_from_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+sys.exit(0 if xkb.xkb_keymap_new_from_string(xkb.xkb_context_new(0), texte.encode(), 1, 0) else 1)'
 verifie "style du bureau" test -s /usr/share/smoky-bureau/bureau.css
 verifie "police des titres (Comfortaa)" bash -c 'fc-list | grep -qi comfortaa'
 verifie "asusd ne change plus le profil d'énergie (réglage forcé à chaque démarrage)" grep -q 'change_platform_profile_on_battery' /usr/libexec/smokyos/smoky-asusd-profils.sh

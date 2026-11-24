@@ -1,12 +1,15 @@
 [Unit]
-Description=Smoky OS - clavier à l'écran (Stevia), affiché en mode tablette ou clavier détaché
+Description=Smoky OS - clavier à l'écran (bouton de la barre ; seul dans un champ de texte en mode tablette ou clavier détaché)
 PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
-# Il n'apparaît que dans un champ de texte, et seulement en mode tablette ou clavier détaché
-# (smoky-adaptive règle org.gnome.desktop.a11y.applications screen-keyboard-enabled).
-ExecStart=/usr/bin/sh -c 'exec "$(command -v stevia || command -v phosh-osk-stevia)"'
+# Clavier maison (smokybureau/clavier_ecran.py) : caché tant qu'on ne l'appelle pas, il tape par un
+# clavier virtuel Wayland. smoky-adaptive règle org.gnome.desktop.a11y.applications
+# screen-keyboard-enabled (mode tablette ou clavier détaché) : il apparaît alors seul.
+Type=dbus
+BusName=fr.smoky.Clavier
+ExecStart=/usr/libexec/smokyos/smoky-clavier-ecran.py
 Restart=on-failure
 RestartSec=3
 Slice=session.slice

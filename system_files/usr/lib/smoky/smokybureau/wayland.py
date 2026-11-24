@@ -1,20 +1,25 @@
 """Smoky OS — petit client Wayland écrit pour Smoky, en Python pur (aucune bibliothèque).
 
 Il parle directement le protocole Wayland (messages binaires sur la prise du moteur
-d'affichage) pour deux choses que GTK ne sait pas faire :
+d'affichage) pour ce que GTK ne sait pas faire :
   * la liste des fenêtres ouvertes, pour le dock (protocole wlr-foreign-toplevel) :
     titre, appli, état (active, en grand, réduite), et les actions activer / réduire / fermer ;
-  * éteindre et rallumer l'écran (protocole wlr-output-power-management).
+  * éteindre et rallumer l'écran (protocole wlr-output-power-management) ;
+  * pour le clavier à l'écran (ClientClavier) : taper dans l'appli qui a le clavier
+    (zwp_virtual_keyboard_v1) et savoir quand un champ de texte est actif (zwp_input_method_v2).
 
 Il s'intègre à la boucle GLib : lecture seulement quand le moteur d'affichage écrit.
 Format des messages : identifiant d'objet (u32), puis taille<<16 | numéro (u32), puis les
 arguments, chacun aligné sur 4 octets (chaînes terminées par 0, tableaux précédés de leur taille).
 """
+import array
 import os
 import socket
 import struct
+import time
 
 ETATS = {0: "grand", 1: "reduite", 2: "active", 3: "plein_ecran"}
+PROTOCOLES_BUREAU = {"wl_seat", "wl_output", "zwlr_foreign_toplevel_manager_v1", "zwlr_output_power_manager_v1"}
 
 
 def _chaine(s):
@@ -48,7 +53,8 @@ class Client:
     """Connexion au moteur d'affichage. `quand_change()` est appelé après chaque mise à jour
     complète de la liste des fenêtres."""
 
-    def __init__(self, quand_change=lambda: None, prise=None):
+    def __init__(self, quand_change=lambda: None, prise=None, protocoles=PROTOCOLES_BUREAU):
+        self.protocoles = protocoles          # seuls ces protocoles sont demandés au moteur d'affichage
         if prise is None:
             nom = os.environ.get("WAYLAND_DISPLAY", "wayland-0")
             prise = nom if nom.startswith("/") else os.path.join(os.environ["XDG_RUNTIME_DIR"], nom)
@@ -72,8 +78,17 @@ class Client:
         self.objets[oid] = (genre, donnee)
         return oid
 
-    def _envoyer(self, oid, numero, args=b""):
+    def _envoyer(self, oid, numero, args=b"", fds=()):
         msg = struct.pack("=II", oid, ((8 + len(args)) << 16) | numero) + args
+        if fds:                               # descripteurs de fichier : à côté du message (SCM_RIGHTS)
+            self.sock.setblocking(True)
+            try:
+                envoye = self.sock.sendmsg([msg], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", fds).tobytes())])
+                if envoye < len(msg):
+                    self.sock.sendall(msg[envoye:])
+            finally:
+                self.sock.setblocking(False)
+            return
         try:
             self.sock.sendall(msg)
         except BlockingIOError:
@@ -128,15 +143,8 @@ class Client:
             nom = struct.unpack_from("=I", args)[0]
             interface, pos = self._lire_chaine(args, 4)
             version = struct.unpack_from("=I", args, pos)[0]
-            if interface == "wl_seat" and self.seat is None:
-                self.seat = self._lier(nom, interface, 1, "seat")
-            elif interface == "wl_output":
-                o = self._lier(nom, interface, min(version, 4), "ecran")
-                self.ecrans[o] = ""
-            elif interface == "zwlr_foreign_toplevel_manager_v1":
-                self._lier(nom, interface, min(version, 3), "gestion_fenetres")
-            elif interface == "zwlr_output_power_manager_v1":
-                self.gestion_ecran = self._lier(nom, interface, 1, "gestion_ecran")
+            if interface in self.protocoles:
+                self._global(nom, interface, version)
         elif genre == "ecran" and numero == 4:                        # wl_output.name
             self.ecrans[oid] = self._lire_chaine(args, 0)[0]
         elif genre == "gestion_fenetres" and numero == 0:             # toplevel(new_id)
@@ -145,6 +153,22 @@ class Client:
             self.objets[nid] = ("fenetre", f)
         elif genre == "fenetre":
             self._evenement_fenetre(donnee, numero, args)
+        elif genre is not None:
+            self._autre(genre, oid, numero, args)
+
+    def _global(self, nom, interface, version):
+        if interface == "wl_seat" and self.seat is None:
+            self.seat = self._lier(nom, interface, 1, "seat")
+        elif interface == "wl_output":
+            o = self._lier(nom, interface, min(version, 4), "ecran")
+            self.ecrans[o] = ""
+        elif interface == "zwlr_foreign_toplevel_manager_v1":
+            self._lier(nom, interface, min(version, 3), "gestion_fenetres")
+        elif interface == "zwlr_output_power_manager_v1":
+            self.gestion_ecran = self._lier(nom, interface, 1, "gestion_ecran")
+
+    def _autre(self, genre, oid, numero, args):
+        """Événements des objets propres à une sous-classe."""
 
     def _evenement_fenetre(self, f, numero, args):
         if numero == 0:
@@ -179,3 +203,69 @@ class Client:
             self._envoyer(p, 0, struct.pack("=I", 1 if allume else 0))            # set_mode
             self._envoyer(p, 1)                                                   # destroy
         return True
+
+
+class ClientClavier(Client):
+    """Pour le clavier à l'écran. Il crée un clavier virtuel avec sa propre disposition (keymap :
+    un code par caractère, voir commun.keymap_clavier) et tape dans l'appli qui a le clavier,
+    quelle qu'elle soit (Chrome compris). Il écoute aussi les champs de texte par la méthode de
+    saisie : `quand_saisie(True)` quand un champ prend la main, `quand_saisie(False)` quand il la
+    rend (seulement pour les applis qui le disent, comme celles en GTK)."""
+
+    def __init__(self, keymap, quand_saisie=lambda actif: None, prise=None):
+        self.keymap, self.quand_saisie = keymap, quand_saisie
+        self.gestion_clavier = self.gestion_saisie = self.clavier = self.saisie = None
+        self.saisie_active = self._saisie_voulue = False
+        super().__init__(prise=prise, protocoles={"wl_seat", "zwp_virtual_keyboard_manager_v1",
+                                                  "zwp_input_method_manager_v2"})
+
+    def _global(self, nom, interface, version):
+        if interface == "zwp_virtual_keyboard_manager_v1":
+            self.gestion_clavier = self._lier(nom, interface, 1, "gestion_clavier")
+        elif interface == "zwp_input_method_manager_v2":
+            self.gestion_saisie = self._lier(nom, interface, 1, "gestion_saisie")
+        else:
+            super()._global(nom, interface, version)
+        self._preparer()
+
+    def _preparer(self):
+        if self.seat and self.gestion_clavier and not self.clavier:
+            self.clavier = self._nouvel_id("clavier")
+            self._envoyer(self.gestion_clavier, 0, struct.pack("=II", self.seat, self.clavier))  # create_virtual_keyboard
+            donnees = self.keymap.encode() + b"\0"
+            fd = os.memfd_create("smoky-clavier", os.MFD_CLOEXEC)
+            try:
+                vue = memoryview(donnees)
+                while vue:
+                    vue = vue[os.write(fd, vue):]
+                os.lseek(fd, 0, os.SEEK_SET)          # lu depuis le début, même sans mmap
+                self._envoyer(self.clavier, 0, struct.pack("=II", 1, len(donnees)), fds=(fd,))   # keymap(xkb_v1, fd, taille)
+            finally:
+                os.close(fd)
+        if self.seat and self.gestion_saisie and not self.saisie:
+            self.saisie = self._nouvel_id("saisie")
+            self._envoyer(self.gestion_saisie, 0, struct.pack("=II", self.seat, self.saisie))     # get_input_method
+
+    def taper(self, code):
+        """Appuie puis relâche la touche `code` (code evdev de la keymap). False si pas encore prêt."""
+        if not self.clavier:
+            return False
+        t = int(time.monotonic() * 1000) & 0xFFFFFFFF
+        self._envoyer(self.clavier, 1, struct.pack("=III", t, code, 1))                    # key : appuyée
+        self._envoyer(self.clavier, 1, struct.pack("=III", (t + 1) & 0xFFFFFFFF, code, 0))  # relâchée
+        return True
+
+    def _autre(self, genre, oid, numero, args):
+        if genre != "saisie":
+            return
+        if numero in (0, 1):                  # activate / deactivate : pris en compte au « done »
+            self._saisie_voulue = numero == 0
+        elif numero == 5 and self._saisie_voulue != self.saisie_active:              # done
+            self.saisie_active = self._saisie_voulue
+            self.quand_saisie(self.saisie_active)
+        elif numero == 6:                     # unavailable : une autre méthode de saisie a la place
+            self._envoyer(oid, 6)             # destroy ; on n'insiste pas (le bouton de la barre reste)
+            self.saisie, self.gestion_saisie = None, None
+            if self.saisie_active:
+                self.saisie_active = False
+                self.quand_saisie(False)

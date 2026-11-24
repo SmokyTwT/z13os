@@ -3,6 +3,7 @@
   smoky-bureau-cmd lanceur | panneau | verrouiller | veille-si-batterie
   smoky-bureau-cmd volume plus|moins|muet     micro muet     luminosite plus|moins
   smoky-bureau-cmd capture [zone]             ecran eteindre|allumer
+  smoky-bureau-cmd clavier basculer|montrer|cacher   (clavier à l'écran)
   smoky-bureau-cmd veille-lancer | nuit-lancer | preparer-labwc DOSSIER   (services du bureau)
 """
 import os
@@ -25,6 +26,20 @@ def bureau(methode, params=None, signature=None):
     except GLib.Error as e:
         print("bureau Smoky injoignable :", e.message, file=sys.stderr)
         return None
+
+
+def clavier(action):
+    """Clavier à l'écran (smokybureau.clavier_ecran) : actions exportées par son application GTK."""
+    if action not in ("basculer", "montrer", "cacher"):
+        return False
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+        bus.call_sync("fr.smoky.Clavier", "/fr/smoky/Clavier", "org.gtk.Actions", "Activate",
+                      GLib.Variant("(sava{sv})", (action, [], {})), None, Gio.DBusCallFlags.NONE, 3000, None)
+        return True
+    except GLib.Error as e:
+        print("clavier à l'écran injoignable :", e.message, file=sys.stderr)
+        return False
 
 
 LIEU_DEFAUT = {"lat": 50.36, "lon": 3.52}    # Valenciennes ; « lieu » dans ~/.config/smoky/bureau.json
@@ -154,6 +169,8 @@ def main(args=None):
         preparer_labwc(reste[0])
     elif action == "volume" and reste:
         volume(reste[0])
+    elif action == "clavier" and reste:
+        return 0 if clavier(reste[0]) else 1
     elif action == "micro":
         micro()
     elif action == "luminosite" and reste:
