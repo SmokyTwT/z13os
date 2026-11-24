@@ -8,4 +8,5 @@ export XCURSOR_THEME=Smoky-cursors XCURSOR_SIZE=32
 export MOZ_ENABLE_WAYLAND=1 QT_QPA_PLATFORM="wayland;xcb" SDL_VIDEODRIVER="wayland,x11" _JAVA_AWT_WM_NONREPARENTING=1
 CONF="${XDG_RUNTIME_DIR:?}/smoky-labwc"
 rm -rf "$CONF" && cp -r /usr/share/smoky-bureau/labwc "$CONF"
+/usr/bin/smoky-bureau-cmd preparer-labwc "$CONF" || true     # pavé tactile selon tes réglages
 exec labwc -C "$CONF"

@@ -3,20 +3,52 @@
 # 1er essai : par le firmware (efibootmgr --bootnext, systemctl --firmware-setup).
 # Le firmware ASUS refuse parfois qu'on écrive ses variables (« Cannot allocate memory ») :
 # on passe alors par le menu de démarrage Smoky OS (GRUB), qui choisit l'entrée une seule fois.
+# Si SMOKY_ETAT est donné (écran de connexion), le résultat y est aussi écrit : « en cours »,
+# puis la raison d'un échec (sinon le PC redémarre).
 set -uo pipefail
 target="${1:-}"
 CFG=/boot/grub2/grub.cfg
 ENV=/boot/grub2/grubenv
+ETAT="${SMOKY_ETAT:-}"
+
+dire() {   # pour le journal, et pour l'écran de connexion qui attend la réponse
+  echo "$*"
+  if [[ -n "$ETAT" ]]; then printf '%s\n' "$*" > "$ETAT" 2>/dev/null; chmod 644 "$ETAT" 2>/dev/null; fi
+  return 0
+}
+[[ -n "$ETAT" ]] && dire "en cours"
 
 # Windows en mode Ultimate : on le lui remet juste avant de redémarrer dessus, s'il l'avait
 # (smokygpu.py ; ne fait rien pour « uefi », et un refus du firmware n'empêche pas de redémarrer)
 ultimate() {
   [[ "$target" == windows ]] || return 0
-  /usr/bin/python3 -I /usr/libexec/smokyos/smokygpu.py windows || true
+  timeout 60 /usr/bin/python3 -I /usr/libexec/smokyos/smokygpu.py windows || true
+}
+
+redemarrer() {
+  dire "redémarrage"
+  ultimate
+  systemctl reboot
+  exit 0
+}
+
+ecrire_grubenv() {   # $1 = clé=valeur ; grub2-editenv s'il est là, sinon le même format (smoky-grubenv.py)
+  if command -v grub2-editenv >/dev/null; then
+    [[ -f "$ENV" ]] || grub2-editenv "$ENV" create || return 1
+    grub2-editenv "$ENV" set "$1"
+  else
+    /usr/bin/python3 -I /usr/libexec/smokyos/smoky-grubenv.py "$ENV" "$1"
+  fi
 }
 
 grub_once() {   # titre de l'entrée du menu GRUB
-  [[ -f "$CFG" ]] || { echo "menu de démarrage introuvable"; exit 1; }
+  [[ -f "$CFG" ]] || { dire "menu de démarrage introuvable"; exit 1; }
+  # /boot monté en lecture seule (systèmes à image) : ouvert le temps d'écrire, puis refermé
+  local point rw=
+  point=$(findmnt -no TARGET -T "$ENV" 2>/dev/null)
+  if [[ -n "$point" ]] && findmnt -no OPTIONS -T "$ENV" 2>/dev/null | tr ',' '\n' | grep -qx ro; then
+    mount -o remount,rw "$point" && rw="$point"
+  fi
   if ! grep -q next_entry "$CFG"; then
     # le menu lit « next_entry » (une seule fois) dans grubenv
     sed -i '/^set timeout_style=menu$/a\
@@ -30,18 +62,21 @@ if [ "${next_entry}" ]; then\
   set timeout=0\
 fi' "$CFG"
   fi
-  [[ -f "$ENV" ]] || grub2-editenv "$ENV" create
-  grub2-editenv "$ENV" set "next_entry=$1"
+  if ! ecrire_grubenv "next_entry=$1"; then
+    [[ -n "$rw" ]] && mount -o remount,ro "$rw"
+    dire "menu de démarrage : impossible d'enregistrer le choix (rien n'a changé)"
+    exit 1
+  fi
   sync
-  ultimate
-  systemctl reboot
+  [[ -n "$rw" ]] && mount -o remount,ro "$rw"
+  redemarrer
 }
 
 case "$target" in
   windows)
-    id=$(efibootmgr | sed -nE 's/^Boot([0-9A-Fa-f]{4})\*?[[:space:]]+Windows Boot Manager.*/\1/p' | head -1)
-    [[ -n "$id" ]] || { echo "Windows introuvable"; exit 1; }
-    if efibootmgr --bootnext "$id" >/dev/null 2>&1; then ultimate; systemctl reboot; fi
+    id=$(efibootmgr 2>/dev/null | sed -nE 's/^Boot([0-9A-Fa-f]{4})\*?[[:space:]]+Windows Boot Manager.*/\1/p' | head -1)
+    [[ -n "$id" ]] || { dire "Windows introuvable"; exit 1; }
+    if efibootmgr --bootnext "$id" >/dev/null 2>&1; then redemarrer; fi
     # Repli par le menu GRUB, seulement si le lanceur de Windows est le vrai : un autre Linux
     # (CachyOS ici) avait mis son GRUB à la place de bootmgfw.efi, d'où un « grub rescue »
     esp=$(lsblk -nrpo NAME,PARTTYPE | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')
@@ -58,7 +93,7 @@ case "$target" in
       [[ -n "$own" ]] && umount "$mnt"
       [[ "$real" = 1 ]] && grub_once "Windows"
     fi
-    echo "Le firmware refuse : redémarre, appuie sur Échap au logo ROG et choisis Windows Boot Manager"; exit 1 ;;
+    dire "le firmware refuse : redémarre, appuie sur Échap au logo ROG et choisis Windows Boot Manager"; exit 1 ;;
   uefi)
     systemctl reboot --firmware-setup 2>/dev/null || grub_once "Réglages du firmware (UEFI)" ;;
   *) echo "usage : $0 windows|uefi"; exit 2 ;;

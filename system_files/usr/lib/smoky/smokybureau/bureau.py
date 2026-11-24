@@ -136,6 +136,7 @@ class Bureau(Gtk.Application):
         self.connexion_dbus = None
         self.panneau_confirmer = None
         self.historique = []                  # dernières notifications (montrées dans les réglages rapides)
+        self.reglages_gnome = {}              # réglages repris de GNOME (surveiller_gnome)
         self.ne_pas_deranger = False
 
     # --- démarrage ---------------------------------------------------------------------
@@ -159,8 +160,8 @@ class Bureau(Gtk.Application):
         GLib.timeout_add_seconds(30, self.tic_batterie)
         self.tic_batterie()
         self.surveiller_reseau()
-        if commun.lire_json(commun.BUREAU, {}).get("nuit"):
-            subprocess.Popen(["systemctl", "--user", "start", "smoky-nuit.service"])
+        self.creer_coin()
+        self.surveiller_gnome()
         Gio.bus_own_name(Gio.BusType.SESSION, "fr.smoky.Bureau", Gio.BusNameOwnerFlags.NONE,
                          self.bus_obtenu, None, lambda *a: print("nom D-Bus perdu", flush=True))
         Gio.bus_own_name(Gio.BusType.SESSION, "org.freedesktop.Notifications",
@@ -235,6 +236,7 @@ class Bureau(Gtk.Application):
         palier = min(100, max(0, round(n / 10) * 10))
         self.icone_batterie.set_from_icon_name(f"battery-level-{palier}{'-charging' if charge else ''}-symbolic")
         self.texte_batterie.set_label(f"{n} %")
+        self.texte_batterie.set_visible(getattr(self, "texte_batterie_voulu", True))
         bas = n <= 15 and not charge
         for x in (self.texte_batterie, self.icone_batterie):
             (x.add_css_class if bas else x.remove_css_class)("faible")
@@ -316,7 +318,7 @@ class Bureau(Gtk.Application):
 
     def cacher_dock(self):
         self.minuterie_dock = 0
-        if not self.dock_survole and self.fenetres_visibles():
+        if not self.dock_survole and self.fenetres_visibles() and not getattr(self, "dock_fixe", False):
             self.dock.set_visible(False)
         return False
 
@@ -331,7 +333,16 @@ class Bureau(Gtk.Application):
             suivant = enfant.get_next_sibling()
             self.boite_dock.remove(enfant)
             enfant = suivant
-        taille = 64 if commun.lire_json(commun.ADAPTIVE, {}).get("tablet_mode") else 48
+        taille = 64 if commun.lire_json(commun.ADAPTIVE, {}).get("tablet_mode") else \
+            max(32, min(64, self.reglage("org.gnome.shell.extensions.dash-to-dock", "dash-max-icon-size", 48)))
+        fixe = self.reglage("org.gnome.shell.extensions.dash-to-dock", "dock-fixed", False)
+        if fixe != getattr(self, "dock_fixe", None):
+            self.dock_fixe = fixe
+            if fixe:
+                LS.auto_exclusive_zone_enable(self.dock)        # les fenêtres s'arrêtent au-dessus du dock
+            else:
+                LS.set_exclusive_zone(self.dock, 0)
+            self.poignee.set_visible(not fixe)
         fenetres = list(self.fenetres.fenetres.values()) if self.fenetres else []
         favoris = [a for a in (appli(d) for d in commun.dock()) if a]
         vues = set()
@@ -348,7 +359,7 @@ class Bureau(Gtk.Application):
             for appli_id, siennes in autres.items():
                 a = appli(appli_id + ".desktop") or self.appli_par_cle(appli_id)
                 self.boite_dock.append(self.bouton_dock(a, siennes, taille, favori=False, appli_id=appli_id))
-        if not self.fenetres_visibles():
+        if getattr(self, "dock_fixe", False) or not self.fenetres_visibles():
             self.dock.set_visible(True)
         elif not self.dock_survole and not self.minuterie_dock:
             self.dock.set_visible(False)
@@ -579,7 +590,8 @@ class Bureau(Gtk.Application):
         entete = Gtk.Box(spacing=6)
         entete.append(Gtk.Label(label="Notifications", css_classes=["section"], hexpand=True, xalign=0))
         self.bouton_silence = Gtk.ToggleButton(label="Ne pas déranger", css_classes=["lien", "petit"])
-        self.bouton_silence.connect("toggled", lambda b: setattr(self, "ne_pas_deranger", b.get_active()))
+        self.bouton_silence.rappel_id = self.bouton_silence.connect(
+            "toggled", lambda b: self.ecrire_reglage("org.gnome.desktop.notifications", "show-banners", not b.get_active()))
         effacer = Gtk.Button(label="Effacer", css_classes=["lien", "petit"])
         effacer.connect("clicked", lambda *a: (self.historique.clear(), self.remplir_historique()))
         entete.append(self.bouton_silence)
@@ -659,7 +671,7 @@ class Bureau(Gtk.Application):
         self.poser(self.bascule_tablette, commun.lire_json(commun.ADAPTIVE, {}).get("tablet_mode"))
         self.poser(self.bascule_bluetooth, "true" in commun.commande(
             "busctl", "get-property", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Powered", delai=3))
-        self.poser(self.bascule_nuit, commun.commande("systemctl", "--user", "is-active", "smoky-nuit.service").strip() == "active")
+        self.poser(self.bascule_nuit, self.reglage("org.gnome.settings-daemon.plugins.color", "night-light-enabled", False))
         self.zone_wifi.set_visible(False)
         self.remplir_historique()
         self.panneau.present()
@@ -736,10 +748,8 @@ class Bureau(Gtk.Application):
                         "Powered", "b", "true" if actif else "false")
 
     def basculer_nuit(self, actif):
-        commun.commande("systemctl", "--user", "start" if actif else "stop", "smoky-nuit.service")
-        reglages = commun.lire_json(commun.BUREAU, {})
-        reglages["nuit"] = bool(actif)
-        commun.ecrire_json(commun.BUREAU, reglages)
+        # même réglage que l'appli Smoky (Système) : le bureau suit ce changement (appliquer_nuit)
+        self.ecrire_reglage("org.gnome.settings-daemon.plugins.color", "night-light-enabled", bool(actif))
 
     # --- Wi-Fi : liste des réseaux, connexion (le travail de nmcli se fait hors de l'affichage) --------
     def ouvrir_wifi(self):
@@ -989,6 +999,99 @@ class Bureau(Gtk.Application):
                 invocation.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", methode)
         except Exception as e:      # une erreur ne doit jamais faire tomber le bureau
             invocation.return_dbus_error("fr.smoky.Bureau.Erreur", str(e))
+
+    # --- réglages repris de GNOME (appli Smoky → Système, et tes choix d'avant) -------------------
+    def reglage(self, schema, cle, defaut):
+        r = self.reglages_gnome.get(schema)
+        if r is None or not r.props.settings_schema.has_key(cle):
+            return defaut
+        return r.get_value(cle).unpack()
+
+    def ecrire_reglage(self, schema, cle, valeur):
+        r = self.reglages_gnome.get(schema)
+        if r is not None and r.props.settings_schema.has_key(cle):
+            r.set_value(cle, GLib.Variant("b", valeur))
+
+    def surveiller_gnome(self):
+        source = Gio.SettingsSchemaSource.get_default()
+        self.reglages_gnome = {}
+        suivis = {
+            "org.gnome.settings-daemon.plugins.color": {
+                "night-light-enabled": self.appliquer_nuit, "night-light-temperature": self.relancer_nuit,
+                "night-light-schedule-automatic": self.relancer_nuit, "night-light-schedule-from": self.relancer_nuit,
+                "night-light-schedule-to": self.relancer_nuit},
+            "org.gnome.settings-daemon.plugins.power": {
+                k: self.relancer_veille for k in ("sleep-inactive-battery-timeout", "sleep-inactive-battery-type",
+                                                  "sleep-inactive-ac-timeout", "sleep-inactive-ac-type")},
+            "org.gnome.desktop.session": {"idle-delay": self.relancer_veille},
+            "org.gnome.desktop.screensaver": {"lock-delay": self.relancer_veille},
+            "org.gnome.desktop.notifications": {"show-banners": self.appliquer_bulles},
+            "org.gnome.desktop.interface": {"show-battery-percentage": self.appliquer_pourcentage,
+                                            "enable-hot-corners": self.appliquer_coin},
+            "org.gnome.desktop.peripherals.touchpad": {"tap-to-click": self.appliquer_pave,
+                                                       "natural-scroll": self.appliquer_pave},
+            "org.gnome.shell.extensions.dash-to-dock": {"dash-max-icon-size": self.maj_dock,
+                                                        "dock-fixed": self.maj_dock},
+            "org.gnome.desktop.sound": {"allow-volume-above-100-percent": self.appliquer_volume_max},
+        }
+        for schema, cles in suivis.items():
+            if source is None or source.lookup(schema, True) is None:
+                continue
+            r = self.reglages_gnome[schema] = Gio.Settings.new(schema)
+            for cle, rappel in cles.items():
+                if r.props.settings_schema.has_key(cle):
+                    r.connect(f"changed::{cle}", lambda *a, f=rappel: f())
+        for f in (self.appliquer_nuit, self.appliquer_bulles, self.appliquer_pourcentage, self.appliquer_coin,
+                  self.appliquer_volume_max):
+            f()
+
+    def appliquer_nuit(self):
+        actif = self.reglage("org.gnome.settings-daemon.plugins.color", "night-light-enabled", False)
+        commun.commande("systemctl", "--user", "start" if actif else "stop", "smoky-nuit.service")
+
+    def relancer_nuit(self):
+        if self.reglage("org.gnome.settings-daemon.plugins.color", "night-light-enabled", False):
+            commun.commande("systemctl", "--user", "restart", "smoky-nuit.service")
+
+    def relancer_veille(self):
+        # « ne pas mettre en veille » (service arrêté) reste respecté : on ne relance qu'un service actif
+        commun.commande("systemctl", "--user", "try-restart", "smoky-veille.service")
+
+    def appliquer_bulles(self):
+        self.ne_pas_deranger = not self.reglage("org.gnome.desktop.notifications", "show-banners", True)
+        if hasattr(self, "bouton_silence"):
+            self.bouton_silence.handler_block(self.bouton_silence.rappel_id)
+            self.bouton_silence.set_active(self.ne_pas_deranger)
+            self.bouton_silence.handler_unblock(self.bouton_silence.rappel_id)
+
+    def appliquer_pourcentage(self):
+        self.texte_batterie_voulu = self.reglage("org.gnome.desktop.interface", "show-battery-percentage", True)
+        self.tic_batterie()
+
+    def appliquer_pave(self):
+        dossier = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "smoky-labwc")
+        commun.commande("smoky-bureau-cmd", "preparer-labwc", dossier)
+        commun.commande("labwc", "--reconfigure")
+
+    def appliquer_volume_max(self):
+        fort = self.reglage("org.gnome.desktop.sound", "allow-volume-above-100-percent", False)
+        self.curseur_son.set_range(0, 150 if fort else 100)
+
+    # --- coin actif (comme sous GNOME) : la souris dans le coin en haut à gauche ouvre le lanceur ---
+    def creer_coin(self):
+        w = self.coin = Gtk.Window(application=self)
+        w.add_css_class("smoky-poignee")
+        couche(w, LS.Layer.OVERLAY, (LS.Edge.TOP, LS.Edge.LEFT), exclusif=-1, espace="smoky-coin")
+        LS.set_monitor(w, self.ecran)
+        zone = Gtk.Box()
+        zone.set_size_request(3, 3)
+        w.set_child(zone)
+        survol = Gtk.EventControllerMotion()
+        survol.connect("enter", lambda *a: self.ouvrir_lanceur() if not self.lanceur.get_visible() else None)
+        w.add_controller(survol)
+
+    def appliquer_coin(self):
+        self.coin.set_visible(self.reglage("org.gnome.desktop.interface", "enable-hot-corners", True))
 
     # --- fenêtres ouvertes (client Wayland maison) et réglages ---------------------------------
     def connecter_wayland(self):

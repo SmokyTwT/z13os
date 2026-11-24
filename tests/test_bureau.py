@@ -279,6 +279,134 @@ class TestAlertesBatterie(unittest.TestCase):
         self.assertEqual(commun.alerte_batterie(6, False, set())[0], "critique", "débranché à 6 % : alerte critique directe")
 
 
+class TestClavierTactile(unittest.TestCase):
+    """Clavier tactile de l'écran de connexion et du verrouillage (clavier détaché)."""
+
+    @staticmethod
+    def taper(touches):
+        texte, etat, valide = "", ("abc", False), False
+        for t in touches:
+            texte, etat, valide = commun.touche_clavier(texte, etat, t)
+        return texte, etat, valide
+
+    def test_mot_de_passe(self):
+        texte, _etat, valide = self.taper(["m", "⇧", "O", "t", "123", "4", "2", "#+=", "$", "abc", "espace",
+                                            "àé", "é", "x", "⌫", "⏎"])
+        self.assertEqual(texte, "mOt42$ é")
+        self.assertTrue(valide)
+
+    def test_majuscules(self):
+        # les touches portent leur caractère : après ⇧, l'écran montre A, Z, E…
+        self.assertEqual(self.taper(["⇧", "A", "b"])[0], "Ab", "⇧ une fois : une seule majuscule")
+        texte, etat, _ = self.taper(["⇧", "⇧", "A", "B", "⇧", "c"])
+        self.assertEqual(texte, "ABc", "⇧ deux fois : majuscules verrouillées, ⇧ encore : fini")
+        self.assertEqual(etat, ("abc", False))
+
+    def test_tout_se_tape(self):
+        touches = set()
+        for nom, rangees in commun.COUCHES_CLAVIER.items():
+            toutes = " ".join(rangees).split(" ")
+            for t in toutes:
+                if t not in commun.TOUCHES_SPECIALES:
+                    self.assertEqual(len(t), 1, f"{nom} : touche « {t} »")
+                    touches.add(t)
+            for indispensable in ("⌫", "⏎", "espace"):
+                self.assertIn(indispensable, toutes, nom)
+            self.assertTrue({"abc", "⇧"} & set(toutes), f"{nom} : pas de retour aux lettres")
+        manque = [chr(c) for c in range(33, 127) if chr(c) not in touches]
+        self.assertEqual(manque, [], "caractères d'un mot de passe impossibles à taper au doigt")
+
+    def test_clavier_detache(self):
+        branche = """I: Bus=0019 Vendor=0000 Product=0001 Version=0000
+N: Name="Power Button"
+P: Phys=LNXPWRBN/button/input0
+H: Handlers=kbd event0
+B: PROP=0
+B: EV=3
+B: KEY=10000000000000 0
+
+I: Bus=0003 Vendor=0b05 Product=1a30 Version=0110
+N: Name="ASUSTeK Computer Inc. N-KEY Device Keyboard"
+H: Handlers=sysrq kbd leds event5
+B: PROP=0
+B: EV=120013
+B: KEY=1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe
+B: MSC=10
+B: LED=1f
+
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="Asus WMI hotkeys"
+H: Handlers=kbd event8
+B: PROP=0
+B: EV=100013
+B: KEY=80000000000000 0 0 0 1500b00000c00 4000000000300000 0
+"""
+        self.assertEqual(commun.claviers_physiques(branche), ["ASUSTeK Computer Inc. N-KEY Device Keyboard"])
+        blocs = branche.split("\n\n")
+        self.assertEqual(commun.claviers_physiques(blocs[0] + "\n\n" + blocs[2]), [], "boutons seuls : pas un clavier")
+
+
+class TestGrubenv(unittest.TestCase):
+    """Bouton Windows : choix écrit dans le menu de démarrage sans grub2-editenv."""
+    SCRIPT = RACINE / "usr/libexec/smokyos/smoky-grubenv.py"
+
+    def ecrire(self, chemin, ligne):
+        import subprocess
+        subprocess.run([sys.executable, "-I", str(self.SCRIPT), str(chemin), ligne], check=True)
+
+    def test_format(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = Path(d) / "grubenv"
+            self.ecrire(env, "saved_entry=ostree-1")
+            self.ecrire(env, "next_entry=Windows")
+            self.ecrire(env, "next_entry=Windows")
+            donnees = env.read_bytes()
+            self.assertEqual(len(donnees), 1024)
+            self.assertTrue(donnees.startswith(b"# GRUB Environment Block\nsaved_entry=ostree-1\nnext_entry=Windows\n#"))
+            self.assertFalse((Path(d) / "grubenv.new").exists())
+
+    @unittest.skipUnless(__import__("shutil").which("grub-editenv"), "grub-editenv absent")
+    def test_comme_grub(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            a, b = Path(d) / "a", Path(d) / "b"
+            subprocess.run(["grub-editenv", str(a), "create"], check=True)
+            subprocess.run(["grub-editenv", str(a), "set", "saved_entry=x", "next_entry=Windows"], check=True)
+            subprocess.run(["grub-editenv", str(b), "create"], check=True)
+            subprocess.run(["grub-editenv", str(b), "set", "saved_entry=x"], check=True)
+            self.ecrire(b, "next_entry=Windows")
+            self.assertEqual(a.read_bytes(), b.read_bytes(), "même fichier que grub-editenv")
+            liste = subprocess.run(["grub-editenv", str(b), "list"], capture_output=True, text=True, check=True).stdout
+            self.assertEqual(liste.split(), ["saved_entry=x", "next_entry=Windows"])
+
+
+class TestReglagesRepris(unittest.TestCase):
+    def test_veille_par_defaut(self):
+        self.assertEqual(commun.arguments_veille({}), [
+            "swayidle", "-w", "timeout", "300", "smoky-bureau-cmd ecran eteindre", "resume", "smoky-bureau-cmd ecran allumer",
+            "timeout", "300", "smoky-bureau-cmd verrouiller", "timeout", "900", "smoky-bureau-cmd veille-si-batterie",
+            "before-sleep", "smoky-bureau-cmd verrouiller"])
+
+    def test_veille_jamais_et_secteur(self):
+        args = commun.arguments_veille({"idle_delay": 0, "sleep_battery_type": "nothing",
+                                        "sleep_ac_type": "suspend", "sleep_ac": 3600})
+        self.assertNotIn("smoky-bureau-cmd verrouiller", args[:-1], "inactivité « jamais » : pas de verrouillage")
+        self.assertIn("smoky-bureau-cmd veille-si-secteur", args)
+        self.assertNotIn("smoky-bureau-cmd veille-si-batterie", args)
+        self.assertEqual(args[-2:], ["before-sleep", "smoky-bureau-cmd verrouiller"], "toujours verrouillé avant la veille")
+
+    def test_verrouillage_apres_ecran_eteint(self):
+        args = commun.arguments_veille({"idle_delay": 600, "lock_delay": 60})
+        self.assertEqual(args[args.index("smoky-bureau-cmd verrouiller") - 1], "660")
+
+    def test_eclairage_du_soir(self):
+        self.assertEqual(commun.arguments_nuit({"temperature": 2700, "automatique": True}, {"lat": 50.36, "lon": 3.52}),
+                         ["wlsunset", "-T", "6500", "-t", "2700", "-l", "50.36", "-L", "3.52"])
+        self.assertEqual(commun.arguments_nuit({"automatique": False, "debut": 21.5, "fin": 6.25})[-4:],
+                         ["-s", "21:30", "-S", "06:15"])
+        self.assertEqual(commun.arguments_nuit({"temperature": 99999})[4], "6400", "température bornée")
+
+
 class TestBatterie(unittest.TestCase):
     def test_temps_restant_lisse(self):
         with tempfile.TemporaryDirectory() as d:

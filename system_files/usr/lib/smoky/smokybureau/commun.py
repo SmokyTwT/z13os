@@ -155,6 +155,36 @@ def alerte_batterie(niveau, en_charge, deja):
     return None, deja
 
 
+def arguments_veille(r):
+    """swayidle selon tes réglages (mêmes noms que sous GNOME) : écran éteint après `idle_delay`
+    secondes (0 = jamais), verrouillage `lock_delay` secondes plus tard, mise en veille après
+    `sleep_battery` sur batterie et `sleep_ac` sur secteur si leur type est « suspend »."""
+    args = ["swayidle", "-w"]
+    if r.get("idle_delay", 300) > 0:
+        eteint = r.get("idle_delay", 300)
+        args += ["timeout", str(eteint), "smoky-bureau-cmd ecran eteindre", "resume", "smoky-bureau-cmd ecran allumer",
+                 "timeout", str(eteint + max(0, r.get("lock_delay", 0))), "smoky-bureau-cmd verrouiller"]
+    if r.get("sleep_battery_type", "suspend") == "suspend" and r.get("sleep_battery", 900) > 0:
+        args += ["timeout", str(r.get("sleep_battery", 900)), "smoky-bureau-cmd veille-si-batterie"]
+    if r.get("sleep_ac_type", "nothing") == "suspend" and r.get("sleep_ac", 1800) > 0:
+        args += ["timeout", str(r.get("sleep_ac", 1800)), "smoky-bureau-cmd veille-si-secteur"]
+    return args + ["before-sleep", "smoky-bureau-cmd verrouiller"]
+
+
+def arguments_nuit(r, lieu=None):
+    """wlsunset selon tes réglages : température (K), et soit le lever et le coucher du soleil à
+    l'endroit de ta météo (« automatique »), soit des heures fixes (20 h → 7 h par défaut)."""
+    temperature = max(1900, min(6400, int(r.get("temperature", 3500))))
+    args = ["wlsunset", "-T", "6500", "-t", str(temperature)]
+    if r.get("automatique", True) and lieu and lieu.get("lat") is not None and lieu.get("lon") is not None:
+        return args + ["-l", f"{float(lieu['lat']):.2f}", "-L", f"{float(lieu['lon']):.2f}"]
+
+    def heure(h):
+        h = float(h) % 24
+        return f"{int(h):02d}:{round(h % 1 * 60) % 60:02d}"
+    return args + ["-s", heure(r.get("debut", 20.0)), "-S", heure(r.get("fin", 7.0))]
+
+
 def duree(minutes):
     if minutes is None:
         return ""
@@ -197,3 +227,62 @@ def volume():
         return round(float(parts[1]) * 100), "[MUTED]" in sortie
     except (IndexError, ValueError):
         return None, False
+
+
+# --- clavier tactile de la connexion et du verrouillage -----------------------------------------
+# AZERTY. Chaque caractère imprimable d'un clavier (ASCII 32 à 126) est sur une des couches, pour
+# qu'un mot de passe puisse toujours se taper au doigt.
+COUCHES_CLAVIER = {
+    "abc": ["a z e r t y u i o p", "q s d f g h j k l m", "⇧ w x c v b n ' ⌫", "123 àé espace . ⏎"],
+    "ABC": ["A Z E R T Y U I O P", "Q S D F G H J K L M", "⇧ W X C V B N ' ⌫", "123 àé espace . ⏎"],
+    "123": ["1 2 3 4 5 6 7 8 9 0", "@ # & _ - ( ) = % +", "#+= ! ? , ; : / * ⌫", "abc àé espace . ⏎"],
+    "#+=": ["[ ] { } < > ^ ~ ` |", "\\ $ € £ § ° µ \" « »", "123 ' ! ? , ; : ⌫", "abc àé espace . ⏎"],
+    "àé": ["é è ê ë à â ç ù û ü", "ô î ï œ æ É È À Ç Ê", "Ô Î Û Ë Ï Ü Œ Æ ⌫", "abc 123 espace . ⏎"],
+}
+TOUCHES_SPECIALES = {"⇧", "⌫", "⏎", "espace", "abc", "123", "#+=", "àé"}
+
+
+def touche_clavier(texte, etat, touche):
+    """Un appui sur le clavier tactile. etat = (couche, majuscules verrouillées).
+    Renvoie (texte, etat, valider). ⇧ une fois : une majuscule ; deux fois : toutes.
+    Après une lettre accentuée, retour aux lettres ; chiffres et symboles restent affichés."""
+    couche, verrou = etat
+    if touche == "⌫":
+        return texte[:-1], etat, False
+    if touche == "⏎":
+        return texte, etat, True
+    if touche == "⇧":
+        if couche != "ABC":
+            return texte, ("ABC", False), False
+        return texte, (("ABC", True) if not verrou else ("abc", False)), False
+    if touche in COUCHES_CLAVIER and touche != "ABC":
+        return texte, (touche, False), False
+    texte += " " if touche == "espace" else touche
+    if (couche == "ABC" and not verrou) or couche == "àé":
+        etat = ("abc", False)               # une majuscule, une lettre accentuée : puis les lettres
+    return texte, etat, False
+
+
+def claviers_physiques(texte=None):
+    """Les vrais claviers branchés, d'après /proc/bus/input/devices, avec la règle d'udev
+    (ID_INPUT_KEYBOARD) : toutes les touches d'Échap à D présentes. Les boutons (marche,
+    volume, touches ASUS) n'en sont pas. None si on ne peut pas savoir."""
+    if texte is None:
+        try:
+            texte = Path("/proc/bus/input/devices").read_text(errors="replace")
+        except OSError:
+            return None
+    noms = []
+    for bloc in texte.split("\n\n"):
+        nom, touches = "", []
+        for ligne in bloc.splitlines():
+            if ligne.startswith("N: Name="):
+                nom = ligne[8:].strip().strip('"')
+            elif ligne.startswith("B: KEY="):
+                touches = ligne[7:].split()
+        try:
+            if touches and int(touches[-1], 16) & 0xFFFFFFFE == 0xFFFFFFFE:
+                noms.append(nom)
+        except ValueError:
+            pass
+    return noms

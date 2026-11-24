@@ -1,0 +1,11 @@
+[Unit]
+Description=Smoky OS : redémarrer sur Windows (demandé depuis l'écran de connexion)
+
+[Service]
+Type=oneshot
+# la demande est retirée avant tout : jamais de boucle de redémarrages
+ExecStartPre=/usr/bin/rm -f /var/lib/greetd/smoky-windows
+# le résultat (« en cours » ou la raison d'un échec) revient à l'écran de connexion par ce fichier
+Environment=SMOKY_ETAT=/var/lib/greetd/smoky-windows.etat
+ExecStart=/usr/libexec/smokyos/smoky-bootonce.sh windows
+TimeoutStartSec=150

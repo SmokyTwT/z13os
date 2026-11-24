@@ -18,7 +18,8 @@ et comment les morceaux se parlent.
 - Des notifications discrètes, avec un historique.
 - Un lanceur qui cherche les applis.
 - Un écran de verrouillage avec la météo et l'état du PC.
-- Un clavier à l'écran quand le clavier est détaché, et la rotation automatique en tablette.
+- Un clavier à l'écran quand le clavier est détaché (Stevia dans la session, détecté par `/proc/bus/input/devices`), un clavier tactile intégré à l'écran de connexion et au verrouillage (on peut toujours entrer sans clavier), et la rotation automatique en tablette.
+- Les boutons de l'écran de connexion disent à l'écran pourquoi ils ont échoué. « Windows » passe par une demande déposée dans `/var/lib/greetd` et exécutée par `smoky-windows-connexion.path` : l'écran de connexion tourne dans le domaine SELinux de greetd (`xdm_t`), qui ne peut pas démarrer de service lui-même.
 
 **Contraintes :**
 - **Autonomie.** Rien ne se réveille sans raison. Pas de flou en direct, pas d'animation

@@ -1,0 +1,11 @@
+[Unit]
+Description=Smoky OS : bouton Windows de l'écran de connexion (attend sa demande)
+# L'écran de connexion (domaine SELinux de greetd) ne peut pas démarrer de service lui-même :
+# il dépose ce fichier dans son dossier, et c'est systemd qui lance le redémarrage sur Windows.
+
+[Path]
+PathExists=/var/lib/greetd/smoky-windows
+Unit=smoky-windows-connexion.service
+
+[Install]
+WantedBy=multi-user.target

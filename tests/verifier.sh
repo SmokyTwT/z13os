@@ -127,6 +127,14 @@ if sortie=$(python3 tests/test_notes.py 2>&1); then
 else
   echec "tests des notes"; printf '%s\n' "$sortie" | tail -40
 fi
+# réglages repris de GNOME (bureau Smoky) : le schéma doit se compiler sans faute
+if command -v glib-compile-schemas >/dev/null; then
+  if sortie=$(glib-compile-schemas --strict --dry-run system_files/usr/share/glib-2.0/schemas 2>&1); then
+    ok "schémas de réglages valides"
+  else
+    echec "schémas de réglages"; printf '%s\n' "$sortie" | head -20
+  fi
+fi
 # bureau Smoky (refonte) : client Wayland maison, greetd, dock, fréquence de l'écran, batterie
 if sortie=$(python3 tests/test_bureau.py 2>&1); then
   ok "bureau : $(printf '%s\n' "$sortie" | grep -oE 'Ran [0-9]+ tests' | sed 's/Ran /tests réussis : /; s/ tests//')"

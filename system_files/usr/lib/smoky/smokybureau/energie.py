@@ -54,6 +54,12 @@ class Adaptation:
         self.capteur = False
         self.alertes = set()
         self.batterie_etat = commun.Batterie()
+        # clavier détaché (Z13 en tablette) : le clavier à l'écran s'active tout seul. On regarde
+        # /dev/input : un clavier branché ou retiré y ajoute ou y retire un fichier.
+        self.clavier_branche = self.clavier_present()
+        self.attente_clavier = 0
+        self.entrees = Gio.File.new_for_path("/dev/input").monitor_directory(Gio.FileMonitorFlags.NONE, None)
+        self.entrees.connect("changed", lambda *a: self.planifier_clavier())
         self.appliquer_tablette()
         self.verifier()
         GLib.timeout_add_seconds(60, self.surveiller_niveau)
@@ -97,10 +103,32 @@ class Adaptation:
     # --- mode tablette : clavier à l'écran (Stevia) et rotation de l'écran ----------------------
     ROTATIONS = {"normal": "normal", "left-up": "90", "right-up": "270", "bottom-up": "180"}
 
+    @staticmethod
+    def clavier_present():
+        noms = commun.claviers_physiques()
+        return True if noms is None else bool(noms)    # dans le doute : comme avant (clavier là)
+
+    def planifier_clavier(self):
+        if not self.attente_clavier:                 # plusieurs fichiers bougent d'un coup : on attend 1 s
+            self.attente_clavier = GLib.timeout_add(1000, self.revoir_clavier)
+
+    def revoir_clavier(self):
+        self.attente_clavier = 0
+        present = self.clavier_present()
+        if present != self.clavier_branche:
+            self.clavier_branche = present
+            self.appliquer_clavier_ecran()
+        return False
+
+    def appliquer_clavier_ecran(self):
+        """Clavier à l'écran (Stevia) dans les champs de texte : en mode tablette, ou clavier détaché."""
+        actif = bool(self.conf.get("tablet_mode")) or not self.clavier_branche
+        commun.commande("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled",
+                        "true" if actif else "false")
+
     def appliquer_tablette(self):
         tablette = bool(self.conf.get("tablet_mode"))
-        commun.commande("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled",
-                        "true" if tablette else "false")
+        self.appliquer_clavier_ecran()
         if tablette and not self.capteur:
             try:
                 self.systeme.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy", "net.hadess.SensorProxy",
@@ -123,6 +151,8 @@ class Adaptation:
             self.tourner("normal")
 
     def tourner(self, sens=None):
+        if sens is None and self.rotation_bloquee():
+            return
         if sens is None:
             try:
                 v = self.systeme.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy",
@@ -136,6 +166,14 @@ class Adaptation:
         e = ecran_integre()
         if transformation and e:
             commun.commande("wlr-randr", "--output", e[0], "--transform", transformation)
+
+    @staticmethod
+    def rotation_bloquee():
+        source = Gio.SettingsSchemaSource.get_default()
+        schema = "org.gnome.settings-daemon.peripherals.touchscreen"
+        if source is None or source.lookup(schema, True) is None:
+            return False
+        return Gio.Settings.new(schema).get_boolean("orientation-lock")
 
     def relire(self):
         tablette_avant = bool(self.conf.get("tablet_mode"))

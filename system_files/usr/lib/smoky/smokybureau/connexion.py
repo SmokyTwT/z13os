@@ -3,7 +3,8 @@
 Il montre ton compte, demande le mot de passe et le transmet à greetd, qui le vérifie par
 PAM (et déverrouille le trousseau). Il ne voit jamais ton mot de passe ailleurs que dans le champ,
 et ne l'écrit nulle part. Boutons : Windows (redémarrage sur Windows, comme dans l'appli Smoky),
-Redémarrer, Éteindre.
+Redémarrer, Éteindre ; chacun se confirme d'un second appui et dit à l'écran s'il a échoué.
+Un clavier tactile (clavier.py) permet de se connecter clavier détaché.
 
 Protocole greetd : messages JSON précédés de leur longueur (entier 32 bits, ordre de la machine).
 """
@@ -13,6 +14,7 @@ import subprocess
 import syslog
 import threading
 import time
+from pathlib import Path
 
 import gi
 
@@ -20,8 +22,16 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from . import commun  # noqa: E402
+from . import clavier, commun  # noqa: E402
 from .greetd import Greetd  # noqa: E402
+
+# L'écran de connexion tourne dans le domaine SELinux de greetd (xdm_t), qui n'a pas le droit de
+# démarrer un service. Pour Windows, il dépose donc une demande dans son propre dossier ; un service
+# système la voit (smoky-windows-connexion.path), la retire, lance smoky-bootonce.sh et laisse le
+# résultat dans ETAT_WINDOWS (« en cours », ou la raison d'un échec ; sinon le PC redémarre).
+DEMANDE_WINDOWS = Path("/var/lib/greetd/smoky-windows")
+ETAT_WINDOWS = Path("/var/lib/greetd/smoky-windows.etat")
+ESSAI = Path("/etc/smokyos/essai-connexion")     # machine virtuelle de test seulement (voir essai_automatique)
 
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
@@ -85,6 +95,7 @@ class Connexion(Gtk.Application):
             b.connect("clicked", lambda _b, c=cmd, t=texte: self.action(_b, c, t))
             bas.append(b)
         fond.add_overlay(bas)
+        clavier.ajouter(w, fond, self.mdp, self.essayer, centre)    # clavier tactile : connexion clavier détaché
         w.set_child(fond)
         w.present()
         w.fullscreen()
@@ -94,6 +105,7 @@ class Connexion(Gtk.Application):
         # on y écrit donc directement (syslog → journald)
         syslog.openlog("smoky-connexion")
         syslog.syslog(syslog.LOG_INFO, "écran de connexion Smoky affiché")
+        GLib.timeout_add_seconds(3, self.essai_automatique)
 
     def tic(self):
         t = time.localtime()
@@ -108,7 +120,79 @@ class Connexion(Gtk.Application):
             bouton.set_label("Confirmer")
             GLib.timeout_add_seconds(4, lambda: (bouton.set_label(texte), setattr(self, "confirmer", None))[1])
             return
-        subprocess.Popen(cmd)
+        self.confirmer = None
+        bouton.set_label(texte)
+        if texte == "Windows":
+            self.windows()
+            return
+        self.message.set_label("Redémarrage…" if texte == "Redémarrer" else "Extinction…")
+        self.lancer(cmd, texte)
+
+    def lancer(self, cmd, texte):
+        """Lance la commande ; si elle échoue, la raison s'affiche sous le mot de passe."""
+        def travail():
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                erreur = None if r.returncode == 0 else \
+                    ((r.stderr or r.stdout).strip().splitlines() or [f"échec (code {r.returncode})"])[-1]
+            except (OSError, subprocess.TimeoutExpired) as e:
+                erreur = str(e)
+            if erreur:
+                GLib.idle_add(self.fin_action, texte, erreur)
+        threading.Thread(target=travail, daemon=True).start()
+
+    def fin_action(self, texte, resultat):
+        syslog.syslog(syslog.LOG_WARNING, f"bouton {texte} : {resultat}")
+        self.message.set_label(f"{texte} : {resultat}")
+        return False
+
+    def windows(self):
+        self.message.set_label("Redémarrage sur Windows…")
+        self.depuis = time.time()
+        try:
+            DEMANDE_WINDOWS.write_text(f"{int(self.depuis)}\n")
+        except OSError as e:
+            # dossier absent ou refusé : l'ancienne voie (service démarré directement, règle polkit)
+            syslog.syslog(syslog.LOG_WARNING, f"bouton Windows : demande impossible ({e}), essai direct")
+            self.lancer(["systemctl", "start", "smoky-windows.service"], "Windows")
+            return
+        self.attente = 0
+        GLib.timeout_add_seconds(1, self.suivre_windows)
+
+    def suivre_windows(self):
+        self.attente += 1
+        try:
+            if ETAT_WINDOWS.stat().st_mtime >= self.depuis - 1:
+                etat = ETAT_WINDOWS.read_text().strip()
+                if etat and etat != "en cours":
+                    self.fin_action("Windows", etat)
+                    return False
+        except OSError:
+            pass
+        if self.attente >= 20 and DEMANDE_WINDOWS.exists():
+            try:
+                DEMANDE_WINDOWS.unlink()
+            except OSError:
+                pass
+            self.fin_action("Windows", "demande pas prise en compte (service smoky-windows-connexion arrêté)")
+            return False
+        if self.attente >= 150:
+            self.fin_action("Windows", "pas de réponse")
+            return False
+        return True
+
+    def essai_automatique(self):
+        """Machine virtuelle de test seulement : appuie sur « Windows » pour vérifier que l'écran de
+        connexion en a le droit (le résultat va au journal). Jamais sur un vrai PC : il faut à la fois
+        ce fichier, déposé par l'essai de démarrage, et une machine QEMU."""
+        try:
+            qemu = "QEMU" in Path("/sys/class/dmi/id/sys_vendor").read_text()
+            demande = ESSAI.read_text().strip()
+        except OSError:
+            return False
+        if qemu and demande == "windows":
+            self.windows()
+        return False
 
     def essayer(self):
         mot_de_passe = self.mdp.get_text()

@@ -3,6 +3,7 @@
   smoky-bureau-cmd lanceur | panneau | verrouiller | veille-si-batterie
   smoky-bureau-cmd volume plus|moins|muet     micro muet     luminosite plus|moins
   smoky-bureau-cmd capture [zone]             ecran eteindre|allumer
+  smoky-bureau-cmd veille-lancer | nuit-lancer | preparer-labwc DOSSIER   (services du bureau)
 """
 import os
 import sys
@@ -26,6 +27,51 @@ def bureau(methode, params=None, signature=None):
         return None
 
 
+LIEU_DEFAUT = {"lat": 50.36, "lon": 3.52}    # Valenciennes ; « lieu » dans ~/.config/smoky/bureau.json
+
+
+def reglage(schema, cle, defaut):
+    """Un réglage de ton profil (mêmes noms que sous GNOME, voir fr.smoky.bureau-compat.gschema.xml)."""
+    source = Gio.SettingsSchemaSource.get_default()
+    s = source.lookup(schema, True) if source else None
+    if s is None or not s.has_key(cle):
+        return defaut
+    return Gio.Settings.new(schema).get_value(cle).unpack()
+
+
+def reglages_veille():
+    puissance = "org.gnome.settings-daemon.plugins.power"
+    return {"idle_delay": reglage("org.gnome.desktop.session", "idle-delay", 300),
+            "lock_delay": reglage("org.gnome.desktop.screensaver", "lock-delay", 0),
+            "sleep_battery": reglage(puissance, "sleep-inactive-battery-timeout", 900),
+            "sleep_battery_type": reglage(puissance, "sleep-inactive-battery-type", "suspend"),
+            "sleep_ac": reglage(puissance, "sleep-inactive-ac-timeout", 1800),
+            "sleep_ac_type": reglage(puissance, "sleep-inactive-ac-type", "nothing")}
+
+
+def reglages_nuit():
+    couleur = "org.gnome.settings-daemon.plugins.color"
+    return {"temperature": reglage(couleur, "night-light-temperature", 3500),
+            "automatique": reglage(couleur, "night-light-schedule-automatic", True),
+            "debut": reglage(couleur, "night-light-schedule-from", 20.0),
+            "fin": reglage(couleur, "night-light-schedule-to", 7.0)}
+
+
+def preparer_labwc(dossier):
+    """Pavé tactile de labwc selon tes réglages (toucher pour cliquer, défilement naturel)."""
+    import re
+    rc = Path(dossier) / "rc.xml"
+    if not rc.is_file():
+        return
+    pave = "org.gnome.desktop.peripherals.touchpad"
+    oui = lambda v: "yes" if v else "no"                                       # noqa: E731
+    texte = rc.read_text()
+    texte = re.sub(r"<tap>\w+</tap>", f"<tap>{oui(reglage(pave, 'tap-to-click', True))}</tap>", texte)
+    texte = re.sub(r"<naturalScroll>\w+</naturalScroll>",
+                   f"<naturalScroll>{oui(reglage(pave, 'natural-scroll', True))}</naturalScroll>", texte)
+    rc.write_text(texte)
+
+
 def bulle(genre, valeur):
     bureau("Bulle", GLib.Variant("(si)", (genre, int(valeur))))
 
@@ -36,11 +82,12 @@ def notifier(titre, corps, icone="dialog-information"):
 
 def volume(action):
     cible = "@DEFAULT_AUDIO_SINK@"
+    limite = "1.5" if reglage("org.gnome.desktop.sound", "allow-volume-above-100-percent", False) else "1.0"
     if action == "muet":
         commun.commande("wpctl", "set-mute", cible, "toggle")
     else:
         commun.commande("wpctl", "set-mute", cible, "0")
-        commun.commande("wpctl", "set-volume", "-l", "1.0", cible, "5%+" if action == "plus" else "5%-")
+        commun.commande("wpctl", "set-volume", "-l", limite, cible, "5%+" if action == "plus" else "5%-")
     pourcent, muet = commun.volume()
     if pourcent is not None:
         bulle("volume", -1 if muet else pourcent)
@@ -93,6 +140,18 @@ def main(args=None):
     elif action == "veille-si-batterie":
         if not commun.secteur():
             os.execvp("systemctl", ["systemctl", "suspend"])
+    elif action == "veille-si-secteur":
+        if commun.secteur():
+            os.execvp("systemctl", ["systemctl", "suspend"])
+    elif action == "veille-lancer":
+        args = commun.arguments_veille(reglages_veille())
+        os.execvp(args[0], args)
+    elif action == "nuit-lancer":
+        lieu = commun.lire_json(commun.BUREAU, {}).get("lieu") or LIEU_DEFAUT
+        args = commun.arguments_nuit(reglages_nuit(), lieu)
+        os.execvp(args[0], args)
+    elif action == "preparer-labwc" and reste:
+        preparer_labwc(reste[0])
     elif action == "volume" and reste:
         volume(reste[0])
     elif action == "micro":

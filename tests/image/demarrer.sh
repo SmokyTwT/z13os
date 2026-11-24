@@ -61,6 +61,22 @@ echo "== mémoire (Mo)"; free -m 2>&1
 echo "== processus les plus gros (Mo)"; ps -eo rss,comm --sort=-rss | awk 'NR>1 && NR<=26 {printf "%7.1f %s\n", $1/1024, $2}'
 echo "== nombre de processus"; ps -e --no-headers | wc -l
 echo "== mémoire compressée"; sysctl vm.swappiness vm.page-cluster 2>&1 | tr '\n' ' '; echo; swapon --show=NAME,SIZE --noheadings 2>&1 | tr '\n' ' '; echo
+if [ "$n" = 2 ] && [ -e /etc/smokyos/essai-connexion ]; then
+  # Bouton « Windows » de l'écran de connexion : il l'actionne tout seul en machine virtuelle de test
+  # (fichier déposé au 1er démarrage). Pas de Windows ici : la réponse attendue est « Windows
+  # introuvable », qui prouve que la demande est bien arrivée jusqu'au service système.
+  echo "== bouton Windows de l'écran de connexion"
+  for _ in $(seq 45); do journalctl -b -t smoky-connexion -o cat 2>/dev/null | grep -q '^bouton Windows : ' && break; sleep 2; done
+  ligne=$(journalctl -b -t smoky-connexion -o cat 2>/dev/null | grep '^bouton Windows : ' | tail -1)
+  echo "${ligne:-aucune réponse de l'écran de connexion}"
+  journalctl -b -u smoky-windows-connexion.service -o cat --no-pager 2>&1 | tail -4
+  ls -laZ /var/lib/greetd 2>&1 | head -5
+  journalctl -b -o cat --no-pager 2>/dev/null | grep -E 'avc: +denied' | grep -E 'xdm_t|greet' | tail -5
+  case "$ligne" in
+    *"Windows introuvable"*|*"firmware refuse"*|*"redémarrage"*) echo "SMOKY-WINDOWS ok" ;;
+    *) echo "SMOKY-WINDOWS ko" ;;
+  esac
+fi
 if [ "$n" = 2 ] && systemctl is-active -q greetd.service && [ -s /var/lib/smoky-mesure-mdp ]; then
   # Bureau Smoky : on se connecte vraiment, comme l'écran de connexion (protocole de greetd),
   # puis on regarde si labwc et le bureau Smoky tournent dans la session du compte d'essai
@@ -107,6 +123,8 @@ if [ "$n" = 1 ]; then
   mdp=$(head -c 18 /dev/urandom | base64)
   useradd -m -u 1000 -c "Essai" essai 2>&1 && echo "essai:$mdp" | chpasswd 2>&1
   (umask 077; printf '%s\n' "$mdp" > /var/lib/smoky-mesure-mdp)
+  # au second démarrage, l'écran de connexion essaiera son bouton « Windows » (voir connexion.py)
+  mkdir -p /etc/smokyos && echo windows > /etc/smokyos/essai-connexion
 fi
 touch /var/lib/smoky-mesure
 sleep 2
@@ -303,6 +321,13 @@ case "${ETAT[1]}" in
     elif [ "${ETAT[2]}" = graphique ] && grep -qaE "$AFFICHE" "$T/serie-2.txt" && gpu_ok "$T/serie-2.txt"; then
       session=""
       grep -qa 'SMOKY-SESSION ok' "$T/serie-2.txt" && session=", et le bureau Smoky s'ouvre après la connexion"
+      # bouton Windows de l'écran de connexion : signalé (sans bloquer la publication) s'il ne passe pas
+      if grep -qa 'SMOKY-WINDOWS ok' "$T/serie-2.txt"; then
+        session="$session ; le bouton Windows de l'écran de connexion répond"
+      elif grep -qa 'SMOKY-WINDOWS ko' "$T/serie-2.txt"; then
+        echo "::warning::le bouton Windows de l'écran de connexion ne passe pas (détail ci-dessous)"
+        sed -n '/bouton Windows de l.écran de connexion/,/SMOKY-WINDOWS/p' "$T/serie-2.txt" | sed -E 's/^\[[ 0-9.]+\] smoky-mesure\[[0-9]+\]: ?//'
+      fi
       echo "RÉSULTAT : l'image démarre deux fois de suite jusqu'à l'écran de connexion (${DUREE[1]} s, puis ${DUREE[2]} s)$session."
       exit 0
     else

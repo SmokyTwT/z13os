@@ -130,6 +130,7 @@ cursor-theme='Smoky-cursors'
 accent-color='slate'
 color-scheme='prefer-dark'
 clock-show-weekday=true
+show-battery-percentage=true
 
 [org.gnome.desktop.wm.preferences]
 button-layout='close,minimize,maximize:appmenu'
@@ -145,6 +146,26 @@ disabled=['org.gnome.Software.desktop']
 [org.gnome.Ptyxis.Profile]
 palette='smoky'
 EOF
+# Réglages repris de GNOME (fr.smoky.bureau-compat) : si un paquet fournit déjà l'un de ces schémas
+# (GNOME réinstallé un jour), c'est le sien qui compte ; sinon le compilateur en ignorerait un des deux
+python3 -I - <<'PY'
+import glob
+import xml.etree.ElementTree as ET
+compat = "/usr/share/glib-2.0/schemas/fr.smoky.bureau-compat.gschema.xml"
+autres = set()
+for f in glob.glob("/usr/share/glib-2.0/schemas/*.gschema.xml"):
+    if f != compat:
+        try:
+            autres.update(s.get("id") for s in ET.parse(f).getroot().iter("schema"))
+        except ET.ParseError:
+            pass
+arbre = ET.parse(compat)
+for s in list(arbre.getroot().findall("schema")):
+    if s.get("id") in autres:
+        arbre.getroot().remove(s)
+        print("réglages repris : schéma déjà fourni par un paquet, gardé tel quel :", s.get("id"))
+arbre.write(compat, encoding="utf-8")
+PY
 glib-compile-schemas /usr/share/glib-2.0/schemas
 
 # --- Pare-feu ------------------------------------------------------------------
@@ -178,7 +199,7 @@ systemctl enable supergfxd.service thermald.service fstrim.timer \
   z13-firstboot.service smoky-focus-cleanup.service smoky-gpu.service \
   rpm-ostreed-automatic.timer smoky-flatpak-update.timer \
   greetd.service power-profiles-daemon.service smoky-asusd-profils.service firewalld.service \
-  bluetooth.service cups.socket
+  bluetooth.service cups.socket smoky-windows-connexion.path
 # Écran de connexion : celui de Smoky (greetd), démarrage en mode graphique
 systemctl set-default graphical.target
 

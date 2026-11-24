@@ -1,11 +1,12 @@
 [Unit]
-Description=Smoky OS - éclairage du soir (couleurs plus chaudes de 20 h à 7 h)
+Description=Smoky OS - éclairage du soir (couleurs plus chaudes la nuit)
 PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
-# Démarré par le bureau Smoky si tu l'as activé dans les réglages rapides
-ExecStart=/usr/bin/wlsunset -T 6500 -t 4000 -S 07:00 -s 20:00
+# Allumé par le bureau Smoky si l'éclairage du soir est activé (réglages rapides ou appli Smoky) ;
+# température et horaires pris dans tes réglages (coucher et lever du soleil, ou heures fixes)
+ExecStart=/usr/bin/smoky-bureau-cmd nuit-lancer
 Restart=on-failure
 RestartSec=3
 Slice=session.slice

@@ -29,7 +29,7 @@ gi.require_version("Gtk4SessionLock", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 from gi.repository import Gtk4SessionLock as SL  # noqa: E402
 
-from . import commun  # noqa: E402
+from . import clavier, commun  # noqa: E402
 
 MOIS_LONGS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
               "octobre", "novembre", "décembre"]
@@ -108,6 +108,7 @@ class Verrou(Gtk.Application):
             for x in (self.heure, self.date, self.etat, self.mdp, self.message):
                 centre.append(x)
             fond.add_overlay(centre)
+            clavier.ajouter(w, fond, self.mdp, self.essayer, centre)  # clavier tactile : déverrouiller clavier détaché
         w.set_child(fond)
         self.verrou.assign_window_to_monitor(w, moniteur)
         w.present()

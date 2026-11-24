@@ -68,6 +68,9 @@ titre "Écran de connexion"
 verifie "greetd lance l'écran de connexion Smoky" grep -q '^command = "/usr/libexec/smokyos/smoky-connexion.sh"' /etc/greetd/config.toml
 verifie "écran de connexion sous le compte greetd" grep -q '^user = "greetd"' /etc/greetd/config.toml
 verifie "compte greetd présent" getent passwd greetd
+verifie "dossier de l'écran de connexion créé au démarrage (bouton Windows)" bash -c 'systemd-tmpfiles --cat-config 2>/dev/null | grep -q "^d /var/lib/greetd "'
+verifie "bouton Windows : de quoi écrire le choix dans le menu de démarrage" bash -c 'command -v grub2-editenv || test -x /usr/libexec/smokyos/smoky-grubenv.py'
+echo "  (grub2-editenv : $(command -v grub2-editenv || echo "absent, repli smoky-grubenv.py"))"
 verifie "connexion : le trousseau est déverrouillé par le mot de passe" grep -q 'pam_gnome_keyring.so' /etc/pam.d/greetd
 verifie "verrouillage : vérification PAM dédiée" grep -q '^auth .*include .*system-auth' /etc/pam.d/smoky-verrou
 for f in /usr/libexec/smokyos/smoky-connexion.sh /usr/bin/smoky-session /usr/bin/smoky-bureau-cmd \
@@ -81,7 +84,8 @@ verifie "démarrage en mode graphique" bash -c '[ "$(systemctl get-default)" = g
 titre "Services"
 for u in supergfxd.service thermald.service fstrim.timer z13-firstboot.service smoky-focus-cleanup.service \
          smoky-gpu.service rpm-ostreed-automatic.timer smoky-flatpak-update.timer greetd.service \
-         power-profiles-daemon.service smoky-asusd-profils.service firewalld.service bluetooth.service; do
+         power-profiles-daemon.service smoky-asusd-profils.service firewalld.service bluetooth.service \
+         smoky-windows-connexion.path; do
   verifie "$u activé" systemctl is-enabled "$u"
 done
 for u in smoky-autoicons.path smoky-autoicons.service smoky-adaptive.service smoky-mail.timer \
@@ -149,6 +153,8 @@ nb=$(ls /usr/share/icons/Smoky-icons/apps/256/*.png 2>/dev/null | wc -l)
 [ "$nb" -ge 10 ] && ok "icônes Smoky générées ($nb)" || echec "icônes Smoky générées : $nb (10 attendues au moins)"
 verifie "réglages GNOME par défaut de Smoky OS présents" grep -q "^icon-theme='Smoky-icons'" /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override
 verifie "réglages GNOME compilés après ceux de Smoky OS" bash -c '[ -s /usr/share/glib-2.0/schemas/gschemas.compiled ] && ! [ /usr/share/glib-2.0/schemas/zz1-z13os.gschema.override -nt /usr/share/glib-2.0/schemas/gschemas.compiled ]'
+verifie "réglages lisibles (thème)" gsettings get org.gnome.desktop.interface color-scheme
+verifie "réglages de la page Système lisibles par le bureau (éclairage du soir, veille)" bash -c 'gsettings get org.gnome.settings-daemon.plugins.color night-light-enabled && gsettings get org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout'
 verifie "dock Smoky par défaut : Smoky puis Chrome en tête" python3 -c 'import json, sys; d = json.load(open("/usr/share/smoky-bureau/dock.json"))["dock"]; sys.exit(0 if d[:2] == ["smoky.desktop", "google-chrome.desktop"] and "smoky-notes.desktop" not in d else 1)'
 avert=$(glib-compile-schemas --strict --dry-run /usr/share/glib-2.0/schemas 2>&1 | grep -i 'z13os' || true)
 [ -z "$avert" ] && ok "tous les réglages par défaut de Smoky OS existent encore dans GNOME" || { attention "réglages par défaut ignorés par GNOME :"; printf '%s\n' "$avert" | sed 's/^/          /'; }
@@ -156,7 +162,7 @@ avert=$(glib-compile-schemas --strict --dry-run /usr/share/glib-2.0/schemas 2>&1
 titre "Bureau Smoky"
 verifie "le bureau Smoky se charge (GTK 4, layer-shell, verrouillage, PAM)" python3 -I -c '
 import sys; sys.path.insert(0, "/usr/lib/smoky")
-import smokybureau.bureau, smokybureau.verrou, smokybureau.connexion, smokybureau.energie, smokybureau.cmd, pam'
+import smokybureau.bureau, smokybureau.verrou, smokybureau.connexion, smokybureau.clavier, smokybureau.energie, smokybureau.cmd, pam'
 verifie "modules du bureau précompilés" bash -c 'ls /usr/lib/smoky/smokybureau/__pycache__/bureau.*.pyc >/dev/null'
 for f in /usr/share/smoky-bureau/labwc/rc.xml /usr/share/smoky-bureau/labwc/menu.xml /usr/share/smoky-bureau/connexion/rc.xml; do
   verifie "$(basename "$(dirname "$f")")/$(basename "$f") lisible" python3 -c 'import sys, xml.etree.ElementTree as E; E.parse(sys.argv[1])' "$f"

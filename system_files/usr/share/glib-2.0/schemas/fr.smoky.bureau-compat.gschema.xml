@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Smoky OS — bureau Smoky : réglages repris de GNOME.
+     GNOME n'est plus installé, mais l'appli Smoky (Système) et tes choix d'avant utilisent ces
+     réglages. On les redéclare ici, avec les mêmes noms : tes valeurs enregistrées (dconf) restent
+     valables, et le bureau Smoky les applique lui-même (éclairage du soir, veille, rotation, dock).
+     Seules les clés utilisées sont déclarées ; les valeurs par défaut sont celles de Smoky. -->
+<schemalist>
+  <schema id="org.gnome.settings-daemon.plugins.color" path="/org/gnome/settings-daemon/plugins/color/">
+    <key name="night-light-enabled" type="b"><default>false</default></key>
+    <key name="night-light-temperature" type="u"><default>3500</default></key>
+    <key name="night-light-schedule-automatic" type="b"><default>true</default></key>
+    <key name="night-light-schedule-from" type="d"><default>20.0</default></key>
+    <key name="night-light-schedule-to" type="d"><default>7.0</default></key>
+  </schema>
+  <schema id="org.gnome.settings-daemon.plugins.power" path="/org/gnome/settings-daemon/plugins/power/">
+    <key name="ambient-enabled" type="b"><default>false</default></key>
+    <key name="sleep-inactive-battery-timeout" type="i"><default>900</default></key>
+    <key name="sleep-inactive-battery-type" type="s"><default>'suspend'</default></key>
+    <key name="sleep-inactive-ac-timeout" type="i"><default>1800</default></key>
+    <key name="sleep-inactive-ac-type" type="s"><default>'nothing'</default></key>
+  </schema>
+  <schema id="org.gnome.settings-daemon.peripherals.touchscreen" path="/org/gnome/settings-daemon/peripherals/touchscreen/">
+    <key name="orientation-lock" type="b"><default>false</default></key>
+  </schema>
+  <schema id="org.gnome.shell.extensions.dash-to-dock" path="/org/gnome/shell/extensions/dash-to-dock/">
+    <key name="dash-max-icon-size" type="i"><default>48</default></key>
+    <key name="dock-fixed" type="b"><default>false</default></key>
+  </schema>
+</schemalist>
