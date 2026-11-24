@@ -163,6 +163,9 @@ for f in /usr/share/smoky-bureau/labwc/rc.xml /usr/share/smoky-bureau/labwc/menu
 done
 verifie "thème des fenêtres Smoky" test -f /usr/share/themes/Smoky/labwc/themerc
 verifie "agent polkit présent" test -x /usr/libexec/polkit-mate-authentication-agent-1
+for f in blueman.desktop geoclue-demo-agent.desktop; do
+  [ -f "/etc/xdg/autostart/$f" ] && verifie "$f ne se lance pas à la connexion" grep -q '^Hidden=true' "/etc/xdg/autostart/$f"
+done
 verifie "clavier à l'écran présent" bash -c 'command -v stevia || command -v phosh-osk-stevia'
 verifie "style du bureau" test -s /usr/share/smoky-bureau/bureau.css
 verifie "police des titres (Comfortaa)" bash -c 'fc-list | grep -qi comfortaa'

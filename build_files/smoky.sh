@@ -197,10 +197,13 @@ systemctl mask ModemManager.service || true
 # GNOME Logiciels ne reste plus ouvert en permanence en arrière-plan (≈ 150 Mo de mémoire, réveils
 # réguliers) : les applis se mettent à jour une fois par jour, sur secteur (smoky-flatpak-update),
 # et le système via rpm-ostree. L'appli Logiciels reste utilisable normalement.
-if [[ -f /etc/xdg/autostart/org.gnome.Software.desktop ]]; then
-  grep -q '^Hidden=true' /etc/xdg/autostart/org.gnome.Software.desktop || \
-    sed -i '/^\[Desktop Entry\]/a Hidden=true' /etc/xdg/autostart/org.gnome.Software.desktop
-fi
+# Bureau Smoky : pas de zone de notification pour l'applet Bluetooth (le Bluetooth est dans les
+# réglages rapides), ni d'agent de localisation de démonstration (vu dans l'essai de session en VM)
+for f in org.gnome.Software.desktop blueman.desktop geoclue-demo-agent.desktop; do
+  if [[ -f /etc/xdg/autostart/$f ]]; then
+    grep -q '^Hidden=true' "/etc/xdg/autostart/$f" || sed -i '/^\[Desktop Entry\]/a Hidden=true' "/etc/xdg/autostart/$f"
+  fi
+done
 
 # Mises à jour système téléchargées en arrière-plan, appliquées au prochain redémarrage
 sed -i 's/^#\?AutomaticUpdatePolicy=.*/AutomaticUpdatePolicy=stage/' /etc/rpm-ostreed.conf
