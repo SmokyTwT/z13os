@@ -105,19 +105,16 @@ def paquet():
 
 # --- réglages qui comptent pour l'autonomie -------------------------------------------------------------
 def frequence_ecran():
-    """Hz de l'écran intégré, demandé à GNOME (session graphique seulement)."""
+    """Hz de l'écran intégré, demandé au moteur d'affichage (wlr-randr, bureau Smoky)."""
+    import json
     try:
-        from gi.repository import Gio
-        bus = Gio.bus_get_sync(Gio.BusType.SESSION)
-        _serie, ecrans, _logiques, _props = bus.call_sync(
-            "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig", "org.gnome.Mutter.DisplayConfig",
-            "GetCurrentState", None, None, Gio.DBusCallFlags.NONE, 3000, None).unpack()
-    except Exception:                                   # pas de session (sudo, console) : on s'en passe
+        sorties = json.loads(commande("wlr-randr", "--json") or "[]")
+    except ValueError:                                  # pas de session (sudo, console) : on s'en passe
         return "?"
-    for (connecteur, _v, _p, _s), modes, _props in ecrans:
-        mode = next((m for m in modes if m[6].get("is-current")), None)
-        if mode and connecteur.startswith("eDP"):
-            return f"{mode[3]:.0f} Hz ({mode[1]} × {mode[2]})"
+    for s in sorties:
+        mode = next((m for m in s.get("modes", []) if m.get("current")), None)
+        if mode and s.get("name", "").startswith("eDP"):
+            return f"{mode['refresh']:.0f} Hz ({mode['width']} × {mode['height']})"
     return "?"
 
 
@@ -134,8 +131,7 @@ def reglages():
     if clavier:
         lignes.append(f"rétroéclairage du clavier : {lire(clavier[0])} sur {lire(Path(clavier[0]).with_name('max_brightness'))}")
     profil = commande("powerprofilesctl", "get") or "?"
-    tuned = commande("tuned-adm", "active").replace("Current active profile: ", "") or "?"
-    lignes.append(f"profil d'énergie : {profil} (tuned : {tuned})")
+    lignes.append(f"profil d'énergie : {profil} (power-profiles-daemon, seul à le changer)")
     cpu = "/sys/devices/system/cpu/cpu0/cpufreq"
     turbo = lire("/sys/devices/system/cpu/intel_pstate/no_turbo")
     maxi = lire(f"{cpu}/scaling_max_freq")
