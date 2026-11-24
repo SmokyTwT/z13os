@@ -324,32 +324,73 @@ def caracteres_session():
     return vus
 
 
+# Touches « ordinaires » d'un clavier (codes evdev) : on n'utilise qu'elles, pour que Chrome, qui
+# déduit aussi le nom de la touche (KeyboardEvent.code) du code, ne voie jamais un Ctrl, un Échap
+# ou une touche inconnue. Lettres et chiffres gardent leur place ; le reste va sur les 4 niveaux
+# (rien, Maj, Alt Gr, Maj + Alt Gr) des touches de ponctuation, puis des chiffres et des lettres.
+_LETTRES = dict(zip("qwertyuiop", range(16, 26))) | dict(zip("asdfghjkl", range(30, 39))) \
+    | dict(zip("zxcvbnm", range(44, 51)))
+_CHIFFRES = dict(zip("1234567890", range(2, 12)))
+_PONCTUATION = [12, 13, 26, 27, 39, 40, 41, 43, 51, 52, 53, 86]
+_SPECIALES_EVDEV = {"⌫": 14, "⇥": 15, "⏎": 28, " ": 57, "←": 105, "→": 106}
+MAJ, ALTGR = 0x1, 0x80                       # Shift et Mod5 (Alt Gr = LevelThree, voir la keymap)
+_NIVEAUX = (0, MAJ, ALTGR, MAJ | ALTGR)
+
+
+def _nom_symbole(c):
+    if c in TOUCHES_ENVOYEES:
+        return TOUCHES_ENVOYEES[c]
+    if c.isascii() and c.isalnum():
+        return c                                 # a…z, A…Z, 0…9 : leur propre nom
+    return f"U{ord(c):04X}"                      # le reste par son point de code Unicode
+
+
 def keymap_clavier(caracteres):
-    """Disposition XKB « un code par caractère » (comme wtype) : le moteur d'affichage la passe
-    à l'appli, qui retrouve le caractère quelle que soit la disposition du vrai clavier.
-    Renvoie (texte de la keymap, {caractère: code evdev}) ; code XKB = code evdev + 8."""
-    symboles, codes = [], {}
-    for c in caracteres:
-        if c in codes:
-            continue
-        if c in TOUCHES_ENVOYEES:
-            sym = TOUCHES_ENVOYEES[c]
-        elif c.isascii() and c.isalnum():
-            sym = c                                  # a…z, A…Z, 0…9 : leur propre nom
+    """Disposition XKB du clavier à l'écran : le moteur d'affichage la passe à l'appli, qui
+    retrouve le caractère quelle que soit la disposition du vrai clavier.
+    Renvoie (texte de la keymap, {caractère: (code evdev, modificateurs)})."""
+    cases = {}                                   # code evdev → [symbole par niveau]
+    codes = {}
+
+    def poser(c, code, niveau):
+        cases.setdefault(code, [None] * 4)[niveau] = c
+        codes[c] = (code, _NIVEAUX[niveau])
+
+    restants = []
+    for c in dict.fromkeys(caracteres):
+        if c in _SPECIALES_EVDEV:
+            codes[c] = (_SPECIALES_EVDEV[c], 0)
+        elif c in _LETTRES:
+            poser(c, _LETTRES[c], 0)
+        elif c.lower() in _LETTRES and c.isupper():
+            poser(c, _LETTRES[c.lower()], 1)
+        elif c in _CHIFFRES:
+            poser(c, _CHIFFRES[c], 0)
         else:
-            sym = f"U{ord(c):04X}"                   # le reste par son point de code Unicode
-        symboles.append(sym)
-        codes[c] = len(symboles)
-    if len(symboles) > 247:                          # codes XKB jusqu'à 255
+            restants.append(c)
+    libres = [(code, n) for n in range(4) for code in _PONCTUATION] + \
+             [(code, n) for n in range(1, 4) for code in _CHIFFRES.values()] + \
+             [(code, n) for n in range(2, 4) for code in _LETTRES.values()]
+    libres = [(code, n) for code, n in libres if cases.get(code, [None] * 4)[n] is None]
+    if len(restants) > len(libres):
         raise ValueError("trop de caractères pour une seule disposition")
+    for c, (code, n) in zip(restants, libres):
+        poser(c, code, n)
+    symboles = "".join(
+        f"  key <K{code}> {{ type= \"FOUR_LEVEL\", [ {', '.join(_nom_symbole(x) if x else 'NoSymbol' for x in niv)} ] }};\n"
+        for code, niv in sorted(cases.items()))
+    symboles += "".join(f"  key <K{code}> {{ [ {_nom_symbole(c)} ] }};\n" for c, code in _SPECIALES_EVDEV.items()
+                        if c in codes)
+    tous = sorted(set(cases) | {code for c, code in _SPECIALES_EVDEV.items() if c in codes} | {100})
     texte = ("xkb_keymap {\n"
-             "xkb_keycodes \"smoky\" {\n  minimum = 8;\n"
-             f"  maximum = {len(symboles) + 8};\n"
-             + "".join(f"  <K{i}> = {i + 8};\n" for i in range(1, len(symboles) + 1)) +
+             "xkb_keycodes \"smoky\" {\n  minimum = 8;\n  maximum = 255;\n"
+             + "".join(f"  <K{code}> = {code + 8};\n" for code in tous) +
              "};\n"
              "xkb_types \"smoky\" { include \"complete\" };\n"
              "xkb_compatibility \"smoky\" { include \"complete\" };\n"
              "xkb_symbols \"smoky\" {\n"
-             + "".join(f"  key <K{i}> {{ [ {s} ] }};\n" for i, s in enumerate(symboles, 1)) +
+             + symboles +
+             "  key <K100> { [ ISO_Level3_Shift ] };\n"      # Alt Gr : jamais appuyée, elle lie LevelThree à Mod5
+             "  modifier_map Mod5 { <K100> };\n"
              "};\n};\n")
     return texte, codes

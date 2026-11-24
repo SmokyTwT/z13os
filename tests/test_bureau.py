@@ -392,14 +392,22 @@ class TestClavierSession(unittest.TestCase):
         keymap = xkb.xkb_keymap_new_from_string(contexte, texte.encode(), 1, 0)
         self.assertTrue(keymap, "la disposition se compile (libxkbcommon)")
         etat = xkb.xkb_state_new(keymap)
-        speciaux = {"⌫": 0xFF08, "⏎": 0xFF0D, "⇥": 0xFF09, "←": 0xFF51, "→": 0xFF53}
-        for c, code in codes.items():
+        xkb.xkb_state_update_mask.argtypes = [ctypes.c_void_p] + [ctypes.c_uint32] * 6
+        speciaux = {"⌫": (0xFF08, 14), "⏎": (0xFF0D, 28), "⇥": (0xFF09, 15), "←": (0xFF51, 105),
+                    "→": (0xFF53, 106), " ": (0x20, 57)}
+        ordinaires = set(range(2, 14)) | set(range(16, 28)) | set(range(30, 42)) | {43} | set(range(44, 54)) | {86}
+        for c, (code, mods) in codes.items():
+            xkb.xkb_state_update_mask(etat, mods, 0, 0, 0, 0, 0)
             if c in speciaux:
-                self.assertEqual(xkb.xkb_state_key_get_one_sym(etat, code + 8), speciaux[c], c)
+                self.assertEqual((xkb.xkb_state_key_get_one_sym(etat, code + 8), code), speciaux[c], c)
                 continue
+            self.assertIn(code, ordinaires, f"{c} : seulement des touches ordinaires (Chrome lit aussi le code)")
             tampon = ctypes.create_string_buffer(16)
             xkb.xkb_state_key_get_utf8(etat, code + 8, tampon, 16)
-            self.assertEqual(tampon.value.decode(), c, f"code {code}")
+            self.assertEqual(tampon.value.decode(), c, f"code {code}, modificateurs {mods:#x}")
+        self.assertEqual(codes["a"], (30, 0), "les lettres gardent leur place")
+        self.assertEqual(codes["A"], (30, commun.MAJ))
+        self.assertEqual(codes["1"], (2, 0))
 
     def test_protocole(self):
         texte, codes = commun.keymap_clavier(commun.caracteres_session())
@@ -439,9 +447,13 @@ class TestClavierSession(unittest.TestCase):
                 with os.fdopen(fds[0], "rb") as f:
                     self.assertEqual(f.read(), texte.encode() + b"\0")
                 saisie = struct.unpack("=II", [m for m in recus if m[0] == gestion_saisie][0][2])[1]
-                self.assertTrue(client.taper(codes["é"]))
-                touches = [struct.unpack("=III", m[2]) for m in lire_messages(cote) if m[0] == clavier and m[1] == 1]
-                self.assertEqual([(k, e) for _t, k, e in touches], [(codes["é"], 1), (codes["é"], 0)])
+                code, mods = codes["€"]
+                self.assertTrue(mods, "€ demande Alt Gr")
+                self.assertTrue(client.taper(code, mods))
+                envoyes = [(m[1], m[2]) for m in lire_messages(cote) if m[0] == clavier]
+                self.assertEqual(envoyes[0], (2, struct.pack("=IIII", mods, 0, 0, 0)), "modificateurs d'abord")
+                self.assertEqual([struct.unpack("=III", a)[1:] for n, a in envoyes[1:3]], [(code, 1), (code, 0)])
+                self.assertEqual(envoyes[3], (2, struct.pack("=IIII", 0, 0, 0, 0)), "puis relâchés")
                 for evenements, attendu in (([0, 5], [True]), ([1, 5], [True, False]), ([0, 1, 5], [True, False])):
                     cote.sendall(b"".join(message(saisie, n) for n in evenements))
                     client.lire()

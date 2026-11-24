@@ -207,7 +207,7 @@ class Client:
 
 class ClientClavier(Client):
     """Pour le clavier à l'écran. Il crée un clavier virtuel avec sa propre disposition (keymap :
-    un code par caractère, voir commun.keymap_clavier) et tape dans l'appli qui a le clavier,
+    voir commun.keymap_clavier) et tape dans l'appli qui a le clavier,
     quelle qu'elle soit (Chrome compris). Il écoute aussi les champs de texte par la méthode de
     saisie : `quand_saisie(True)` quand un champ prend la main, `quand_saisie(False)` quand il la
     rend (seulement pour les applis qui le disent, comme celles en GTK)."""
@@ -246,13 +246,18 @@ class ClientClavier(Client):
             self.saisie = self._nouvel_id("saisie")
             self._envoyer(self.gestion_saisie, 0, struct.pack("=II", self.seat, self.saisie))     # get_input_method
 
-    def taper(self, code):
-        """Appuie puis relâche la touche `code` (code evdev de la keymap). False si pas encore prêt."""
+    def taper(self, code, modificateurs=0):
+        """Appuie puis relâche la touche `code` (code evdev de la keymap), avec Maj et/ou Alt Gr
+        enfoncés si `modificateurs` le dit (masque XKB). False si pas encore prêt."""
         if not self.clavier:
             return False
         t = int(time.monotonic() * 1000) & 0xFFFFFFFF
+        if modificateurs:
+            self._envoyer(self.clavier, 2, struct.pack("=IIII", modificateurs, 0, 0, 0))      # modifiers
         self._envoyer(self.clavier, 1, struct.pack("=III", t, code, 1))                    # key : appuyée
         self._envoyer(self.clavier, 1, struct.pack("=III", (t + 1) & 0xFFFFFFFF, code, 0))  # relâchée
+        if modificateurs:
+            self._envoyer(self.clavier, 2, struct.pack("=IIII", 0, 0, 0, 0))
         return True
 
     def _autre(self, genre, oid, numero, args):

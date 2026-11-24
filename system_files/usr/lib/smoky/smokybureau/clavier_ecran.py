@@ -2,8 +2,8 @@
 
 Une bande en bas de l'écran (layer-shell, au-dessus des fenêtres, qui leur laisse la place) qui ne
 prend jamais le clavier : le champ de texte de l'appli garde la main. Les touches partent par un
-clavier virtuel Wayland avec sa propre disposition (un code par caractère) : ça marche dans toutes
-les applis, Chrome compris, quelle que soit la disposition du vrai clavier.
+clavier virtuel Wayland avec sa propre disposition (touches ordinaires, 4 niveaux) : ça marche dans
+toutes les applis, Chrome compris, quelle que soit la disposition du vrai clavier.
 
 Quand il apparaît :
   * toujours par le bouton clavier de la barre (`smoky-bureau-cmd clavier basculer`) ;
@@ -153,10 +153,8 @@ class ClavierSession(Gtk.Application):
         if envoi == "cacher":
             self.range_a_la_main = bool(self.wl and self.wl.saisie_active)
             self.cacher()
-        elif envoi:
-            code = self.codes.get(envoi)
-            if code and self.wl:
-                self.wl.taper(code)
+        elif envoi and envoi in self.codes and self.wl:
+            self.wl.taper(*self.codes[envoi])
         if self.etat != avant:
             self.dessiner()
 
