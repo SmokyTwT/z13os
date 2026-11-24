@@ -14,7 +14,7 @@ complète, et la version précédente reste dans le menu de démarrage en cas de
 | Proton VPN, Déjà Dup, mpv | Applis officielles (Flatpak), installées au 1er démarrage |
 | Moodle, Google Drive | Applis dans le dock + Drive dans Fichiers (Paramètres > Comptes en ligne) |
 | Claude | Appli Claude dans le dock |
-| Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto |
+| Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto ; moins de réveils du processeur au repos ; consommation et autonomie estimée en direct dans Smoky → Système → Énergie, mesure détaillée par `smoky-diagnostic --energie` |
 | Prise de notes façon GoodNotes | **Notes**, dans l'appli Smoky : bibliothèque de carnets avec couvertures, classeurs (une pile par matière), favoris, recherche et corbeille ; papiers vierge, ligné, quadrillé, pointillé, Seyès, Cornell, portées (blanc, ivoire, cendre, fumée ; A4, A4 paysage, écran) ; stylo sensible à la pression, surligneur, gomme (trait entier ou précise), bout gomme du stylet ; lasso (déplacer, agrandir, recolorer, copier, dupliquer) ; formes parfaites en maintenant le stylet ; texte, images, pointeur laser ; un PDF de cours devient un carnet à annoter ; export PDF dans Notes/PDF ; signets et miniatures des pages ; défilement et zoom aux doigts, toucher à 2 doigts = annuler, 3 doigts = rétablir ; gribouiller sur un mot l'efface (il passe en rouge pendant le gribouillis) ; rejet de la paume ; enregistrement automatique dans Notes/Carnets (synchronisé avec Google Drive), une page modifiée ailleurs se met à jour toute seule. Les carnets d'avant restent dans l'ancien Smoky Notes (grille des applis, « ancien »), sans changement |
 | Bureau Smoky | Écrit pour Smoky OS (Python + GTK 4, `/usr/lib/smoky/smokybureau`) à la place de GNOME : barre (heure, batterie avec temps restant, réseau, son), dock qui se cache sous les fenêtres (repris de ton dock GNOME à la première connexion), lanceur avec recherche (touche Windows), réglages rapides (profil d'énergie, son, luminosité, réseaux Wi-Fi, Bluetooth, éclairage du soir, charge à 100 % une fois, ne pas mettre en veille, tablette, verrouiller, éteindre, Windows), bulles de son et de luminosité, notifications avec historique et « Ne pas déranger » ; fenêtres ouvertes en grand (règle de labwc, les boîtes de dialogue gardent leur taille) ; écran de connexion et verrouillage Smoky (bouton « Windows », relais swaylock s'il plante) ; aucun flou ni animation en continu (autonomie). Thème « fumée » noir/gris/blanc, logos Smoky-icons et curseur Smoky inchangés. Décisions et conception : `docs/refonte/` |
 | Smoky (nouvelle appli unique) | **Smoky**, en tête du dock : une seule fenêtre qui regroupera toutes les applis maison. Déjà là : **Aujourd'hui** (tâches avec date limite, ta journée, état du PC, mise à jour prête), **Notes**, **Agenda** et **Mail** (voir plus bas) et **Système** (tous les réglages de Smoky Center, rangés en dix sections). Maison arrive ensuite ; d'ici là, son bouton ouvre l'ancienne appli. Serveur local sans dépendance (127.0.0.1, code d'accès tiré à chaque lancement), arrêté tout seul quand la fenêtre se ferme |
@@ -97,6 +97,13 @@ graphique, durée du démarrage, mémoire, batterie, disque, erreurs récentes. 
 rien et ne demande aucun mot de passe. Les chemins de ton dossier personnel, les adresses
 (e-mail, IP, MAC) et ce qui ressemble à un code d'accès sont masqués ; relis quand même le
 rapport avant de le partager. Pour l'avoir dans un fichier : `smoky-diagnostic > ~/diagnostic.txt`.
+
+Pour l'autonomie : `smoky-diagnostic --energie`, sur batterie, sans toucher au PC pendant une
+minute. Il donne la consommation moyenne, l'autonomie qu'elle laisse (batterie pleine et jusqu'à
+la limite de charge), les réglages qui comptent (luminosité, fréquence de l'écran, profil
+d'énergie, turbo, veille des liaisons PCIe, carte NVIDIA, Wi-Fi) et ce qui a fait travailler le
+processeur. `sudo smoky-diagnostic --energie-paquet` ajoute le repos du processeur entier, le
+chiffre le plus parlant quand la batterie fond au repos.
 
 ## Modifier Smoky OS
 1. Modifie les fichiers, puis lance `bash tests/verifier.sh` (moins d'une minute).

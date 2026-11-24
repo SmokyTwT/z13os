@@ -6,6 +6,25 @@ import { api, tenter } from "/js/app.js";
 
 const ETATS = { Charging: "En charge.", Discharging: "Sur batterie.", Full: "Batterie pleine.", "Not charging": "Branché, la charge est en pause." };
 const HEURE = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const watts = (w) => w.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+const duree = (min) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}` : `${min} min`);
+
+// « Sur batterie : 8,4 W en ce moment, environ 3 h 10 restantes. »
+function etatBatterie(b) {
+  if (b.niveau === "?") return "Batterie introuvable sur cette machine.";
+  if (b.etat === "Discharging" && b.watts) {
+    return `Sur batterie : ${watts(b.watts)} W en ce moment${b.restant ? `, environ ${duree(b.restant)} restantes` : ""}.`;
+  }
+  return ETATS[b.etat] || `Batterie : ${b.etat}.`;
+}
+
+// Ce que donnerait une batterie pleine (ou chargée jusqu'à la limite) au rythme actuel
+function autonomie(b) {
+  const morceaux = [`Batterie pleine : environ ${duree(b.plein)}.`];
+  if (b.a_la_limite) morceaux.push(`Chargée jusqu'à ${b.limite} % : environ ${duree(b.a_la_limite)}.`);
+  if (b.a_la_limite && b.a_la_limite < 300) morceaux.push("Pour une longue journée, « Charger à 100 % » avant de partir.");
+  return morceaux.join(" ");
+}
 
 export async function monter(conteneur, contexte) {
   let e = null;               // état de la machine
@@ -49,8 +68,9 @@ export async function monter(conteneur, contexte) {
       const b = e.energie;
       return [
         h("p", { class: "grand-chiffre", texte: b.niveau === "?" ? "—" : `${b.niveau} %` }),
-        h("p", { class: "intro", texte: b.niveau === "?" ? "Batterie introuvable sur cette machine." : ETATS[b.etat] || `Batterie : ${b.etat}.` }),
+        h("p", { class: "intro", texte: etatBatterie(b) }),
         groupe(
+          b.plein ? rangee("Autonomie à ce rythme", autonomie(b), etiquette(`≈ ${duree(b.plein)}`)) : null,
           rangee("Limite de charge", "80 % préserve la batterie si le PC est souvent branché : bien plus de cycles avant usure.",
             segment({ options: [[60, "60 %"], [80, "80 %"], [100, "100 %"]], valeur: Number(b.limite), nom: "Limite de charge",
               surChange: (v) => agir({ action: "limite_de_charge", limite: v }, `Charge limitée à ${v} %.`) })),
@@ -245,10 +265,23 @@ export async function monter(conteneur, contexte) {
   section = SECTIONS.some(([id]) => id === contexte.suite?.[0]) ? contexte.suite[0] : "energie";
   contenu.replaceChildren(h("p", { class: "vide", texte: "Lecture de l'état du PC…" }));
 
+  // l'état complet lance une douzaine de petits programmes : relu chaque minute (et après chaque
+  // action) ; la batterie, simple lecture de fichiers, toutes les 15 s quand la section Énergie est à l'écran
   const tic = () => { if (document.visibilityState === "visible") relire(); };
-  minuterie = setInterval(tic, 20000);
+  minuterie = setInterval(tic, 60000);
+  const ticBatterie = async () => {
+    if (document.visibilityState !== "visible" || section !== "energie" || !e || enCours) return;
+    try {
+      e.energie = { ...e.energie, ...(await api.lire("/api/systeme/batterie")) };
+      if (!enCours) dessiner();
+    } catch { /* la relecture complète dira ce qui ne va pas */ }
+  };
+  const minuterieBatterie = setInterval(ticBatterie, 15000);
   document.addEventListener("visibilitychange", tic);
   const oublier = contexte.surChangement((quoi) => { if (quoi === "systeme") relire(); });
   await relire();
-  return { aller, demonter() { clearInterval(minuterie); document.removeEventListener("visibilitychange", tic); oublier(); } };
+  return {
+    aller,
+    demonter() { clearInterval(minuterie); clearInterval(minuterieBatterie); document.removeEventListener("visibilitychange", tic); oublier(); },
+  };
 }
