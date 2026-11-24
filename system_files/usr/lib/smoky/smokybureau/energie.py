@@ -117,7 +117,7 @@ class Adaptation:
         present = self.clavier_present()
         if present != self.clavier_branche:
             self.clavier_branche = present
-            self.appliquer_clavier_ecran()
+            self.appliquer_tablette()              # clavier détaché = tablette : clavier à l'écran et rotation
         return False
 
     def appliquer_clavier_ecran(self):
@@ -128,7 +128,9 @@ class Adaptation:
                         "true" if actif else "false")
 
     def appliquer_tablette(self):
-        tablette = bool(self.conf.get("tablet_mode"))
+        """Mode tablette (réglages rapides) ou clavier détaché, comme Windows sur le Z13 : clavier à
+        l'écran tout seul et rotation de l'écran (sauf rotation verrouillée dans Système)."""
+        tablette = bool(self.conf.get("tablet_mode")) or not self.clavier_branche
         self.appliquer_clavier_ecran()
         if tablette and not self.capteur:
             try:
