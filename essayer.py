@@ -37,6 +37,8 @@ attente = float(sys.argv[1]) if len(sys.argv) > 1 else 40
 time.sleep(attente); capture("1-demarrage")
 taper(["q", "i", "d", "e", "ret"]); time.sleep(6)             # « aide » sur un clavier AZERTY
 taper(["semicolon", "e", "semicolon", "o", "i", "r", "e", "ret"]); time.sleep(6)   # « memoire »
+taper(["s", "y", "s", "t", "e", "semicolon", "e", "ret"]); time.sleep(6)            # « systeme »
+taper(["h", "e", "u", "r", "e", "ret"]); time.sleep(6)                                # « heure »
 capture("2-aide")
 qmp("quit")
 qemu.wait(10)

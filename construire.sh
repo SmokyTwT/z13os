@@ -6,7 +6,10 @@ mkdir -p construit/esp/EFI/BOOT
 clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -fshort-wchar -mno-red-zone \
   -fno-stack-protector -mno-stack-arg-probe -fno-math-errno -Wall -Wextra -Werror \
   -c smokyos.c -o construit/smokyos.o
-lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:construit/esp/EFI/BOOT/BOOTX64.EFI construit/smokyos.o
+clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -fshort-wchar -mno-red-zone \
+  -fno-stack-protector -mno-stack-arg-probe -fno-math-errno -Wall -Wextra -Werror \
+  -c noyau.c -o construit/noyau.o
+lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:construit/esp/EFI/BOOT/BOOTX64.EFI construit/smokyos.o construit/noyau.o
 ls -l construit/esp/EFI/BOOT/BOOTX64.EFI
 # Image de clé USB / de machine virtuelle : une partition FAT (EFI) qui contient EFI/BOOT/BOOTX64.EFI
 rm -f construit/smokyos.img

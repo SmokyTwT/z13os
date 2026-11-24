@@ -1,14 +1,18 @@
-/* Smoky OS 100 % maison, version 0.1 — un système d'exploitation écrit de zéro, pour toi.
+/* Smoky OS 100 % maison, version 0.2 — un système d'exploitation écrit de zéro, pour toi.
  *
  * Aucun Linux, aucune bibliothèque : ce fichier, uefi.h (écrit d'après la spécification) et le
  * compilateur. Il démarre directement par le firmware UEFI du PC, dessine lui-même tout ce
  * que tu vois (y compris sa police, faite de traits sur une grille), lit le clavier et tient un
- * petit carnet de commandes. Le firmware ne sert qu'à démarrer, au clavier et à l'heure.
+ * petit carnet de commandes. Le firmware ne sert qu'à démarrer : ensuite Smoky OS le congédie et gère
+ * seul les interruptions, la minuterie, le clavier et l'horloge (noyau.c).
  *
  * Sécurité de ton PC : il n'a AUCUN pilote de disque et n'appelle jamais les fonctions
  * d'écriture du firmware (variables EFI). Il ne peut ni lire ni modifier Windows ou Smoky OS.
  */
 #include "uefi.h"
+#include "noyau.h"
+
+static int noyau_actif;                 /* 1 dès que le firmware est congédié */
 
 int _fltused = 0;              /* exigé par la cible Windows dès qu'on calcule en virgule flottante */
 
@@ -237,7 +241,7 @@ static void dessiner_fond(void) {
 static u32 journal[LIGNES][LARGE];
 static int longueurs[LIGNES], couleurs[LIGNES], nb_lignes;
 static u32 saisie[LARGE];
-static int nb_saisie, azerty = 1;
+static int nb_saisie;
 static float CX, CY, CW, CH;
 
 static void noter(const char *texte, u32 couleur) {
@@ -281,6 +285,10 @@ static const char *MOIS[] = {"janvier", "février", "mars", "avril", "mai", "jui
                              "septembre", "octobre", "novembre", "décembre"};
 static int derniere_minute = -1;
 
+static int lire_heure(EFI_TIME *t) {
+  return noyau_actif ? noyau_heure(t) : !EFI_ERREUR(RT->lire_heure(t, 0));
+}
+
 static int jour_semaine(int a, int m, int j) {             /* Zeller simplifié (0 = dimanche) */
   static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
   if (m < 3) a--;
@@ -304,7 +312,7 @@ static char *fin(char *d) { while (*d) d++; return d; }
 
 static void dessiner_heure(int force) {
   EFI_TIME t;
-  if (EFI_ERREUR(RT->lire_heure(&t, 0))) return;
+  if (!lire_heure(&t)) return;
   if (!force && t.minute == derniere_minute) return;
   derniere_minute = t.minute;
   int x = L - entier(420 * U), y = entier(18 * U), w = entier(400 * U), h = entier(110 * U);
@@ -330,24 +338,23 @@ static int egal(const u32 *a, int n, const char *b) {
   return i == n && !b[i];
 }
 
-static void memoire(char *d) {
-  static EFI_MEMORY_DESCRIPTOR carte[512];
-  UINTN taille = sizeof carte, cle, taille_desc; u32 version;
-  copier(d, "Mémoire vive : ");
-  if (EFI_ERREUR(BS->carte_memoire(&taille, carte, &cle, &taille_desc, &version))) { copier(fin(d), "illisible"); return; }
-  u64 pages = 0;
-  for (UINTN o = 0; o < taille; o += taille_desc) {
-    EFI_MEMORY_DESCRIPTOR *m = (EFI_MEMORY_DESCRIPTOR *)((u8 *)carte + o);
-    if (m->type >= EFI_MEMOIRE_CODE_CHARGEUR && m->type <= EFI_MEMOIRE_LIBRE) pages += m->nb_pages;
-  }
-  u64 mo = pages * 4096 / (1024 * 1024);
-  char n[16];
+static void taille_texte(char *d, u64 octets) {
+  u64 mo = octets / (1024 * 1024);
+  char n[24];
   if (mo >= 1024) {
     nombre_libre(n, mo / 1024); copier(fin(d), n); copier(fin(d), ",");
-    nombre_libre(n, mo % 1024 * 10 / 1024); copier(fin(d), n); copier(fin(d), " Go utilisables");
+    nombre_libre(n, mo % 1024 * 10 / 1024); copier(fin(d), n); copier(fin(d), " Go");
   } else {
-    nombre_libre(n, mo); copier(fin(d), n); copier(fin(d), " Mo utilisables");
+    nombre_libre(n, mo); copier(fin(d), n); copier(fin(d), " Mo");
   }
+}
+
+static void memoire(char *d) {
+  copier(d, "Mémoire vive : ");
+  taille_texte(d, noyau_memoire_totale());
+  copier(fin(d), ", dont ");
+  taille_texte(d, noyau_memoire_libre());
+  copier(fin(d), " libres");
 }
 
 static int executer(void) {                                 /* renvoie 1 pour quitter */
@@ -370,13 +377,13 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     noter("heure       l'heure et la date", 0xb6b7c2);
     noter("memoire     la mémoire vive du PC", 0xb6b7c2);
     noter("ecran       la définition de l'écran", 0xb6b7c2);
-    noter("clavier     AZERTY ou QWERTY", 0xb6b7c2);
+    noter("systeme     ce que Smoky OS gère lui-même", 0xb6b7c2);
     noter("effacer     vide le carnet", 0xb6b7c2);
     noter("apropos     ce qu'est cet OS", 0xb6b7c2);
-    noter("redemarrer, eteindre, quitter (retour au firmware)", 0xb6b7c2);
+    noter("redemarrer, eteindre", 0xb6b7c2);
   } else if (egal(s, n, "heure")) {
     EFI_TIME t; char d[96], x[8];
-    if (!EFI_ERREUR(RT->lire_heure(&t, 0))) {
+    if (lire_heure(&t)) {
       copier(d, "Il est "); nombre(x, t.heure, 2); copier(fin(d), x); copier(fin(d), " h ");
       nombre(x, t.minute, 2); copier(fin(d), x); copier(fin(d), ", ");
       copier(fin(d), JOURS[jour_semaine(t.annee, t.mois, t.jour)]); copier(fin(d), " ");
@@ -391,36 +398,32 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     copier(d, "Écran : "); nombre(x, L, L >= 1000 ? 4 : 3); copier(fin(d), x); copier(fin(d), " × ");
     nombre(x, H, H >= 1000 ? 4 : 3); copier(fin(d), x); copier(fin(d), BVR ? " (BVR)" : " (RVB)");
     noter(d, 0xf3f3f6);
-  } else if (egal(s, n, "clavier")) {
-    azerty = !azerty;
-    noter(azerty ? "Clavier : AZERTY (français)" : "Clavier : QWERTY", 0xf3f3f6);
+  } else if (egal(s, n, "systeme") || egal(s, n, "système")) {
+    char d[120], x[24];
+    noter("Le firmware est congédié : Smoky OS gère seul", 0xf3f3f6);
+    noter("interruptions, minuterie, clavier AZERTY, horloge et mémoire.", 0xb6b7c2);
+    u64 secondes = noyau_tics() / TICS_PAR_SECONDE;
+    copier(d, "Allumé depuis "); nombre_libre(x, secondes / 60); copier(fin(d), x); copier(fin(d), " min ");
+    nombre_libre(x, secondes % 60); copier(fin(d), x); copier(fin(d), " s");
+    noter(d, 0xb6b7c2);
+    copier(d, "Interruptions : minuterie "); nombre_libre(x, noyau_interruptions(0)); copier(fin(d), x);
+    copier(fin(d), ", clavier "); nombre_libre(x, noyau_interruptions(1)); copier(fin(d), x);
+    noter(d, 0xb6b7c2);
   } else if (egal(s, n, "effacer")) {
     nb_lignes = 0;
   } else if (egal(s, n, "apropos") || egal(s, n, "à-propos")) {
-    noter("Smoky OS 100 % maison 0.1 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
-    noter("Démarrage UEFI, affichage, police en traits, clavier, carnet.", 0xb6b7c2);
+    noter("Smoky OS 100 % maison 0.2 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
+    noter("Il démarre par le firmware, puis se débrouille seul.", 0xb6b7c2);
     noter("Aucun pilote de disque : il ne peut pas toucher à tes systèmes.", 0xb6b7c2);
   } else if (egal(s, n, "redemarrer") || egal(s, n, "redémarrer")) {
-    RT->redemarrer(EFI_RESET_FROID, EFI_SUCCESS, 0, 0);
+    noyau_redemarrer();
   } else if (egal(s, n, "eteindre") || egal(s, n, "éteindre")) {
     RT->redemarrer(EFI_RESET_ARRET, EFI_SUCCESS, 0, 0);
-  } else if (egal(s, n, "quitter")) {
-    quitter = 1;
   } else {
     noter("Commande inconnue. Tape « aide ».", 0xff8f85);
   }
   nb_saisie = 0;
   return quitter;
-}
-
-/* Le firmware lit le clavier en QWERTY : on rend les touches de ton clavier AZERTY */
-static u32 clavier_fr(u32 c) {
-  static const char us[] = "qwaz;:m,<.>/?1234567890!@#$%^&*()QWAZM";
-  static const u32 fr[] = {'a', 'z', 'q', 'w', 'm', 'M', ',', ';', '.', ':', '/', '!', 0xa7,
-                           '&', 0xe9, '"', '\'', '(', '-', 0xe8, '_', 0xe7, 0xe0,
-                           '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'A', 'Z', 'Q', 'W', '?'};
-  for (int i = 0; us[i]; i++) if ((u32)(u8)us[i] == c) return fr[i];
-  return c;
 }
 
 /* --- Démarrage ---------------------------------------------------------------------------------- */
@@ -458,7 +461,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
     return 1;
   dessiner_fond();
   float x = ecrire(44 * U, 74 * U, 44 * U, .55f, 0xff8f85, "smoky os");
-  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.1");
+  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.2");
   ecrire(44 * U, 108 * U, 17 * U, .4f, 0xb6b7c2, "100 % maison, écrit de zéro");
   ecrire(44 * U, H - 40 * U, 15 * U, .38f, 0x7c7c86,
          "Aucun pilote de disque : ton Windows et ton Smoky OS de tous les jours ne peuvent pas être touchés.");
@@ -471,24 +474,58 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
   dessiner_carnet();
   dessiner_heure(1);
 
-  EFI_EVENT tic;                                          /* un réveil par seconde, pas plus */
-  BS->creer_evenement(EVT_TIMER, 0, 0, 0, &tic);
-  BS->minuterie(tic, MINUTERIE_PERIODIQUE, 10000000);
-  EFI_EVENT attente[2] = {st->entree->attente_touche, tic};
+  /* congé au firmware : dernière carte de la mémoire, puis ExitBootServices (sans rien afficher
+   * ni allouer entre les deux, sinon la carte change et il faut recommencer) */
+  static EFI_MEMORY_DESCRIPTOR carte[768];
+  UINTN taille = 0, cle = 0, taille_desc = 0; u32 version;
+  for (int essai = 0; essai < 8 && !noyau_actif; essai++) {
+    taille = sizeof carte;
+    if (EFI_ERREUR(BS->carte_memoire(&taille, carte, &cle, &taille_desc, &version))) break;
+    if (!EFI_ERREUR(BS->sortir_services(image_os, cle))) noyau_actif = 1;
+  }
+  if (!noyau_actif) {
+    noter("Le firmware n'a pas voulu laisser la main.", 0xff8f85);
+    dessiner_carnet();
+    for (;;) __asm__ volatile("hlt");
+  }
+  noyau_demarrer(carte, taille, taille_desc);
+  noter("Firmware congédié : Smoky OS tourne seul. Tape « systeme ».", 0xb6b7c2);
+  dessiner_carnet();
+  u64 derniere_seconde = 0;
   for (;;) {
-    UINTN quoi;
-    BS->attendre(2, attente, &quoi);                        /* le processeur dort entre deux événements */
-    if (quoi == 1) { dessiner_heure(0); continue; }
-    EFI_INPUT_KEY k;
-    int change = 0;
-    while (!EFI_ERREUR(st->entree->lire_touche(st->entree, &k))) {
-      u32 c = k.caractere;
-      if (c == '\r') { if (executer()) return EFI_SUCCESS; }
-      else if (c == 8) { if (nb_saisie) nb_saisie--; }
-      else if (k.code_touche == 0x17) nb_saisie = 0;      /* Échap : efface la ligne */
-      else if (c >= 0x20 && nb_saisie < 90) saisie[nb_saisie++] = azerty ? clavier_fr(c) : c;
+    noyau_attendre();                                       /* le processeur dort entre deux interruptions */
+    u64 seconde = noyau_tics() / TICS_PAR_SECONDE;
+    if (seconde != derniere_seconde) { derniere_seconde = seconde; dessiner_heure(0); }
+    u32 c; int genre, change = 0;
+    while (noyau_touche(&c, &genre)) {
+      if (genre == TOUCHE_ENTREE) executer();
+      else if (genre == TOUCHE_EFFACER) { if (nb_saisie) nb_saisie--; }
+      else if (genre == TOUCHE_ECHAP) nb_saisie = 0;
+      else if (nb_saisie < 90) saisie[nb_saisie++] = c;
       change = 1;
     }
     if (change) dessiner_carnet();
   }
+}
+
+/* --- Écran d'erreur : le processeur a signalé une faute (appelé par le noyau, sans retour) --------- */
+void noyau_panique(int vecteur, u64 code_erreur, u64 adresse) {
+  static const char *NOMS[32] = {"division par zéro", "pas à pas", "NMI", "point d'arrêt", "dépassement",
+    "hors limites", "instruction inconnue", "coprocesseur absent", "double faute", "", "segment d'état",
+    "segment absent", "pile", "protection générale", "défaut de page", "", "calcul flottant",
+    "alignement", "vérification machine", "calcul SIMD", "virtualisation", "contrôle de flux"};
+  char d[160], x[24];
+  float w = 900 * U, h = 260 * U, bx = (L - w) / 2, by = (H - h) / 2;
+  bloc(bx, by, w, h, 20 * U, 0xff8f85, 1);
+  bloc(bx + 2, by + 2, w - 4, h - 4, 19 * U, 0x1a0f0e, 1);
+  ecrire(bx + 40 * U, by + 64 * U, 26 * U, .5f, 0xff8f85, "Le processeur a signalé une erreur");
+  copier(d, "Faute n° "); nombre_libre(x, (u64)vecteur); copier(fin(d), x);
+  if (vecteur >= 0 && vecteur < 32 && NOMS[vecteur] && NOMS[vecteur][0]) { copier(fin(d), " : "); copier(fin(d), NOMS[vecteur]); }
+  copier(fin(d), " (code "); nombre_libre(x, code_erreur); copier(fin(d), x); copier(fin(d), ")");
+  ecrire(bx + 40 * U, by + 120 * U, 19 * U, .4f, 0xf3f3f6, d);
+  copier(d, "Instruction à l'adresse "); nombre_libre(x, adresse); copier(fin(d), x);
+  ecrire(bx + 40 * U, by + 160 * U, 17 * U, .38f, 0xb6b7c2, d);
+  ecrire(bx + 40 * U, by + 210 * U, 17 * U, .38f, 0xb6b7c2, "Smoky OS s'est arrêté. Rien n'a été écrit sur ton disque.");
+  montrer((int)bx - 2, (int)by - 2, (int)w + 4, (int)h + 4);
+  for (;;) __asm__ volatile("cli\n hlt");
 }

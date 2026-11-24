@@ -7,21 +7,26 @@ compilateur. Son nom de travail était « Braise ».
 Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci est dans la branche
 `os-maison`.
 
-## Ce qu'il sait faire (version 0.1)
+## Ce qu'il sait faire (version 0.2)
 
-- Il démarre directement par le firmware UEFI du PC, comme un programme `BOOTX64.EFI`.
+- Il démarre directement par le firmware UEFI du PC, comme un programme `BOOTX64.EFI`, puis il
+  **congédie le firmware** (ExitBootServices). À partir de là, il gère seul (`noyau.c`) :
+  - les segments et la table des interruptions ;
+  - le contrôleur d'interruptions et la minuterie, à 50 réveils par seconde ;
+  - le clavier PS/2 en AZERTY, avec majuscules, Alt Gr et accents circonflexe et tréma ;
+  - l'horloge du PC (puce CMOS) et la mémoire libre ;
+  - un écran d'erreur si le processeur signale une faute.
 - Il dessine tout lui-même : le fond aux braises, les cadres, et sa police, faite de traits sur une
   grille. Celle-ci s'agrandit sans perte et a les accents français.
-- Il lit le clavier, en AZERTY par défaut, avec la commande `clavier` pour passer en QWERTY.
-- Il tient un carnet de commandes : `aide`, `heure`, `memoire`, `ecran`, `effacer`, `apropos`,
-  `redemarrer`, `eteindre` et `quitter`.
-- Entre deux touches, le processeur dort : un seul réveil par seconde, pour l'heure.
+- Il tient un carnet de commandes : `aide`, `heure`, `memoire`, `ecran`, `systeme`, `effacer`,
+  `apropos`, `redemarrer` (par le contrôleur du clavier, sans le firmware) et `eteindre`.
+- Entre deux interruptions, le processeur dort (`hlt`).
 
 ## Sécurité de ton PC
 
 Il n'a **aucun pilote de disque**. Il n'appelle jamais les fonctions d'écriture du firmware. Il ne
 peut donc ni lire ni modifier ton Windows, ton Smoky OS de tous les jours, ou un réglage du PC. Le
-firmware lui sert uniquement à démarrer, à lire le clavier et à donner l'heure.
+firmware lui sert uniquement à démarrer et, pour `eteindre`, à couper le courant.
 
 ## Construire et essayer
 
@@ -37,6 +42,6 @@ qu'il n'est pas signé. On le fera ensemble, plus tard, avec ton accord.
 
 | Version | Contenu |
 |---|---|
-| 0.2 | Il prend la main : sa propre mémoire, ses interruptions et son horloge, sans le firmware. |
-| 0.3 | Clavier USB et écran tactile du Z13, avec ses propres pilotes. |
+| 0.2 | Fait : il prend la main (sa mémoire, ses interruptions, sa minuterie, son clavier, son horloge). |
+| 0.3 | Clavier USB (contrôleur xHCI) et APIC du Z13 : indispensables pour le vrai PC, qui n'a pas de PS/2. |
 | 0.4 | Fenêtres et petites applis : notes, calculatrice, horloge. |

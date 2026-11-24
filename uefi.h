@@ -84,7 +84,8 @@ typedef struct {
   void *signaler, *fermer_evenement, *verifier_evenement;
   void *installer_protocole, *reinstaller_protocole, *desinstaller_protocole, *gerer_protocole, *reserve;
   void *notification_protocole, *trouver_poignee, *trouver_chemin, *installer_table;
-  void *charger_image, *lancer_image, *sortir, *decharger_image, *sortir_services;
+  void *charger_image, *lancer_image, *sortir, *decharger_image;
+  EFI_STATUS (*sortir_services)(EFI_HANDLE image, UINTN cle_carte);
   void *compteur_suivant;
   EFI_STATUS (*attendre_us)(UINTN microsecondes);
   EFI_STATUS (*chien_de_garde)(UINTN delai, u64 code, UINTN taille, CHAR16 *donnees);
