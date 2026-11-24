@@ -10,6 +10,7 @@ Protocole greetd : messages JSON précédés de leur longueur (entier 32 bits, o
 import os
 import pwd
 import subprocess
+import syslog
 import threading
 import time
 
@@ -89,7 +90,10 @@ class Connexion(Gtk.Application):
         w.fullscreen()
         self.mdp.grab_focus()
         self.tic()
-        print("écran de connexion Smoky affiché", flush=True)     # repère de l'essai de démarrage
+        # repère pour l'essai de démarrage : la sortie de l'écran de connexion ne va pas au journal,
+        # on y écrit donc directement (syslog → journald)
+        syslog.openlog("smoky-connexion")
+        syslog.syslog(syslog.LOG_INFO, "écran de connexion Smoky affiché")
 
     def tic(self):
         t = time.localtime()

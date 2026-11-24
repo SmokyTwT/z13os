@@ -22,7 +22,7 @@ ATTENTE="${SMOKY_ATTENTE_DEMARRAGE:-600}"        # secondes au plus pour atteind
 ECHEC='Kernel panic|emergency mode|Reached target emergency|dracut-emergency|Failed to mount /sysroot|ostree-prepare-root.*(failed|error)'
 # écran de connexion : GDM (images d'avant la refonte) ou greetd + écran de connexion Smoky
 GDM_KO='(gdm|greetd)\.service: (Failed|Main process exited)|Failed to start (gdm|greetd)\.service'
-AFFICHE='Started gdm\.service|écran de connexion Smoky affiché'
+AFFICHE='Started gdm\.service|écran de connexion Smoky affiché|smoky-mesure\[[0-9]+\]: +[0-9]+ /usr/bin/python3 -I /usr/libexec/smokyos/smoky-connexion\.py'
 QEMU=""
 
 mkdir -p "$T"
