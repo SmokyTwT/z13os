@@ -116,9 +116,9 @@ for f in /usr/bin/smoky-notes /usr/bin/smoky-center /usr/bin/smoky-mail /usr/bin
   verifie "$f exécutable" test -x "$f"
 done
 # /opt (= /var/opt) n'existe qu'une fois le système démarré : ici on passe par le dossier réel
-verifie "Google Chrome se lance (version)" /usr/lib/google/chrome/google-chrome --version
-verifie "Chrome déplacé dans /usr/lib/google" test -x /usr/lib/google/chrome/chrome
-verifie "lien /opt/google recréé au démarrage" grep -q '^L /var/opt/google - - - - /usr/lib/google$' /usr/lib/tmpfiles.d/z13os-chrome.conf
+verifie "Google Chrome se lance (version)" google-chrome-stable --version
+# fedora-bootc : /opt est un vrai dossier de l'image (Silverblue le renvoyait vers /var/opt)
+verifie "Chrome dans l'image (/opt/google)" bash -c 'test -x /opt/google/chrome/chrome && [ ! -L /opt ]'
 verifie "règles Chrome lisibles" python3 -c 'import json; json.load(open("/etc/opt/chrome/policies/managed/smokyos.json"))'
 verifie "Chrome réglé pour Wayland" grep -q '^Exec=/usr/bin/google-chrome-stable --ozone-platform-hint=auto' /usr/share/applications/google-chrome.desktop
 for a in netflix disney prime tf1 m6 drive spotify whatsapp claude moodle; do
@@ -166,7 +166,7 @@ verifie "agent polkit présent" test -x /usr/libexec/polkit-mate-authentication-
 verifie "clavier à l'écran présent" bash -c 'command -v stevia || command -v phosh-osk-stevia'
 verifie "style du bureau" test -s /usr/share/smoky-bureau/bureau.css
 verifie "police des titres (Comfortaa)" bash -c 'fc-list | grep -qi comfortaa'
-verifie "asusd ne change plus le profil d'énergie (réglage forcé à chaque démarrage)" grep -q 'change_platform_profile_on_battery' /usr/lib/systemd/system/smoky-asusd-profils.service
+verifie "asusd ne change plus le profil d'énergie (réglage forcé à chaque démarrage)" grep -q 'change_platform_profile_on_battery' /usr/libexec/smokyos/smoky-asusd-profils.sh
 unites_session=(/usr/lib/systemd/user/smoky-bureau*.service /usr/lib/systemd/user/smoky-bureau-session.target \
                 /usr/lib/systemd/user/smoky-veille.service /usr/lib/systemd/user/smoky-verrou.service \
                 /usr/lib/systemd/user/smoky-nuit.service /usr/lib/systemd/user/smoky-autorisation.service \
@@ -236,7 +236,7 @@ verifie "serveur présent" test -f /usr/lib/smoky/lancer.py
 verifie "page présente" test -f /usr/share/smoky/index.html
 verifie "raccourci dans la grille des applis" grep -q '^Exec=/usr/bin/smoky$' /usr/share/applications/smoky.desktop
 verifie "icône de l'appli" test -f /usr/share/icons/hicolor/scalable/apps/smoky-appli.svg
-verifie "Smoky dans le dock par défaut" bash -c "grep -rqs \"'smoky.desktop'\" /usr/share/glib-2.0/schemas/"
+verifie "Smoky dans le dock par défaut" grep -q '"smoky.desktop"' /usr/share/smoky-bureau/dock.json
 verifie "modules Python précompilés (ouverture plus rapide)" bash -c 'n=$(ls /usr/lib/smoky/smoky/*.py | wc -l); p=$(ls /usr/lib/smoky/smoky/__pycache__/*.pyc 2>/dev/null | wc -l); [ "$p" -ge "$n" ]'
 verifie "le serveur démarre avec le Python de l'image" python3 -I /usr/lib/smoky/lancer.py --help
 if SMOKY_RACINE=/ HOME=/tmp/verif-home python3 /tests/test_smoky.py >/tmp/verif-smoky.log 2>&1; then

@@ -1238,9 +1238,10 @@ class TestSystemeSansOutils(unittest.TestCase):
         self.assertEqual(set(etat["carte_graphique"]["mux"]) - {"mux", "interface", "nvidia_coupee", "intel_auto", "windows_ultimate",
                                                                 "essais", "probleme", "dernier_basculement"}, set())
         if os.environ.get("SMOKY_RACINE") == "/":
-            # dans l'image : Python du système, GSettings et les schémas GNOME sont là
-            self.assertGreaterEqual(len(etat["gnome"]), 15, "réglages GNOME lisibles dans l'image")
-            for nom in ("night_light", "text_scale", "idle_delay", "animations", "sleep_ac"):
+            # dans l'image : Python du système et GSettings. Depuis le bureau Smoky (refonte), seuls les
+            # schémas lus par les applis GTK restent (plus ceux de GNOME Shell ni de ses démons)
+            self.assertGreaterEqual(len(etat["gnome"]), 10, "réglages lisibles dans l'image")
+            for nom in ("text_scale", "idle_delay", "animations"):
                 self.assertIn(nom, etat["gnome"])
             self.assertIn("intel_auto", etat["carte_graphique"]["mux"])
 

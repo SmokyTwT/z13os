@@ -10,7 +10,7 @@ ConditionPathExists=/etc/asusd/asusd.ron
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/sed -i -E 's/^([[:space:]]*)(change_platform_profile_on_ac|change_platform_profile_on_battery|platform_profile_linked_epp):[[:space:]]*true,/\1\2: false,/' /etc/asusd/asusd.ron
+ExecStart=/usr/libexec/smokyos/smoky-asusd-profils.sh
 
 [Install]
 WantedBy=multi-user.target
