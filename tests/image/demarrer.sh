@@ -68,7 +68,8 @@ if [ "$n" = 2 ] && [ -e /etc/smokyos/essai-connexion ]; then
   echo "== bouton Windows de l'écran de connexion"
   for _ in $(seq 45); do journalctl -b -t smoky-connexion -o cat 2>/dev/null | grep -q '^bouton Windows : ' && break; sleep 2; done
   ligne=$(journalctl -b -t smoky-connexion -o cat 2>/dev/null | grep '^bouton Windows : ' | tail -1)
-  echo "${ligne:-aucune réponse de l'écran de connexion}"
+  [ -n "$ligne" ] || ligne="aucune réponse de l'écran de connexion"   # (apostrophe hors de ${…:-…} : bash l'y prend pour un guillemet)
+  echo "$ligne"
   journalctl -b -u smoky-windows-connexion.service -o cat --no-pager 2>&1 | tail -4
   ls -laZ /var/lib/greetd 2>&1 | head -5
   journalctl -b -o cat --no-pager 2>/dev/null | grep -E 'avc: +denied' | grep -E 'xdm_t|greet' | tail -5

@@ -127,6 +127,16 @@ if sortie=$(python3 tests/test_notes.py 2>&1); then
 else
   echec "tests des notes"; printf '%s\n' "$sortie" | tail -40
 fi
+# script lancé DANS la machine virtuelle de l'essai de démarrage : une faute de syntaxe y
+# passerait inaperçue ici (ce n'est qu'un texte pour le script qui l'envoie)
+if sortie=$(python3 - <<'PY' 2>&1
+import subprocess, sys
+s = open("tests/image/demarrer.sh", encoding="utf-8").read()
+a = s.index("read -r -d '' MESURE_SCRIPT <<'EOS'"); a = s.index("\n", a) + 1
+r = subprocess.run(["bash", "-n"], input=s[a:s.index("\nEOS\n", a)] + "\n", text=True, capture_output=True)
+sys.stderr.write(r.stderr); sys.exit(r.returncode)
+PY
+); then ok "script des mesures en machine virtuelle : syntaxe"; else echec "script des mesures en machine virtuelle"; printf '%s\n' "$sortie" | head -5; fi
 # réglages repris de GNOME (bureau Smoky) : le schéma doit se compiler sans faute
 if command -v glib-compile-schemas >/dev/null; then
   if sortie=$(glib-compile-schemas --strict --dry-run system_files/usr/share/glib-2.0/schemas 2>&1); then
