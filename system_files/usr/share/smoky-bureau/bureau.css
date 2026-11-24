@@ -190,3 +190,9 @@ window.smoky-barre {
 .reseau.actif { color: #f3f3f6; font-weight: 700; }
 .signal { font-family: monospace; color: #7c7c86; }
 .wifi-etat { color: #7c7c86; font-size: 12px; }
+
+/* --- réglages rapides : historique des notifications ------------------------------------------ */
+.section { font-family: "Comfortaa", "Adwaita Sans", sans-serif; font-weight: 700; font-size: 12px; color: #b6b7c2; }
+.lien.petit { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.lien.petit:checked { background: #e4e4ea; color: #0e0e10; }
+.historique { color: #b6b7c2; font-size: 12px; }

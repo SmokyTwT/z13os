@@ -267,6 +267,18 @@ class TestWifi(unittest.TestCase):
         self.assertIn("--ask", args)
 
 
+class TestAlertesBatterie(unittest.TestCase):
+    def test_une_alerte_par_seuil_et_par_decharge(self):
+        deja = set()
+        vues = []
+        for niveau in (40, 16, 15, 14, 12, 7, 6, 5):
+            alerte, deja = commun.alerte_batterie(niveau, False, deja)
+            vues.append(alerte)
+        self.assertEqual(vues, [None, None, "faible", None, None, "critique", None, None])
+        self.assertEqual(commun.alerte_batterie(5, True, deja), (None, set()), "en charge : on repart de zéro")
+        self.assertEqual(commun.alerte_batterie(6, False, set())[0], "critique", "débranché à 6 % : alerte critique directe")
+
+
 class TestBatterie(unittest.TestCase):
     def test_temps_restant_lisse(self):
         with tempfile.TemporaryDirectory() as d:

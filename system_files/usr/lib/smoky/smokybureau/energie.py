@@ -26,6 +26,7 @@ CHARGE_UNE_FOIS = commun.CONFIG / "charge-once"
 VPN = "Smoky VPN"
 PPD = ("org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles")
 PLAFOND_LUMIERE = 50
+PORTAIL_ESSAI = "http://fedoraproject.org/static/hotspot.txt"   # la page de connexion s'ouvre à sa place
 
 
 def ok(*args):
@@ -51,8 +52,47 @@ class Adaptation:
                                       "StateChanged", "/org/freedesktop/NetworkManager", None,
                                       Gio.DBusSignalFlags.NONE, self.reseau_change)
         self.capteur = False
+        self.alertes = set()
+        self.batterie_etat = commun.Batterie()
         self.appliquer_tablette()
         self.verifier()
+        GLib.timeout_add_seconds(60, self.surveiller_niveau)
+        self.systeme.signal_subscribe("org.freedesktop.NetworkManager", "org.freedesktop.DBus.Properties",
+                                      "PropertiesChanged", "/org/freedesktop/NetworkManager", None,
+                                      Gio.DBusSignalFlags.NONE, self.connectivite)
+        self.portail_signale = False
+
+    # --- batterie faible : prévenir avant qu'il ne soit trop tard ---------------------------------
+    def surveiller_niveau(self):
+        e = self.batterie_etat.etat()
+        if e:
+            alerte, self.alertes = commun.alerte_batterie(e["niveau"], e["statut"] != "Discharging", self.alertes)
+            reste = f" Environ {commun.duree(e['minutes'])} restantes." if e.get("minutes") else ""
+            if alerte == "faible":
+                commun.commande("notify-send", "-a", "Smoky OS", "-i", "battery-caution", "Batterie faible",
+                                f"{e['niveau']} %.{reste} Branche le chargeur bientôt.")
+            elif alerte == "critique":
+                commun.commande("notify-send", "-a", "Smoky OS", "-u", "critical", "-i", "battery-empty",
+                                "Batterie presque vide", f"{e['niveau']} %.{reste} Enregistre ton travail et branche le chargeur.")
+        return True
+
+    # --- Wi-Fi d'hôtel ou de gare : page de connexion à valider ------------------------------------
+    def connectivite(self, conn, expediteur, chemin, interface, signal, params):
+        changes = params.unpack()[1]
+        if "Connectivity" not in changes:
+            return
+        if changes["Connectivity"] == 2 and not self.portail_signale:         # 2 = portail captif
+            self.portail_signale = True
+            threading.Thread(target=self.proposer_portail, daemon=True).start()
+        elif changes["Connectivity"] == 4:                                     # 4 = internet complet
+            self.portail_signale = False
+
+    def proposer_portail(self):
+        reponse = commun.commande("notify-send", "-a", "Smoky OS", "-i", "network-wireless", "-t", "15000",
+                                  "-A", "ouvrir=Ouvrir la page", "Wi-Fi à valider",
+                                  "Ce réseau demande d'accepter ses conditions avant d'aller sur internet.", delai=20)
+        if reponse.strip() == "ouvrir":
+            subprocess.Popen(["xdg-open", PORTAIL_ESSAI])
 
     # --- mode tablette : clavier à l'écran (Stevia) et rotation de l'écran ----------------------
     ROTATIONS = {"normal": "normal", "left-up": "90", "right-up": "270", "bottom-up": "180"}

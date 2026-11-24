@@ -142,6 +142,19 @@ class Batterie:
                 "limite": nombre("charge_control_end_threshold")}
 
 
+def alerte_batterie(niveau, en_charge, deja):
+    """Quelle alerte donner ? (None, 'faible' à 15 %, 'critique' à 7 %), une seule fois par décharge.
+    `deja` = ensemble des alertes déjà données ; renvoie (alerte, nouvel ensemble)."""
+    if en_charge or niveau is None:
+        return None, set()
+    for nom, seuil in (("critique", 7), ("faible", 15)):
+        if niveau <= seuil:
+            if nom in deja:
+                return None, deja
+            return nom, deja | {nom, "faible"}
+    return None, deja
+
+
 def duree(minutes):
     if minutes is None:
         return ""

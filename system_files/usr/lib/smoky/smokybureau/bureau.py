@@ -135,6 +135,8 @@ class Bureau(Gtk.Application):
         self.prochain_notif = 1
         self.connexion_dbus = None
         self.panneau_confirmer = None
+        self.historique = []                  # dernières notifications (montrées dans les réglages rapides)
+        self.ne_pas_deranger = False
 
     # --- démarrage ---------------------------------------------------------------------
     def do_activate(self):
@@ -536,7 +538,7 @@ class Bureau(Gtk.Application):
         liens.append(b_wifi)
         liens.append(b_bt)
         p.append(liens)
-        self.zone_wifi = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.NONE)
+        self.zone_wifi = Gtk.Box(visible=False)
         boite_wifi = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.etat_wifi = Gtk.Label(css_classes=["wifi-etat"], xalign=0)
         boite_wifi.append(self.etat_wifi)
@@ -553,7 +555,8 @@ class Bureau(Gtk.Application):
         self.ligne_mdp.append(self.mdp_wifi)
         self.ligne_mdp.append(ok)
         boite_wifi.append(self.ligne_mdp)
-        self.zone_wifi.set_child(boite_wifi)
+        boite_wifi.set_hexpand(True)
+        self.zone_wifi.append(boite_wifi)
         p.append(self.zone_wifi)
         self.reseau_choisi = None
         actions = Gtk.Box(css_classes=["actions"], homogeneous=True, spacing=6)
@@ -573,6 +576,17 @@ class Bureau(Gtk.Application):
             b.connect("clicked", lambda _b, a=action, c=confirmer, l=lbl, t=texte: self.action_panneau(a, c, l, t))
             actions.append(b)
         p.append(actions)
+        entete = Gtk.Box(spacing=6)
+        entete.append(Gtk.Label(label="Notifications", css_classes=["section"], hexpand=True, xalign=0))
+        self.bouton_silence = Gtk.ToggleButton(label="Ne pas déranger", css_classes=["lien", "petit"])
+        self.bouton_silence.connect("toggled", lambda b: setattr(self, "ne_pas_deranger", b.get_active()))
+        effacer = Gtk.Button(label="Effacer", css_classes=["lien", "petit"])
+        effacer.connect("clicked", lambda *a: (self.historique.clear(), self.remplir_historique()))
+        entete.append(self.bouton_silence)
+        entete.append(effacer)
+        p.append(entete)
+        self.liste_historique = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        p.append(self.liste_historique)
         fond.add_overlay(p)
         w.set_child(fond)
         touches = Gtk.EventControllerKey()
@@ -646,8 +660,22 @@ class Bureau(Gtk.Application):
         self.poser(self.bascule_bluetooth, "true" in commun.commande(
             "busctl", "get-property", "org.bluez", "/org/bluez/hci0", "org.bluez.Adapter1", "Powered", delai=3))
         self.poser(self.bascule_nuit, commun.commande("systemctl", "--user", "is-active", "smoky-nuit.service").strip() == "active")
-        self.zone_wifi.set_reveal_child(False)
+        self.zone_wifi.set_visible(False)
+        self.remplir_historique()
         self.panneau.present()
+
+    def remplir_historique(self):
+        while (enfant := self.liste_historique.get_first_child()):
+            self.liste_historique.remove(enfant)
+        if not self.historique:
+            self.liste_historique.append(Gtk.Label(label="Rien de nouveau.", css_classes=["wifi-etat"], xalign=0))
+        for n in self.historique[:5]:
+            ligne = Gtk.Box(spacing=8, css_classes=["historique"])
+            ligne.append(Gtk.Label(label=n["heure"], css_classes=["wifi-etat"]))
+            texte = n["titre"] + (" — " + n["corps"] if n["corps"] else "")
+            ligne.append(Gtk.Label(label=texte, xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END,
+                                   max_width_chars=42))
+            self.liste_historique.append(ligne)
 
     def action_panneau(self, action, confirmer, etiquette, texte):
         if confirmer and self.panneau_confirmer is not etiquette:
@@ -715,8 +743,8 @@ class Bureau(Gtk.Application):
 
     # --- Wi-Fi : liste des réseaux, connexion (le travail de nmcli se fait hors de l'affichage) --------
     def ouvrir_wifi(self):
-        visible = not self.zone_wifi.get_reveal_child()
-        self.zone_wifi.set_reveal_child(visible)
+        visible = not self.zone_wifi.get_visible()
+        self.zone_wifi.set_visible(visible)
         if visible:
             self.etat_wifi.set_label("Recherche des réseaux…")
             self.ligne_mdp.set_visible(False)
@@ -840,6 +868,12 @@ class Bureau(Gtk.Application):
         nid = remplace if remplace in self.notifs else self.prochain_notif
         if nid == self.prochain_notif:
             self.prochain_notif += 1
+        t = time.localtime()
+        self.historique.insert(0, {"heure": f"{t.tm_hour:02d}:{t.tm_min:02d}", "titre": titre or appli_nom,
+                                   "corps": self.texte_simple(corps or "").replace("\n", " ")})
+        del self.historique[30:]
+        if self.ne_pas_deranger and indices.get("urgency") != 2:
+            return nid                         # rangée dans l'historique, sans bulle
         self.fermer_notif(nid, raison=None)
         carte = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=["notif"])
         if indices.get("urgency") == 2:
