@@ -5,7 +5,8 @@ import json, os, shutil, socket, subprocess, sys, time
 BRANCHEMENT = "--branchement" in sys.argv          # clavier branché seulement après le démarrage
 SANS_PIT = "--sans-pit" in sys.argv                # comme un PC récent dont le firmware arrête le PIT
 HUBS = 2 if "--hubs" in sys.argv else 1 if "--hub" in sys.argv else 0   # clavier derrière 1 ou 2 hubs
-sys.argv = [a for a in sys.argv if a not in ("--branchement", "--sans-pit", "--hub", "--hubs")]
+TABLETTE = "--tablette" in sys.argv             # pointeur absolu (tablette) au lieu d'une souris
+sys.argv = [a for a in sys.argv if a not in ("--branchement", "--sans-pit", "--hub", "--hubs", "--tablette")]
 # où brancher le clavier : port 2 du contrôleur, ou port 3 d'un hub (lui-même sur le port 1 d'un autre hub)
 CHEMIN = "2" if not HUBS else "2.3" if HUBS == 1 else "2.1.3"
 CONCENTRATEURS = [] if not HUBS else ["-device", "usb-hub,bus=xhci.0,port=2"] + (
@@ -23,7 +24,7 @@ qemu = subprocess.Popen([
     "-drive", f"if=pflash,format=raw,file={T}/vars.fd",
     # démarrage depuis une clé USB virtuelle (copie jetable : l'image reste intacte)
     "-device", "qemu-xhci,id=xhci", "-drive", f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img",
-    "-device", "usb-storage,bus=xhci.0,port=1,drive=cle", "-device", "usb-mouse,id=souris,bus=xhci.0,port=3",
+    "-device", "usb-storage,bus=xhci.0,port=1,drive=cle", "-device", ("usb-tablet" if TABLETTE else "usb-mouse") + ",id=souris,bus=xhci.0,port=3",
     *CONCENTRATEURS,
     *([] if BRANCHEMENT else ["-device", f"usb-kbd,id=clavier-usb,bus=xhci.0,port={CHEMIN}"]),
     "-device", "virtio-vga", "-qmp", f"unix:{T}/qmp.sock,server,nowait", "-serial", f"file:{T}/serie.txt"],
@@ -61,6 +62,11 @@ def souris(dx, dy):                             # déplacement relatif, en petit
     qmp("input-send-event", events=[{"type": "rel", "data": {"axis": "x", "value": dx}},
                                     {"type": "rel", "data": {"axis": "y", "value": dy}}]); time.sleep(0.25)
 def aller(x, y):                                # coin en haut à gauche, puis la position voulue
+    if TABLETTE:                                # tablette : la position, directement (0 à 32767)
+        qmp("input-send-event", events=[{"type": "abs", "data": {"axis": "x", "value": round(x * 32767 / 1919)}},
+                                        {"type": "abs", "data": {"axis": "y", "value": round(y * 32767 / 1079)}}])
+        time.sleep(1)
+        return
     souris(-5000, -5000); time.sleep(2)         # la souris de QEMU rend le déplacement par paquets de 127
     souris(int(x), int(y)); time.sleep(1.5)
 def bouton(enfonce):
@@ -106,7 +112,9 @@ for k in (4, 15, 12, 19):                                    # à la souris : 7 
 time.sleep(2)
 capture("6-calculatrice-souris")
 aller(calc_x + 150 * U, calc_y + 25 * U); bouton(True)       # on la prend par sa barre de titre…
-souris(-400, 120); time.sleep(1.5); bouton(False); time.sleep(3)   # …et on la pose ailleurs
+if TABLETTE: aller(calc_x + 150 * U - 400, calc_y + 25 * U + 120)
+else: souris(-400, 120); time.sleep(1.5)
+bouton(False); time.sleep(3)                                 # …et on la pose ailleurs
 combo("alt", "tab"); time.sleep(3)                           # le carnet repasse devant
 capture("7-deplacee-alt-tab")
 combo("alt", "tab"); time.sleep(1); combo("esc"); time.sleep(2)   # calculatrice devant, puis fermée

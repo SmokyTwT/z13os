@@ -8,7 +8,7 @@ du firmware, écrites d'après la spécification UEFI) et le compilateur. Son no
 Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci est dans la branche
 `os-maison`.
 
-## Ce qu'il sait faire (version 0.5)
+## Ce qu'il sait faire (version 0.6)
 
 - Il démarre directement par le firmware UEFI du PC, comme un programme `BOOTX64.EFI`, puis il
   **congédie le firmware** (ExitBootServices). À partir de là, il gère seul (`noyau.c`) :
@@ -27,7 +27,11 @@ Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci 
     l'OS tourne, comme le clavier détachable du Z13. Il peut aussi être derrière un ou plusieurs
     **hubs USB 2** (un hub interne du PC, un dock, la partie USB 2 d'un hub USB 3). Un appareil qui
     refuse une requête ne bloque pas les suivantes. Un PC sans contrôleur PS/2 démarre aussi ;
-  - la **souris USB** (protocole de démarrage), branchée directement ou derrière un hub ;
+  - les **pointeurs USB** : souris, pavé tactile en mode souris, tablette (pointeur absolu). Il lit
+    leur format dans le descripteur de rapport que chaque appareil fournit (`hid.c`, essayé à chaque
+    construction contre de vrais descripteurs), avec repli sur le protocole de démarrage. Un clavier
+    qui a aussi un pointeur (le pavé du clavier détachable, un récepteur sans fil clavier + souris)
+    est géré en entier : ce cas-là n'a pas encore été essayé, faute d'appareil de ce genre dans QEMU ;
   - l'horloge du PC (puce CMOS), lue en temps universel et affichée à l'heure de Paris (heure d'été
     comprise), et la mémoire libre ;
   - un écran d'erreur si le processeur signale une faute.
@@ -44,7 +48,9 @@ Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci 
   - **horloge** : l'heure en grand, la date, et un chronomètre (Espace pour démarrer ou arrêter).
 - Il tient un carnet de commandes : `aide`, `heure`, `memoire`, `ecran`, `systeme`, `usb` (la
   liste des appareils USB, avec leur chemin : `port 6 → 3` veut dire « port 3 du hub branché sur le
-  port 6 »), `bilan` (tout ce qu'il voit du PC sur un seul écran, à photographier), `calculatrice`,
+  port 6 » ; pour un appareil à plusieurs interfaces, une ligne `interfaces 3/1/1* 3/0/0` donne leur
+  classe, sous-classe et protocole, `*` pour celles qu'il utilise), `bilan` (tout ce qu'il voit du PC
+  sur un seul écran, à photographier), `calculatrice`,
   `notes`, `horloge`, `effacer`, `apropos`, `redemarrer` (par le contrôleur du clavier, sans le
   firmware) et `eteindre`.
 - Entre deux interruptions, le processeur dort (`hlt`).
@@ -54,7 +60,7 @@ Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci 
 Il n'a **aucun pilote de disque**. Il n'appelle jamais les fonctions d'écriture du firmware. Il ne
 peut donc ni lire ni modifier ton Windows, ton Smoky OS de tous les jours, ou un réglage du PC. Le
 firmware lui sert uniquement à démarrer et, pour `eteindre`, à couper le courant. Le pilote USB ne
-parle qu'aux claviers, aux souris et aux hubs : une clé USB branchée est seulement reconnue (elle
+parle qu'aux claviers, aux pointeurs et aux hubs : une clé USB branchée est seulement reconnue (elle
 apparaît dans `usb`), jamais lue.
 
 ## Construire et essayer
@@ -65,7 +71,12 @@ apparaît dans `usb`), jamais lue.
 ./essayer.py 25 --branchement   # le clavier USB n'est branché qu'après le démarrage, puis débranché et rebranché
 ./essayer.py 25 --sans-pit      # sans PIT ni HPET, comme un PC récent dont le firmware les arrête
 ./essayer.py 25 --hub           # le clavier derrière un hub ; --hubs : derrière deux hubs à la suite
+./essayer.py 25 --tablette      # une tablette (pointeur absolu) à la place de la souris
 ```
+
+`construire.sh` commence par l'essai du lecteur de descripteurs HID (`essais/hid.c`, compilé et lancé
+sur la machine de construction) : souris et tablette de QEMU, souris de récepteur sans fil, pavé
+tactile de précision, clavier, PUSH/POP, descripteur coupé.
 
 Les options se combinent (`--hubs --branchement`). Chaque essai tape `aide`, `memoire`, `systeme`,
 `heure`, une ligne avec Maj, Alt Gr et un accent, puis `usb` et `bilan`. Ensuite il ouvre la
@@ -89,4 +100,5 @@ qu'il n'est pas signé. On le fera ensemble, plus tard, avec ton accord. Ce jour
 | 0.3 | Fait : clavier USB (pilote xHCI maison), branchement à chaud, PC sans PS/2. |
 | 0.4 | Fait : le temps par le compteur du processeur, la minuterie de l'APIC local (un PC dont le vieux PIT est arrêté fonctionne), les hubs USB 2, la reprise après une requête refusée, un contrôleur USB endormi réveillé, la commande `bilan`. Vérifié dans QEMU (avec et sans PIT, derrière un et deux hubs, branchement à chaud), pas encore sur le vrai Z13. Le mode x2APIC n'a pas pu être essayé (ce QEMU ne l'émule pas) : s'il ne répondait pas, l'OS prendrait le PIT, ou se passerait de minuterie. |
 | 0.5 | Fait : souris USB, fenêtres (déplacer, mettre devant, fermer, Alt+Tab), calculatrice, notes, horloge avec chronomètre, heure de Paris. Vérifié dans QEMU. |
-| 0.6 | Le pavé tactile du clavier du Z13 (un appareil USB à plusieurs interfaces : clavier et pavé ensemble), puis l'écran tactile (I2C, plus gros morceau). |
+| 0.6 | Fait : pointeurs décrits par leur descripteur de rapport (souris, pavé tactile en mode souris, tablette), clavier + pointeur sur un même appareil (pour le pavé du clavier du Z13), interfaces affichées par `usb` et `bilan`. Vérifié dans QEMU avec une souris et une tablette ; le clavier + pointeur attend un vrai appareil. |
+| 0.7 | L'essai sur le vrai Z13 (photo de `bilan`), puis ce qu'il montrera : le pavé en mode précision s'il le faut, l'écran tactile (I2C, plus gros morceau). |

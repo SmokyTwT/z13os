@@ -16,6 +16,7 @@
  * adresses physiques = adresses virtuelles (le firmware a laissé une correspondance 1 pour 1). */
 #include "usb.h"
 #include "noyau.h"
+#include "hid.h"
 
 /* --- Petits outils ------------------------------------------------------------------------------- */
 static void sortie32(u16 port, u32 v) { __asm__ volatile("outl %0, %1" : : "a"(v), "Nd"(port)); }
@@ -92,7 +93,17 @@ struct controleur;
 struct appareil {
   struct controleur *hc;
   struct appareil *parent;              /* hub où il est branché ; 0 : directement sur le contrôleur */
-  int slot, port, vitesse, dci, interface, clavier, hub, souris;
+  int slot, port, vitesse, dci, interface, clavier, hub;
+  int souris;                           /* pointeur principal : 1 souris de démarrage, 2 rapport décrit (hid.c) */
+  struct pointeur_hid pt;
+  struct {                              /* second point : le pointeur d'un clavier (pavé tactile, récepteur) */
+    int actif, souris, dci, longueur, panne, pannes;
+    struct anneau ep;
+    volatile u8 *rapport;
+    struct pointeur_hid pt;
+  } f2;
+  struct { u8 classe, sous, proto, utile; } ifs[6];   /* interfaces, pour « usb » et « bilan » */
+  int nb_ifs, pave_seul;                /* pave_seul : pavé tactile sans mode souris (pas encore géré) */
   int port_parent, etage;               /* port du hub parent ; étage 0 = sur le contrôleur */
   u32 route;                            /* chemin depuis le port du contrôleur : 4 bits par étage */
   int tt_slot, tt_port;                 /* traducteur du hub haut débit qu'empruntent les appareils lents */
@@ -120,25 +131,33 @@ struct controleur {
 static struct controleur HC[4];
 static int nb_hc, nb_claviers, nb_souris;
 
-/* souris : rapports (boutons, déplacement) mis en file pour l'interface */
-static struct { int dx, dy, boutons; } FILE_SOURIS[64];
+/* pointeurs : rapports (boutons, déplacement ou position) mis en file pour l'interface */
+static struct souris_evt FILE_SOURIS[64];
 static int souris_tete, souris_queue;
 
-int usb_souris(int *dx, int *dy, int *boutons) {
+int usb_souris(struct souris_evt *e) {
   if (souris_queue == souris_tete) return 0;
-  *dx = FILE_SOURIS[souris_queue].dx; *dy = FILE_SOURIS[souris_queue].dy; *boutons = FILE_SOURIS[souris_queue].boutons;
+  *e = FILE_SOURIS[souris_queue];
   souris_queue = (souris_queue + 1) & 63;
   return 1;
 }
 int usb_nb_souris(void) { return nb_souris; }
 
-static void rapport_souris(const volatile u8 *r) {
+static void pousser_souris(int boutons, int dx, int dy, int absolu, int x, int y) {
   int suivant = (souris_tete + 1) & 63;
   if (suivant == souris_queue) return;                  /* file pleine : l'interface ne suit pas */
-  FILE_SOURIS[souris_tete].boutons = r[0] & 7;
-  FILE_SOURIS[souris_tete].dx = (signed char)r[1];
-  FILE_SOURIS[souris_tete].dy = (signed char)r[2];
+  struct souris_evt *e = &FILE_SOURIS[souris_tete];
+  e->boutons = boutons; e->dx = dx; e->dy = dy; e->absolu = absolu; e->x = x; e->y = y;
   souris_tete = suivant;
+}
+
+static void rapport_souris(const volatile u8 *r) {       /* protocole de démarrage : 3 octets */
+  pousser_souris(r[0] & 7, (signed char)r[1], (signed char)r[2], 0, 0, 0);
+}
+
+static void rapport_pointeur(const struct pointeur_hid *p, const volatile u8 *r, int n) {   /* format décrit */
+  int b, dx, dy, x, y;
+  if (hid_lire(p, r, n, &b, &dx, &dy, &x, &y)) pousser_souris(b, dx, dy, p->absolu, x, y);
 }
 
 static void poser(struct anneau *a, u64 param, u32 statut, u32 controle) {
@@ -277,6 +296,10 @@ static void demander_rapport(struct appareil *a) {
   poser(&a->ep, (u64)a->rapport, (u32)a->longueur, (T_NORMAL << 10) | (1 << 5) | (1 << 2));
   sonner(a->hc, a->slot, a->dci);
 }
+static void demander_rapport2(struct appareil *a) {
+  poser(&a->f2.ep, (u64)a->f2.rapport, (u32)a->f2.longueur, (T_NORMAL << 10) | (1 << 5) | (1 << 2));
+  sonner(a->hc, a->slot, a->f2.dci);
+}
 
 /* --- Un appareil : adresse, descripteurs, puis clavier ou hub ------------------------------------- */
 static int intervalle(int vitesse, int b_interval) {
@@ -294,13 +317,13 @@ static void ecrire_slot(struct appareil *a, int entrees) {
   s[3] = 0;
 }
 
-static void ecrire_ep_interruption(struct appareil *a, int mps, int b_interval) {
-  volatile u32 *ep = ctx(a, a->dci + 1);
+static void ecrire_ep(struct appareil *a, int dci, struct anneau *r, int mps, int b_interval, int longueur) {
+  volatile u32 *ep = ctx(a, dci + 1);
   ep[0] = (u32)intervalle(a->vitesse, b_interval) << 16;
   ep[1] = 3 << 1 | 7 << 3 | (u32)mps << 16;            /* 3 essais, interruption entrante */
-  ep[2] = (u32)(u64)a->ep.trbs | 1;
-  ep[3] = (u32)((u64)a->ep.trbs >> 32);
-  ep[4] = (u32)a->longueur | (u32)mps << 16;
+  ep[2] = (u32)(u64)r->trbs | 1;
+  ep[3] = (u32)((u64)r->trbs >> 32);
+  ep[4] = (u32)longueur | (u32)mps << 16;
 }
 
 static struct appareil *place_libre(struct controleur *hc) {
@@ -317,11 +340,12 @@ static void debrancher(struct appareil *a) {
     if (hc->app[i].slot && hc->app[i].parent == a) debrancher(&hc->app[i]);
   if (a->clavier) nb_claviers--;
   if (a->souris) nb_souris--;
+  if (a->f2.actif) nb_souris--;
   commande(hc, 0, T_DISABLE_SLOT << 10 | (u32)a->slot << 24, 0);
   hc->dcbaa[a->slot] = 0;
   if (a->parent) journal_nb("usb : appareil débranché d'un hub, port ", (u64)a->port_parent);
   else journal_nb("usb : appareil débranché du port ", (u64)a->port);
-  a->clavier = 0; a->souris = 0; a->hub = 0; a->a_voir = 0; a->port = 0; a->parent = 0; a->slot = 0;
+  a->clavier = 0; a->souris = 0; a->f2.actif = 0; a->hub = 0; a->a_voir = 0; a->port = 0; a->parent = 0; a->slot = 0;
 }
 
 static int preparer_hub(struct appareil *a, int ep_mps) {
@@ -349,13 +373,13 @@ static void allumer_hub(struct appareil *a) {
 static void installer(struct controleur *hc, struct appareil *parent, int port_parent, int racine, int vitesse) {
   struct appareil *a = place_libre(hc);
   if (!a) { journal("usb : trop d'appareils\n"); return; }
-  volatile u8 *pages[4] = {a->entree, a->sortie, a->tampon, a->rapport};
-  volatile trb *anneaux[2] = {a->ep0.trbs, a->ep.trbs};
+  volatile u8 *pages[5] = {a->entree, a->sortie, a->tampon, a->rapport, a->f2.rapport};
+  volatile trb *anneaux[3] = {a->ep0.trbs, a->ep.trbs, a->f2.ep.trbs};
   zero(a, sizeof *a);
   a->entree = page_propre(pages[0]); a->sortie = page_propre(pages[1]);
-  a->tampon = page_propre(pages[2]); a->rapport = page_propre(pages[3]);
-  a->ep0.trbs = anneaux[0]; a->ep.trbs = anneaux[1];
-  if (!a->entree || !a->sortie || !a->tampon || !a->rapport || !nouvel_anneau(&a->ep0)) return;
+  a->tampon = page_propre(pages[2]); a->rapport = page_propre(pages[3]); a->f2.rapport = page_propre(pages[4]);
+  a->ep0.trbs = anneaux[0]; a->ep.trbs = anneaux[1]; a->f2.ep.trbs = anneaux[2];
+  if (!a->entree || !a->sortie || !a->tampon || !a->rapport || !a->f2.rapport || !nouvel_anneau(&a->ep0)) return;
   a->hc = hc; a->parent = parent; a->port_parent = port_parent; a->port = racine; a->vitesse = vitesse;
   if (parent) {
     a->etage = parent->etage + 1;
@@ -401,53 +425,122 @@ static void installer(struct controleur *hc, struct appareil *parent, int port_p
   int total = a->tampon[2] | a->tampon[3] << 8, valeur = a->tampon[5];
   if (total > 1024) total = 1024;
   if (total < 9 || !requete(a, 0x80, 6, 0x200, 0, (u16)total)) return;
-  /* une interface (réglage 0) de clavier de démarrage (3/1/1), de souris de démarrage (3/1/2) ou de
-   * hub (9), et son point entrant ; le clavier passe avant la souris d'un même appareil */
-  int genre = 0, courant = 0, iface_courante = 0, iface = 0, ep_adresse = 0, ep_mps = 8, ep_intervalle = 10;
+  /* interfaces (réglage 0) : classe, sous-classe, protocole, premier point « interruption » entrant, et
+   * pour le HID la longueur de son descripteur de rapport */
+  struct { u8 num, classe, sous, proto, ep, intervalle; u16 mps, long_desc; } IF[6];
+  int nb = 0, courant = -1;
   for (int i = 0; i + 1 < total && a->tampon[i] >= 2; i += a->tampon[i]) {
     const volatile u8 *d = a->tampon + i;
     if (d[1] == 4) {
+      courant = -1;
+      if (d[3] || nb >= 6) continue;                    /* autres réglages de l'interface : ignorés */
       if (!a->classe) a->classe = d[5];                 /* classe donnée par les interfaces : la première */
-      iface_courante = d[2];
-      courant = d[3] ? 0 : d[5] == 3 && d[6] == 1 && d[7] == 1 ? 1 : d[5] == 9 ? 2 :
-                d[5] == 3 && d[6] == 1 && d[7] == 2 ? 3 : 0;
-    } else if (d[1] == 5 && courant && (!ep_adresse || (genre == 3 && courant == 1)) && (d[2] & 0x80) && (d[3] & 3) == 3) {
-      genre = courant; iface = iface_courante;
-      ep_adresse = d[2]; ep_mps = d[4] | (d[5] & 7) << 8; ep_intervalle = d[6];
+      IF[nb].num = d[2]; IF[nb].classe = d[5]; IF[nb].sous = d[6]; IF[nb].proto = d[7];
+      IF[nb].ep = 0; IF[nb].intervalle = 10; IF[nb].mps = 8; IF[nb].long_desc = 0;
+      courant = nb++;
+    } else if (d[1] == 0x21 && courant >= 0 && d[0] >= 9) {        /* descripteur HID */
+      IF[courant].long_desc = (u16)(d[7] | d[8] << 8);
+    } else if (d[1] == 5 && courant >= 0 && !IF[courant].ep && (d[2] & 0x80) && (d[3] & 3) == 3) {
+      IF[courant].ep = d[2]; IF[courant].mps = (u16)(d[4] | (d[5] & 7) << 8); IF[courant].intervalle = d[6];
     }
   }
-  if (!genre) { journal_nb("usb : appareil (pas un clavier) sur le port ", (u64)(parent ? port_parent : racine)); return; }
+  a->nb_ifs = nb;
+  int hub = -1, clavier = -1, hid = 0;
+  for (int k = 0; k < nb; k++) {
+    a->ifs[k].classe = IF[k].classe; a->ifs[k].sous = IF[k].sous; a->ifs[k].proto = IF[k].proto;
+    if (!IF[k].ep) continue;
+    if (IF[k].classe == 9 && hub < 0) hub = k;
+    if (IF[k].classe == 3) hid = 1;
+    if (IF[k].classe == 3 && IF[k].sous == 1 && IF[k].proto == 1 && clavier < 0) clavier = k;
+  }
+  if (hub < 0 && !hid) { journal_nb("usb : appareil (ni clavier ni pointeur) sur le port ", (u64)(parent ? port_parent : racine)); return; }
   requete(a, 0x00, 9, (u16)valeur, 0, 0);               /* SET_CONFIGURATION */
-  a->interface = iface;
-  a->dci = (ep_adresse & 15) * 2 + 1;
-  if (genre == 2 && !preparer_hub(a, ep_mps)) return;
-  if (genre == 1 || genre == 3) {
-    requete(a, 0x21, 0x0B, 0, (u16)iface, 0);           /* SET_PROTOCOL : protocole de démarrage */
-    if (genre == 1) requete(a, 0x21, 0x0A, 0, (u16)iface, 0);   /* SET_IDLE : rapport seulement au changement */
-    a->longueur = ep_mps > 64 ? 64 : ep_mps > 8 ? ep_mps : 8;
+  if (hub >= 0) {
+    a->interface = IF[hub].num;
+    a->dci = (IF[hub].ep & 15) * 2 + 1;
+    a->ifs[hub].utile = 1;
+    if (!preparer_hub(a, IF[hub].mps) || !nouvel_anneau(&a->ep)) return;
+    zero(a->entree, 4096);
+    ctx(a, 0)[1] = 1 | 1u << a->dci;                    /* l'appareil (ses ports de hub) + le point */
+    ecrire_slot(a, a->dci);
+    ecrire_ep(a, a->dci, &a->ep, IF[hub].mps, IF[hub].intervalle, a->longueur);
+    if (!commande(hc, (u64)a->entree, T_CONFIGURE << 10 | (u32)a->slot << 24, 0)) {
+      journal("usb : le contrôleur refuse la configuration\n"); a->hub = 0; return;
+    }
+    journal_nb("usb : hub prêt, ports : ", (u64)a->nb_ports_hub);
+    allumer_hub(a);
+    demander_rapport(a);
+    return;
   }
+  /* pointeur : une interface HID (autre que le clavier) dont le descripteur de rapport décrit une souris,
+   * un pavé tactile en mode souris ou une tablette (hid.c) ; sinon une souris de démarrage (3/1/2) */
+  struct pointeur_hid pt;
+  int pointeur = -1, demarrage = 0;
+  for (int k = 0; k < nb && pointeur < 0; k++) {
+    if (k == clavier || IF[k].classe != 3 || !IF[k].ep || !IF[k].long_desc) continue;
+    int l = IF[k].long_desc > 1024 ? 1024 : IF[k].long_desc;
+    if (!requete(a, 0x81, 6, 0x2200, IF[k].num, (u16)l)) continue;   /* descripteur de rapport */
+    if (hid_pointeur(a->tampon, l, &pt)) pointeur = k;
+    else if (pt.pave) a->pave_seul = 1;
+  }
+  if (pointeur >= 0) a->pave_seul = 0;
+  for (int k = 0; k < nb && pointeur < 0; k++)
+    if (k != clavier && IF[k].classe == 3 && IF[k].sous == 1 && IF[k].proto == 2 && IF[k].ep) { pointeur = k; demarrage = 1; }
+  if (clavier < 0 && pointeur < 0) {
+    journal_nb(a->pave_seul ? "usb : pavé tactile sans mode souris (pas encore géré), port "
+                            : "usb : appareil HID sans clavier ni pointeur, port ", (u64)(parent ? port_parent : racine));
+    return;
+  }
+  if (clavier >= 0) {
+    requete(a, 0x21, 0x0B, 0, IF[clavier].num, 0);      /* SET_PROTOCOL : protocole de démarrage */
+    requete(a, 0x21, 0x0A, 0, IF[clavier].num, 0);      /* SET_IDLE : rapport seulement au changement */
+    a->ifs[clavier].utile = 1;
+  }
+  if (pointeur >= 0) {
+    if (IF[pointeur].sous == 1)                         /* démarrage, ou rapport décrit (seulement si le choix existe) */
+      requete(a, 0x21, 0x0B, demarrage ? 0 : 1, IF[pointeur].num, 0);
+    a->ifs[pointeur].utile = 1;
+  }
+  /* point principal : le clavier, sinon le pointeur ; second : le pointeur d'un clavier */
+  int principal = clavier >= 0 ? clavier : pointeur, second = clavier >= 0 ? pointeur : -1;
+  a->interface = IF[principal].num;
+  a->dci = (IF[principal].ep & 15) * 2 + 1;
+  a->longueur = IF[principal].mps > 64 ? 64 : IF[principal].mps > 8 ? IF[principal].mps : 8;
   if (!nouvel_anneau(&a->ep)) return;
-  zero(a->entree, 4096);
-  ctx(a, 0)[1] = 1 | 1u << a->dci;                      /* appareil (pour un hub : ses ports) + le point */
-  ecrire_slot(a, a->dci);
-  ecrire_ep_interruption(a, ep_mps, ep_intervalle);
-  if (!commande(hc, (u64)a->entree, T_CONFIGURE << 10 | (u32)a->slot << 24, 0)) {
-    journal("usb : le contrôleur refuse la configuration\n"); a->hub = 0; return;
+  u32 ajout = 1 | 1u << a->dci;
+  int entrees = a->dci;
+  if (second >= 0) {
+    a->f2.dci = (IF[second].ep & 15) * 2 + 1;
+    a->f2.longueur = IF[second].mps > 64 ? 64 : IF[second].mps > 8 ? IF[second].mps : 8;
+    if (!nouvel_anneau(&a->f2.ep)) return;
+    ajout |= 1u << a->f2.dci;
+    if (a->f2.dci > entrees) entrees = a->f2.dci;
   }
-  if (genre == 1) {
+  zero(a->entree, 4096);
+  ctx(a, 0)[1] = ajout;                                 /* l'appareil + ses points « interruption » */
+  ecrire_slot(a, entrees);
+  ecrire_ep(a, a->dci, &a->ep, IF[principal].mps, IF[principal].intervalle, a->longueur);
+  if (second >= 0) ecrire_ep(a, a->f2.dci, &a->f2.ep, IF[second].mps, IF[second].intervalle, a->f2.longueur);
+  if (!commande(hc, (u64)a->entree, T_CONFIGURE << 10 | (u32)a->slot << 24, 0)) {
+    journal("usb : le contrôleur refuse la configuration\n"); return;
+  }
+  if (clavier >= 0) {
     a->clavier = 1;
     nb_claviers++;
     if (parent) journal_nb("usb : clavier prêt derrière un hub, port ", (u64)port_parent);
     else journal_nb("usb : clavier prêt sur le port ", (u64)racine);
-  } else if (genre == 3) {
-    a->souris = 1;
+  }
+  if (pointeur >= 0) {
+    if (second >= 0) { a->f2.actif = 1; a->f2.souris = demarrage ? 1 : 2; if (!demarrage) a->f2.pt = pt; }
+    else { a->souris = demarrage ? 1 : 2; if (!demarrage) a->pt = pt; }
     nb_souris++;
-    journal_nb("usb : souris prête sur le port ", (u64)(parent ? port_parent : racine));
-  } else {
-    journal_nb("usb : hub prêt, ports : ", (u64)a->nb_ports_hub);
-    allumer_hub(a);
+    journal_nb(demarrage ? "usb : souris prête (protocole de démarrage), port " :
+               pt.absolu ? "usb : pointeur absolu prêt (tablette), port " :
+               pt.pave ? "usb : pavé tactile prêt (mode souris), port " : "usb : souris prête, port ",
+               (u64)(parent ? port_parent : racine));
   }
   demander_rapport(a);
+  if (second >= 0) demander_rapport2(a);
 }
 
 /* port du contrôleur : remise à zéro (USB 2 ; l'USB 3 s'en charge seul), puis installation */
@@ -520,11 +613,22 @@ static void traiter(struct controleur *hc, const trb *e) {
     int ok = code == 1 || code == 13;
     for (int i = 0; i < hc->nb_app; i++) {
       struct appareil *a = &hc->app[i];
-      if (!a->slot || a->slot != slot || a->dci != dci || !(a->clavier || a->hub || a->souris)) continue;
+      if (!a->slot || a->slot != slot) continue;
+      int reste = (int)(e->statut & 0xFFFFFF);          /* octets non reçus (paquet court) */
+      if (a->f2.actif && a->f2.dci == dci) {            /* le pointeur d'un clavier */
+        if (!ok) { a->f2.panne = 1; journal_nb("usb : erreur sur le pointeur, code ", code); continue; }
+        a->f2.pannes = 0;
+        if (a->f2.souris == 1) rapport_souris(a->f2.rapport);
+        else rapport_pointeur(&a->f2.pt, a->f2.rapport, a->f2.longueur - reste);
+        demander_rapport2(a);
+        continue;
+      }
+      if (a->dci != dci || !(a->clavier || a->hub || a->souris)) continue;
       if (!ok) { a->panne = 1; journal_nb("usb : erreur sur le point « interruption », code ", code); continue; }
       a->pannes = 0;
       if (a->clavier) { u8 r[8]; for (int k = 0; k < 8; k++) r[k] = a->rapport[k]; rapport(a, r); }
-      else if (a->souris) rapport_souris(a->rapport);
+      else if (a->souris == 1) rapport_souris(a->rapport);
+      else if (a->souris == 2) rapport_pointeur(&a->pt, a->rapport, a->longueur - reste);
       else a->a_voir |= (a->rapport[0] | (u32)a->rapport[1] << 8) & tous_les_ports(a);
       demander_rapport(a);
     }
@@ -657,6 +761,10 @@ void usb_sonder(void) {
     for (int i = 0; i < hc->nb_app; i++) {
       struct appareil *a = &hc->app[i];
       if (!a->slot || !(a->clavier || a->hub || a->souris)) continue;
+      if (a->f2.actif && a->f2.panne) {                  /* le pointeur d'un clavier, en erreur : relancé */
+        a->f2.panne = 0;
+        if (++a->f2.pannes <= 5) { relancer(a, a->f2.dci, &a->f2.ep); demander_rapport2(a); }
+      }
       if (a->panne) {                                   /* point « interruption » en erreur : relancé */
         a->panne = 0;
         if (++a->pannes <= 5) { relancer(a, a->dci, &a->ep); demander_rapport(a); }
@@ -699,8 +807,12 @@ void usb_etat(char *d, int max) {
 }
 
 static const char *genre_appareil(const struct appareil *a) {
-  if (a->clavier) return "clavier";
+  if (a->clavier && a->f2.actif) return a->f2.souris == 2 && a->f2.pt.pave ? "clavier + pavé tactile" : "clavier + souris";
+  if (a->clavier) return a->pave_seul ? "clavier (pavé tactile pas encore géré)" : "clavier";
+  if (a->souris == 2 && a->pt.absolu) return "tablette (pointeur absolu)";
+  if (a->souris == 2 && a->pt.pave) return "pavé tactile";
   if (a->souris) return "souris";
+  if (a->pave_seul) return "pavé tactile (pas encore géré)";
   if (a->hub) return "hub";
   switch (a->classe) {
     case 1: return "audio";
@@ -717,6 +829,28 @@ static const char *genre_appareil(const struct appareil *a) {
     case 0xFF: return "propre au fabricant";
     default: return "appareil";
   }
+}
+
+/* interfaces du n-ième appareil s'il en a plusieurs : « interfaces 3/1/1* 3/0/0 » (* : utilisée) */
+int usb_interfaces(int n, char *d, int max) {
+  for (int h = 0; h < nb_hc; h++)
+    for (int k = 0; k < HC[h].nb_app; k++) {
+      struct appareil *a = &HC[h].app[k];
+      if (!a->slot || n-- > 0) continue;
+      if (a->nb_ifs < 2) return 0;
+      int i = 0;
+      d[0] = 0;
+      ajouter(d, &i, max, "    interfaces");
+      for (int f = 0; f < a->nb_ifs; f++) {
+        ajouter(d, &i, max, " ");
+        ajouter_nb(d, &i, max, a->ifs[f].classe, 10, 1); ajouter(d, &i, max, "/");
+        ajouter_nb(d, &i, max, a->ifs[f].sous, 10, 1); ajouter(d, &i, max, "/");
+        ajouter_nb(d, &i, max, a->ifs[f].proto, 10, 1);
+        if (a->ifs[f].utile) ajouter(d, &i, max, "*");
+      }
+      return 1;
+    }
+  return 0;
 }
 
 int usb_decrire(int n, char *d, int max) {

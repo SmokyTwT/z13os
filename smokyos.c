@@ -1,4 +1,4 @@
-/* Smoky OS 100 % maison, version 0.5 — un système d'exploitation écrit de zéro, pour toi.
+/* Smoky OS 100 % maison, version 0.6 — un système d'exploitation écrit de zéro, pour toi.
  *
  * Aucun Linux, aucune bibliothèque : ce fichier, uefi.h (écrit d'après la spécification) et le
  * compilateur. Il démarre directement par le firmware UEFI du PC, dessine lui-même tout ce
@@ -969,13 +969,16 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   } else if (egal(s, n, "usb")) {
     char d[96]; usb_etat(d, sizeof d); noter(d, 0xf3f3f6);
     int n = 0;
-    for (; n < 10 && usb_decrire(n, d, sizeof d); n++) noter(d, 0xb6b7c2);
+    for (; n < 10 && usb_decrire(n, d, sizeof d); n++) {
+      noter(d, 0xb6b7c2);
+      if (usb_interfaces(n, d, sizeof d)) noter(d, 0x7c7c86);
+    }
     if (!n) noter("Aucun appareil USB branché.", 0xb6b7c2);
-    noter("Pilote maison : contrôleurs xHCI, hubs USB 2, claviers et souris.", 0x7c7c86);
+    noter("Pilote maison : xHCI, hubs USB 2, claviers, souris, pavés et tablettes.", 0x7c7c86);
   } else if (egal(s, n, "bilan")) {
     char d[120], x[24];
     nb_lignes = 0;                                        /* le carnet entier, pour une seule photo */
-    noter("Bilan de ce PC par Smoky OS 100 % maison 0.5", 0xf3f3f6);
+    noter("Bilan de ce PC par Smoky OS 100 % maison 0.6", 0xf3f3f6);
     copier(d, "Processeur : "); noyau_processeur(fin(d), 64); noter(d, 0xb6b7c2);
     copier(d, "Compteur du processeur : "); nombre_libre(x, noyau_frequence_tsc() / 1000000); copier(fin(d), x);
     copier(fin(d), " MHz (mesuré par : "); copier(fin(d), noyau_calibrage()); copier(fin(d), ")");
@@ -987,7 +990,10 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     noter(d, 0xb6b7c2);
     noter(noyau_clavier_ps2() ? "Clavier PS/2 : contrôleur présent" : "Clavier PS/2 : absent (normal sur un PC récent)", 0xb6b7c2);
     usb_etat(d, sizeof d); noter(d, 0xf3f3f6);
-    for (int k = 0; k < 10 && usb_decrire(k, d, sizeof d); k++) noter(d, 0xb6b7c2);
+    for (int k = 0; k < 10 && usb_decrire(k, d, sizeof d); k++) {
+      noter(d, 0xb6b7c2);
+      if (usb_interfaces(k, d, sizeof d)) noter(d, 0x7c7c86);
+    }
   } else if (egal(s, n, "calculatrice") || egal(s, n, "calc")) {
     ouvrir(F_CALC);
   } else if (egal(s, n, "notes")) {
@@ -997,7 +1003,7 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   } else if (egal(s, n, "effacer")) {
     nb_lignes = 0;
   } else if (egal(s, n, "apropos") || egal(s, n, "à-propos")) {
-    noter("Smoky OS 100 % maison 0.5 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
+    noter("Smoky OS 100 % maison 0.6 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
     noter("Il démarre par le firmware, puis se débrouille seul.", 0xb6b7c2);
     noter("Aucun pilote de disque : il ne peut pas toucher à tes systèmes.", 0xb6b7c2);
   } else if (egal(s, n, "redemarrer") || egal(s, n, "redémarrer")) {
@@ -1046,7 +1052,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
     return 1;
   dessiner_fond();
   float x = ecrire(44 * U, 74 * U, 44 * U, .55f, 0xff8f85, "smoky os");
-  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.5");
+  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.6");
   ecrire(44 * U, 108 * U, 17 * U, .4f, 0xb6b7c2, "100 % maison, écrit de zéro");
   ecrire(44 * U, H - 40 * U, 15 * U, .38f, 0x7c7c86,
          "Aucun pilote de disque : ton Windows et ton Smoky OS de tous les jours ne peuvent pas être touchés.");
@@ -1120,13 +1126,14 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
       else if (f == F_NOTES) notes_touche(c, genre);
       else if (f == F_HORLOGE) { horloge_touche(c, genre); abimer_fenetre(F_HORLOGE); }
     }
-    int dx, dy, b;
-    while (usb_souris(&dx, &dy, &b)) {
+    struct souris_evt ev;
+    while (usb_souris(&ev)) {
       souris_vue = 1;
-      souris_bouger(dx, dy);
-      if ((b & 1) && !(boutons_avant & 1)) souris_appui();
-      if (!(b & 1)) deplace = -1;
-      boutons_avant = b;
+      if (ev.absolu) souris_bouger((int)(ev.x * (L - 1) / 65535.0f - souris_x), (int)(ev.y * (H - 1) / 65535.0f - souris_y));
+      else souris_bouger(ev.dx, ev.dy);
+      if ((ev.boutons & 1) && !(boutons_avant & 1)) souris_appui();
+      if (!(ev.boutons & 1)) deplace = -1;
+      boutons_avant = ev.boutons;
       curseur_abime = 1;
     }
     if (souris_vue && !usb_nb_souris()) { souris_vue = 0; deplace = -1; effacer_curseur(); }
