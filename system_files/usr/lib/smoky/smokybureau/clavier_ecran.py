@@ -7,9 +7,9 @@ toutes les applis, Chrome compris, quelle que soit la disposition du vrai clavie
 
 Quand il apparaît :
   * toujours par le bouton clavier de la barre (`smoky-bureau-cmd clavier basculer`) ;
-  * tout seul quand un champ de texte prend la main (méthode de saisie Wayland ; les applis GTK
-    le disent), si le mode tablette est actif ou le clavier détaché : smoky-adaptive règle alors
-    org.gnome.desktop.a11y.applications screen-keyboard-enabled.
+  * tout seul quand un champ de texte prend la main (méthode de saisie Wayland : les applis GTK
+    et Chrome le disent, vérifié avec Chrome 153), si le mode tablette est actif ou le clavier
+    détaché : smoky-adaptive règle alors org.gnome.desktop.a11y.applications screen-keyboard-enabled.
 ⌄ le range. Rien ne tourne quand il est caché : il attend les événements.
 """
 import ctypes

@@ -122,7 +122,7 @@ class Adaptation:
 
     def appliquer_clavier_ecran(self):
         """Clavier à l'écran tout seul dans les champs de texte : en mode tablette, ou clavier détaché
-        (le bouton de la barre apparaît aussi : il sert dans Chrome, qui ne signale pas ses champs)."""
+        (le bouton de la barre apparaît aussi, pour les applis qui ne signalent pas leurs champs)."""
         actif = bool(self.conf.get("tablet_mode")) or not self.clavier_branche
         commun.commande("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled",
                         "true" if actif else "false")

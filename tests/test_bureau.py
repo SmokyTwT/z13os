@@ -11,6 +11,7 @@ import os
 import ctypes
 import ctypes.util
 import socket
+import subprocess
 import struct
 import sys
 import tempfile
@@ -465,6 +466,61 @@ class TestClavierSession(unittest.TestCase):
                 cote.close()
                 client.sock.close()
                 serveur.close()
+
+
+class TestRelances(unittest.TestCase):
+    """Écrans de connexion et de verrouillage qui tombent : relancés, puis écran de secours (on entre
+    toujours au doigt) ; swaylock seulement en dernier recours. Scripts lancés avec des doublures."""
+    LIBEXEC = RACINE / "usr/libexec/smokyos"
+
+    def lancer(self, script, remplacements, codes, args=()):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            journal, file_codes = d / "appels", d / "codes"
+            file_codes.write_text("".join(f"{c}\n" for c in codes))
+            doublure = d / "doublure"
+            doublure.write_text(f"""#!/usr/bin/bash
+echo "$(basename "$0") $*" >> {journal}
+code=$(head -1 {file_codes}); sed -i 1d {file_codes}
+exit "${{code:-0}}"
+""")
+            doublure.chmod(0o755)
+            (d / "swaylock").symlink_to(doublure)
+            texte = (self.LIBEXEC / script).read_text()
+            for avant, apres in remplacements:
+                self.assertIn(avant, texte)
+                texte = texte.replace(avant, apres.format(d=d))
+            copie = d / script
+            copie.write_text(texte)
+            r = subprocess.run(["bash", str(copie), *args], capture_output=True, text=True, timeout=30,
+                               env={**os.environ, "PATH": f"{d}:/usr/bin:/bin"})
+            appels = journal.read_text().splitlines() if journal.exists() else []
+            return r.returncode, appels
+
+    def connexion(self, codes):
+        return self.lancer("smoky-connexion.sh", [("/usr/bin/python3 -I /usr/libexec/smokyos/smoky-connexion.py",
+                                                    "{d}/doublure")], codes, ["--dans-labwc"])
+
+    def verrou(self, codes):
+        return self.lancer("smoky-verrou.sh", [("/usr/bin/python3 -I /usr/libexec/smokyos/smoky-verrou.py",
+                                                 "{d}/doublure"), ("exec swaylock", "exec {d}/swaylock")], codes)
+
+    def test_connexion(self):
+        self.assertEqual(self.connexion([0]), (0, ["doublure "]), "session lancée : rien d'autre")
+        self.assertEqual(self.connexion([143]), (0, ["doublure "]), "arrêté par greetd : pas relancé")
+        self.assertEqual(self.connexion([1, 1, 0]), (0, ["doublure ", "doublure ", "doublure --secours"]),
+                         "tombé deux fois : écran de secours")
+        self.assertEqual(self.connexion([3, 0]), (0, ["doublure ", "doublure "]), "relancé une fois suffit")
+
+    def test_verrou(self):
+        self.assertEqual(self.verrou([0])[1], ["doublure "], "déverrouillé : rien d'autre")
+        self.assertEqual(self.verrou([2])[1], ["doublure "], "déjà verrouillé : rien d'autre")
+        self.assertEqual(self.verrou([1, 0])[1], ["doublure ", "doublure "], "relancé une fois")
+        self.assertEqual(self.verrou([1, 1, 0])[1], ["doublure ", "doublure ", "doublure --secours"],
+                         "puis l'écran de secours")
+        appels = self.verrou([1, 1, 1, 0])[1]
+        self.assertEqual(appels[:3], ["doublure ", "doublure ", "doublure --secours"])
+        self.assertTrue(appels[3].startswith("swaylock "), "swaylock en dernier recours seulement")
 
 
 class TestGrubenv(unittest.TestCase):

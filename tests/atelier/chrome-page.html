@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>vide</title>
+<body style="margin:0;background:#202024;color:#eee;font:20px sans-serif">
+<textarea id="t" autofocus style="width:80vw;height:30vh;font-size:20px"></textarea><br>
+<button id="b" style="font-size:20px">un bouton</button>
+<div style="position:fixed;bottom:0;left:0;right:0;height:40px;background:#ff8f85">bas de la page</div>
+<script>
+// Le titre recopie le texte et les dernières touches (KeyboardEvent.code) : lu par le port de débogage.
+const t = document.getElementById("t"), b = document.getElementById("b"), touches = [];
+t.addEventListener("keydown", e => touches.push(e.code));
+t.addEventListener("input", () => { document.title = "V:" + t.value + "|CODES|" + touches.slice(-4).join(","); });
+t.focus();
+if (location.hash === "#aller-retour") {          // champ, puis bouton, puis champ (captures)
+  setTimeout(() => b.focus(), 6000);
+  setTimeout(() => t.focus(), 10000);
+}
+</script>

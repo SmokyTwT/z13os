@@ -11,6 +11,7 @@ import ctypes
 import os
 import pwd
 import socket
+import sys
 import threading
 import time
 
@@ -59,9 +60,10 @@ def verifier_mot_de_passe(utilisateur, mot_de_passe):
 
 
 class Verrou(Gtk.Application):
-    def __init__(self):
+    def __init__(self, secours=False):
         super().__init__(application_id="fr.smoky.Verrou", flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.code = 0
+        self.secours = secours                # écran minimal : mot de passe et clavier
         self.utilisateur = pwd.getpwuid(os.getuid()).pw_name
         self.fenetres = []
         self.batterie = commun.Batterie()
@@ -82,10 +84,53 @@ class Verrou(Gtk.Application):
         if not self.verrou.lock():
             self.terminer(2)
             return
+        # L'écran est verrouillé : il faut un champ et un clavier quoi qu'il arrive. Si l'affichage
+        # complet échoue, écran de secours ; si même lui échoue, on sort en erreur et
+        # smoky-verrou.sh relance (labwc garde l'écran caché entre les deux).
+        try:
+            if self.secours:
+                raise RuntimeError("mode secours demandé")
+            self.fenetres_pour_tous(self.fenetre_pour)
+            self.tic()
+        except Exception as e:  # noqa: BLE001
+            print("écran de verrouillage : affichage complet impossible, écran de secours :", repr(e), flush=True)
+            self.secours = True
+            for w in self.fenetres:
+                w.destroy()
+            self.fenetres = []
+            try:
+                self.fenetres_pour_tous(self.fenetre_secours)
+            except Exception as e2:  # noqa: BLE001
+                print("écran de verrouillage : écran de secours impossible :", repr(e2), flush=True)
+                self.terminer(1)
+
+    def fenetres_pour_tous(self, fabrique):
         moniteurs = Gdk.Display.get_default().get_monitors()
         for i in range(moniteurs.get_n_items()):
-            self.fenetre_pour(moniteurs.get_item(i), principal=(i == 0))
-        self.tic()
+            fabrique(moniteurs.get_item(i), principal=(i == 0))
+
+    def fenetre_secours(self, moniteur, principal):
+        """Sans image, horloge ni batterie : le champ du mot de passe et le clavier tactile."""
+        w = Gtk.Window(application=self)
+        fond = Gtk.Overlay()
+        fond.set_child(Gtk.Box(hexpand=True, vexpand=True))
+        if principal:
+            centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER,
+                             valign=Gtk.Align.CENTER)
+            centre.append(Gtk.Label(label="Écran verrouillé"))
+            self.mdp = Gtk.PasswordEntry(placeholder_text="Mot de passe", show_peek_icon=True, width_request=320)
+            self.mdp.connect("activate", lambda *a: self.essayer())
+            self.message = Gtk.Label()
+            centre.append(self.mdp)
+            centre.append(self.message)
+            fond.add_overlay(centre)
+            clavier.ajouter(w, fond, self.mdp, self.essayer, centre)
+        w.set_child(fond)
+        self.verrou.assign_window_to_monitor(w, moniteur)
+        w.present()
+        if principal:
+            self.mdp.grab_focus()
+        self.fenetres.append(w)
 
     def fenetre_pour(self, moniteur, principal):
         w = Gtk.Window(application=self)
@@ -160,7 +205,7 @@ class Verrou(Gtk.Application):
 
 def main():
     os.environ.setdefault("GDK_BACKEND", "wayland")
-    app = Verrou()
+    app = Verrou(secours="--secours" in sys.argv[1:])
     app.run([])
     raise SystemExit(app.code)
 

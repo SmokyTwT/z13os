@@ -210,7 +210,7 @@ class ClientClavier(Client):
     voir commun.keymap_clavier) et tape dans l'appli qui a le clavier,
     quelle qu'elle soit (Chrome compris). Il écoute aussi les champs de texte par la méthode de
     saisie : `quand_saisie(True)` quand un champ prend la main, `quand_saisie(False)` quand il la
-    rend (seulement pour les applis qui le disent, comme celles en GTK)."""
+    rend (pour les applis qui le disent : GTK, Chrome récent)."""
 
     def __init__(self, keymap, quand_saisie=lambda actif: None, prise=None):
         self.keymap, self.quand_saisie = keymap, quand_saisie

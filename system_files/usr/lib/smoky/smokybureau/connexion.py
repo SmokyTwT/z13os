@@ -11,6 +11,7 @@ Protocole greetd : messages JSON précédés de leur longueur (entier 32 bits, o
 import os
 import pwd
 import subprocess
+import sys
 import syslog
 import threading
 import time
@@ -48,18 +49,44 @@ def comptes():
 
 
 class Connexion(Gtk.Application):
-    def __init__(self):
+    def __init__(self, secours=False):
         super().__init__(application_id="fr.smoky.Connexion", flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.comptes = comptes()
         self.confirmer = None
+        self.secours = secours                # écran minimal : mot de passe, clavier, boutons
+        self.connecte = False
 
     def do_activate(self):
-        css = Gtk.CssProvider()
-        css.load_from_path(str(commun.CSS))
-        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
-                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        try:
+            css = Gtk.CssProvider()
+            css.load_from_path(str(commun.CSS))
+            Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                                      Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        except GLib.Error as e:
+            print("écran de connexion : style illisible :", e.message, flush=True)
         w = self.fenetre = Gtk.ApplicationWindow(application=self, title="Smoky")
         w.add_css_class("smoky-connexion")
+        try:
+            if self.secours:
+                raise RuntimeError("mode secours demandé")
+            fond = self.construire(w)
+        except Exception as e:  # noqa: BLE001 — jamais d'écran de connexion sans champ ni clavier
+            print("écran de connexion : affichage complet impossible, écran de secours :", repr(e), flush=True)
+            self.secours = True
+            fond = self.construire_secours(w)
+        w.set_child(fond)
+        w.present()
+        w.fullscreen()
+        self.mdp.grab_focus()
+        if not self.secours:
+            self.tic()
+        # repère pour l'essai de démarrage : la sortie de l'écran de connexion ne va pas au journal,
+        # on y écrit donc directement (syslog → journald)
+        syslog.openlog("smoky-connexion")
+        syslog.syslog(syslog.LOG_INFO, "écran de connexion Smoky affiché" + (" (secours)" if self.secours else ""))
+        GLib.timeout_add_seconds(3, self.essai_automatique)
+
+    def construire(self, w):
         fond = Gtk.Overlay()
         image = Gtk.Picture.new_for_filename(commun.FOND_DEFAUT)
         image.set_content_fit(Gtk.ContentFit.COVER)
@@ -81,31 +108,43 @@ class Connexion(Gtk.Application):
             centre.append(choix)
         else:
             centre.append(Gtk.Label(label=affiche, css_classes=["verrou-nom"]))
+        self.champ_et_message(centre)
+        fond.add_overlay(centre)
+        fond.add_overlay(self.boutons_actions())
+        clavier.ajouter(w, fond, self.mdp, self.essayer, centre)    # clavier tactile : connexion clavier détaché
+        return fond
+
+    def construire_secours(self, w):
+        """Le strict nécessaire, sans image ni horloge : premier compte, mot de passe, clavier, boutons."""
+        fond = Gtk.Overlay()
+        fond.set_child(Gtk.Box(hexpand=True, vexpand=True))
+        centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER,
+                         valign=Gtk.Align.CENTER)
+        nom, affiche = self.comptes[0] if self.comptes else ("", "Aucun compte")
+        self.utilisateur = nom
+        centre.append(Gtk.Label(label=f"Connexion : {affiche}"))
+        self.champ_et_message(centre)
+        fond.add_overlay(centre)
+        fond.add_overlay(self.boutons_actions())
+        clavier.ajouter(w, fond, self.mdp, self.essayer, centre)
+        return fond
+
+    def champ_et_message(self, centre):
         self.mdp = Gtk.PasswordEntry(placeholder_text="Mot de passe", show_peek_icon=True,
                                      css_classes=["verrou-mdp"], width_request=320)
         self.mdp.connect("activate", lambda *a: self.essayer())
         centre.append(self.mdp)
         self.message = Gtk.Label(css_classes=["verrou-message"])
         centre.append(self.message)
-        fond.add_overlay(centre)
+
+    def boutons_actions(self):
         bas = Gtk.Box(spacing=8, halign=Gtk.Align.END, valign=Gtk.Align.END, css_classes=["connexion-actions"])
         for texte, cmd in (("Windows", ["systemctl", "start", "--no-block", "smoky-windows.service"]),
                            ("Redémarrer", ["systemctl", "reboot"]), ("Éteindre", ["systemctl", "poweroff"])):
             b = Gtk.Button(label=texte, css_classes=["action"])
             b.connect("clicked", lambda _b, c=cmd, t=texte: self.action(_b, c, t))
             bas.append(b)
-        fond.add_overlay(bas)
-        clavier.ajouter(w, fond, self.mdp, self.essayer, centre)    # clavier tactile : connexion clavier détaché
-        w.set_child(fond)
-        w.present()
-        w.fullscreen()
-        self.mdp.grab_focus()
-        self.tic()
-        # repère pour l'essai de démarrage : la sortie de l'écran de connexion ne va pas au journal,
-        # on y écrit donc directement (syslog → journald)
-        syslog.openlog("smoky-connexion")
-        syslog.syslog(syslog.LOG_INFO, "écran de connexion Smoky affiché")
-        GLib.timeout_add_seconds(3, self.essai_automatique)
+        return bas
 
     def tic(self):
         t = time.localtime()
@@ -211,6 +250,7 @@ class Connexion(Gtk.Application):
 
     def resultat(self, erreur):
         if erreur is None:
+            self.connecte = True
             self.quit()                 # labwc se ferme avec nous, greetd ouvre ta session
             return False
         self.mdp.set_text("")
@@ -221,8 +261,12 @@ class Connexion(Gtk.Application):
 
 
 def main():
+    """Code de sortie : 0 si ta session est lancée, 3 sinon (smoky-connexion.sh relance alors l'écran,
+    puis passe à l'écran de secours)."""
     os.environ.setdefault("GDK_BACKEND", "wayland")
-    Connexion().run([])
+    app = Connexion(secours="--secours" in sys.argv[1:])
+    app.run([])
+    raise SystemExit(0 if app.connecte else 3)
 
 
 if __name__ == "__main__":
