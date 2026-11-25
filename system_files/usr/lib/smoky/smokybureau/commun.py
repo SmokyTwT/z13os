@@ -263,13 +263,17 @@ def touche_clavier(texte, etat, touche):
     return texte, etat, False
 
 
+# périphériques d'entrée vus par le noyau (les essais le remplacent par un faux fichier)
+PERIPHERIQUES = Path(os.environ.get("SMOKY_PERIPHERIQUES", "/proc/bus/input/devices"))
+
+
 def claviers_physiques(texte=None):
     """Les vrais claviers branchés, d'après /proc/bus/input/devices, avec la règle d'udev
     (ID_INPUT_KEYBOARD) : toutes les touches d'Échap à D présentes. Les boutons (marche,
     volume, touches ASUS) n'en sont pas. None si on ne peut pas savoir."""
     if texte is None:
         try:
-            texte = Path("/proc/bus/input/devices").read_text(errors="replace")
+            texte = PERIPHERIQUES.read_text(errors="replace")
         except OSError:
             return None
     noms = []
@@ -286,6 +290,14 @@ def claviers_physiques(texte=None):
         except ValueError:
             pass
     return noms
+
+
+def clavier_branche():
+    """Un vrai clavier est-il branché : celui du Z13, ou un autre (USB, derrière un hub, sans fil
+    avec son récepteur) ? Dans le doute, oui : le clavier à l'écran ne vient pas tout seul, mais son
+    bouton et le mode tablette restent là."""
+    noms = claviers_physiques()
+    return True if noms is None else bool(noms)
 
 
 # --- clavier à l'écran de la session (clavier_ecran.py) ------------------------------------------

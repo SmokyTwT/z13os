@@ -56,10 +56,11 @@ class Adaptation:
         self.batterie_etat = commun.Batterie()
         # clavier détaché (Z13 en tablette) : le clavier à l'écran s'active tout seul. On regarde
         # /dev/input : un clavier branché ou retiré y ajoute ou y retire un fichier.
-        self.clavier_branche = self.clavier_present()
+        self.clavier_branche = commun.clavier_branche()
         self.attente_clavier = 0
         self.entrees = Gio.File.new_for_path("/dev/input").monitor_directory(Gio.FileMonitorFlags.NONE, None)
         self.entrees.connect("changed", lambda *a: self.planifier_clavier())
+        GLib.timeout_add_seconds(10, self.surveiller_clavier)
         self.appliquer_tablette()
         self.verifier()
         GLib.timeout_add_seconds(60, self.surveiller_niveau)
@@ -103,26 +104,31 @@ class Adaptation:
     # --- mode tablette : clavier à l'écran (smoky-clavier-ecran) et rotation de l'écran ---------
     ROTATIONS = {"normal": "normal", "left-up": "90", "right-up": "270", "bottom-up": "180"}
 
-    @staticmethod
-    def clavier_present():
-        noms = commun.claviers_physiques()
-        return True if noms is None else bool(noms)    # dans le doute : comme avant (clavier là)
-
     def planifier_clavier(self):
         if not self.attente_clavier:                 # plusieurs fichiers bougent d'un coup : on attend 1 s
             self.attente_clavier = GLib.timeout_add(1000, self.revoir_clavier)
 
     def revoir_clavier(self):
         self.attente_clavier = 0
-        present = self.clavier_present()
+        self.mettre_a_jour_clavier()
+        return False
+
+    def surveiller_clavier(self):
+        """Filet de sécurité toutes les 10 s : un clavier branché ou retiré sans que /dev/input l'ait
+        signalé ne laisse pas un mauvais état (clavier à l'écran, rotation) plus longtemps."""
+        self.mettre_a_jour_clavier()
+        return True
+
+    def mettre_a_jour_clavier(self):
+        present = commun.clavier_branche()
         if present != self.clavier_branche:
             self.clavier_branche = present
             self.appliquer_tablette()              # clavier détaché = tablette : clavier à l'écran et rotation
-        return False
 
     def appliquer_clavier_ecran(self):
-        """Clavier à l'écran tout seul dans les champs de texte : en mode tablette, ou clavier détaché
-        (le bouton de la barre apparaît aussi, pour les applis qui ne signalent pas leurs champs)."""
+        """Clavier à l'écran permis en mode tablette ou clavier détaché : bouton dans la barre, et
+        apparition seule dans les champs de texte. Le clavier à l'écran ne vient pourtant jamais tout
+        seul quand un vrai clavier est branché (il le vérifie lui-même au moment de sortir)."""
         actif = bool(self.conf.get("tablet_mode")) or not self.clavier_branche
         commun.commande("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled",
                         "true" if actif else "false")

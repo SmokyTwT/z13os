@@ -9,7 +9,9 @@ Quand il apparaît :
   * toujours par le bouton clavier de la barre (`smoky-bureau-cmd clavier basculer`) ;
   * tout seul quand un champ de texte prend la main (méthode de saisie Wayland : les applis GTK
     et Chrome le disent, vérifié avec Chrome 153), si le mode tablette est actif ou le clavier
-    détaché : smoky-adaptive règle alors org.gnome.desktop.a11y.applications screen-keyboard-enabled.
+    détaché (smoky-adaptive règle alors org.gnome.desktop.a11y.applications screen-keyboard-enabled)
+    et qu'aucun vrai clavier n'est branché à cet instant : celui du Z13, ou un autre, même derrière
+    un hub. Sorti tout seul, il se range dès qu'un vrai clavier arrive (vérifié toutes les 2 s).
 ⌄ le range. Rien ne tourne quand il est caché : il attend les événements.
 """
 import ctypes
@@ -42,7 +44,7 @@ class ClavierSession(Gtk.Application):
         self.fenetre = self.wl = None
         self.ouvert_a_la_main = False          # ouvert par le bouton : ne se range pas tout seul
         self.range_a_la_main = False           # rangé par ⌄ pendant qu'un champ a la main
-        self.attente_cacher = self.repetition = 0
+        self.attente_cacher = self.repetition = self.veille_clavier = 0
         self.keymap, self.codes = commun.keymap_clavier(commun.caracteres_session())
 
     # --- démarrage -------------------------------------------------------------------------
@@ -77,6 +79,7 @@ class ClavierSession(Gtk.Application):
         source = Gio.SettingsSchemaSource.get_default()
         if source is not None and source.lookup(SCHEMA_A11Y, True) is not None:
             self.reglages = Gio.Settings.new(SCHEMA_A11Y)
+            self.reglages.connect("changed::screen-keyboard-enabled", lambda *a: self.reglage_change())
         self.connecter()
 
     def connecter(self):
@@ -159,11 +162,21 @@ class ClavierSession(Gtk.Application):
             self.dessiner()
 
     # --- apparition ------------------------------------------------------------------------------
-    def automatique(self):
+    def permis(self):
         try:
             return bool(self.reglages and self.reglages.get_boolean("screen-keyboard-enabled"))
         except GLib.Error:
             return False
+
+    def automatique(self):
+        """Sortir tout seul : permis (mode tablette ou clavier détaché) et aucun vrai clavier branché."""
+        return self.permis() and not commun.clavier_branche()
+
+    def reglage_change(self):
+        """Plus permis (clavier rattaché, mode tablette fini) : il se range, même ouvert par le bouton,
+        puisque le bouton de la barre disparaît au même moment (sinon rien ne le fermerait que ⌄)."""
+        if not self.permis():
+            self.cacher()
 
     def saisie(self, actif):
         """Un champ de texte prend (True) ou rend (False) la main."""
@@ -173,6 +186,7 @@ class ClavierSession(Gtk.Application):
         if actif:
             if self.automatique() and not self.range_a_la_main:
                 self.montrer()
+                self.surveiller_clavier()
         else:
             self.range_a_la_main = False
             if not self.ouvert_a_la_main:      # le champ suivant reprend souvent la main aussitôt
@@ -189,6 +203,21 @@ class ClavierSession(Gtk.Application):
             self.dessiner()
             self.fenetre.present()
 
+    def surveiller_clavier(self):
+        if not self.veille_clavier:
+            self.veille_clavier = GLib.timeout_add_seconds(2, self.verifier_clavier)
+
+    def verifier_clavier(self):
+        """Sorti tout seul : un vrai clavier vient d'être branché (ou rattaché) ? Il se range."""
+        if not self.fenetre or not self.fenetre.get_visible() or self.ouvert_a_la_main:
+            self.veille_clavier = 0
+            return False
+        if commun.clavier_branche():
+            self.veille_clavier = 0
+            self.cacher()
+            return False
+        return True
+
     def montrer_main(self):
         self.ouvert_a_la_main = True
         self.montrer()
@@ -196,6 +225,9 @@ class ClavierSession(Gtk.Application):
     def cacher(self):
         self.ouvert_a_la_main = False
         self.fin_repetition()
+        if self.veille_clavier:
+            GLib.source_remove(self.veille_clavier)
+            self.veille_clavier = 0
         if self.fenetre:
             self.fenetre.set_visible(False)
 

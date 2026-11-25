@@ -358,6 +358,51 @@ B: KEY=80000000000000 0 0 0 1500b00000c00 4000000000300000 0
         blocs = branche.split("\n\n")
         self.assertEqual(commun.claviers_physiques(blocs[0] + "\n\n" + blocs[2]), [], "boutons seuls : pas un clavier")
 
+    BOUTONS = """I: Bus=0019 Vendor=0000 Product=0001 Version=0000
+N: Name="Power Button"
+H: Handlers=kbd event0
+B: KEY=10000000000000 0
+"""
+    CLAVIER_HUB = """I: Bus=0003 Vendor=0c45 Product=7638 Version=0111
+N: Name="SONiX USB Keyboard"
+P: Phys=usb-0000:00:14.0-3.2/input0
+H: Handlers=sysrq kbd leds event12
+B: KEY=1000000000007 ff800000000007ff febeffdfffefffff fffffffffffffffe
+"""
+
+    def test_clavier_externe(self):
+        """25/11 : Z13 détaché, clavier externe derrière un hub. Il compte comme vrai clavier ; un
+        fichier illisible compte aussi (dans le doute, le clavier à l'écran ne sort pas seul)."""
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "devices"
+            with mock.patch.object(commun, "PERIPHERIQUES", f):
+                self.assertTrue(commun.clavier_branche(), "illisible : dans le doute, un clavier est là")
+                f.write_text(self.BOUTONS)
+                self.assertFalse(commun.clavier_branche(), "boutons seuls : tablette")
+                f.write_text(self.BOUTONS + "\n" + self.CLAVIER_HUB)
+                self.assertTrue(commun.clavier_branche(), "clavier USB derrière un hub")
+
+    def test_filet_smoky_adaptive(self):
+        """smoky-adaptive revoit le clavier toutes les 10 s : un branchement que /dev/input n'aurait pas
+        signalé est rattrapé (mode tablette, clavier à l'écran et rotation remis d'aplomb)."""
+        try:
+            from smokybureau import energie
+        except ImportError:
+            self.skipTest("liaisons GTK (gi) absentes pour ce Python : essai fait avec le Python du système")
+        a = energie.Adaptation.__new__(energie.Adaptation)       # sans bus ni capteurs
+        a.clavier_branche = False
+        appels = []
+        a.appliquer_tablette = lambda: appels.append(a.clavier_branche)
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "devices"
+            f.write_text(self.BOUTONS + "\n" + self.CLAVIER_HUB)
+            with mock.patch.object(commun, "PERIPHERIQUES", f):
+                self.assertTrue(a.surveiller_clavier(), "le filet continue de tourner")
+                a.surveiller_clavier()
+                f.write_text(self.BOUTONS)
+                a.surveiller_clavier()
+        self.assertEqual(appels, [True, False], "un seul changement appliqué par branchement")
+
 
 class TestClavierSession(unittest.TestCase):
     """Clavier à l'écran de la session : couches, disposition (keymap), protocole Wayland."""

@@ -20,6 +20,7 @@ for e in clavier-session.py clavier-tout.py connexion-clavier.py connexion-windo
 done
 if [[ -x "$LABWC_SAISIE" ]]; then
   essai "$LABWC_SAISIE" env GSETTINGS_BACKEND=memory python3 "$ICI/clavier-auto.py"
+  essai "$LABWC_SAISIE" env GSETTINGS_BACKEND=memory python3 "$ICI/clavier-externe.py"
   essai "$LABWC_SAISIE" "$ICI/chrome.sh"
 else
   echo "SAUTÉ apparition seule du clavier et Chrome : lance d'abord tests/atelier/preparer.sh"
