@@ -1096,6 +1096,17 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
   rafraichir();
   usb_demarrer();                                         /* clavier USB (celui du Z13 en est un) */
   { char d[96]; usb_etat(d, sizeof d); noter(d, usb_claviers() ? 0xb6b7c2 : 0x7c7c86); }
+  if (!usb_claviers()) {                                  /* rien pour taper : ce que le pilote a vu, à photographier */
+    char d[96];
+    noter("Aucun clavier trouvé. Ce qu'a vu le pilote USB (à photographier) :", 0xff8f85);
+    for (int k = noyau_journal_nb() > 10 ? noyau_journal_nb() - 10 : 0; noyau_journal_ligne(k, d, sizeof d); k++)
+      noter(d, 0x7c7c86);
+    for (int k = 0; k < 6 && usb_decrire(k, d, sizeof d); k++) {
+      noter(d, 0xb6b7c2);
+      if (usb_interfaces(k, d, sizeof d)) noter(d, 0x7c7c86);
+    }
+  }
+  int claviers_avant = usb_claviers();
   abimer_fenetre(F_CARNET);
   rafraichir();
   u64 derniere_seconde = 0, prochain_chrono = 0;
@@ -1137,6 +1148,12 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
       curseur_abime = 1;
     }
     if (souris_vue && !usb_nb_souris()) { souris_vue = 0; deplace = -1; effacer_curseur(); }
+    if (usb_claviers() != claviers_avant) {                 /* clavier branché ou débranché après le démarrage */
+      noter(usb_claviers() > claviers_avant ? "Clavier prêt : tape « bilan » puis Entrée." : "Clavier débranché.",
+            usb_claviers() > claviers_avant ? 0xf3f3f6 : 0x7c7c86);
+      claviers_avant = usb_claviers();
+      abimer_fenetre(F_CARNET);
+    }
     rafraichir();
     if (souris_vue && curseur_abime) dessiner_curseur();
   }

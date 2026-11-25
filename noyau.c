@@ -326,12 +326,35 @@ int noyau_heure(EFI_TIME *t) {
 }
 
 /* --- Journal série (COM1) : lu dans les essais QEMU, sans effet sur un PC qui n'en a pas ---------- */
+/* gardé aussi en mémoire : sur un PC sans port série (le Z13), ses dernières lignes s'affichent à
+ * l'écran quand aucun clavier ne répond */
+#define JOURNAL_LIGNES 24
+#define JOURNAL_LARGEUR 96
+static char journal_memoire[JOURNAL_LIGNES][JOURNAL_LARGEUR];
+static int journal_tete, journal_nb, journal_col;
+
 void noyau_journal(const char *t) {
   for (; *t; t++) {
+    if (*t == '\n') {
+      journal_memoire[journal_tete][journal_col] = 0;
+      journal_tete = (journal_tete + 1) % JOURNAL_LIGNES;
+      if (journal_nb < JOURNAL_LIGNES) journal_nb++;
+      journal_col = 0;
+    } else if (journal_col < JOURNAL_LARGEUR - 1) journal_memoire[journal_tete][journal_col++] = *t;
     for (int i = 0; i < 10000 && !(entree(0x3FD) & 0x20); i++) __asm__ volatile("pause");
     sortie(0x3F8, (u8)*t);
   }
 }
+
+int noyau_journal_ligne(int n, char *d, int max) {
+  if (n < 0 || n >= journal_nb) return 0;
+  const char *l = journal_memoire[(journal_tete - journal_nb + n + JOURNAL_LIGNES) % JOURNAL_LIGNES];
+  int i = 0;
+  for (; l[i] && i < max - 1; i++) d[i] = l[i];
+  d[i] = 0;
+  return 1;
+}
+int noyau_journal_nb(void) { return journal_nb; }
 void noyau_journal_nombre(const char *t, u64 v, int base) {
   char d[24]; int n = 0;
   noyau_journal(t);

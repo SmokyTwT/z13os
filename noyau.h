@@ -19,6 +19,8 @@ u64 noyau_tics(void);                             /* 50 par seconde, comptés pa
 u64 noyau_microsecondes(void);                    /* depuis le démarrage du noyau */
 void noyau_journal(const char *texte);            /* port série COM1 (essais) */
 void noyau_journal_nombre(const char *texte, u64 valeur, int base);
+int noyau_journal_ligne(int n, char *d, int max); /* n-ième ligne gardée du journal (0 = la plus ancienne) */
+int noyau_journal_nb(void);
 int noyau_mapper(u64 base, u64 taille);           /* registres d'un appareil rendus accessibles */
 const char *noyau_minuterie(void);                /* quelle minuterie réveille le processeur */
 const char *noyau_calibrage(void);                /* comment la fréquence du TSC a été trouvée */

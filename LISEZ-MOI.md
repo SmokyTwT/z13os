@@ -53,6 +53,10 @@ Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci 
   sur un seul écran, à photographier), `calculatrice`,
   `notes`, `horloge`, `effacer`, `apropos`, `redemarrer` (par le contrôleur du clavier, sans le
   firmware) et `eteindre`.
+- Si aucun clavier ne répond au démarrage, il affiche tout seul ce qu'a vu le pilote USB (les
+  dernières lignes de son journal, gardées en mémoire, et les appareils trouvés) : une photo de
+  l'écran suffit pour comprendre, même sur un PC sans port série comme le Z13. Un clavier branché
+  ensuite est annoncé.
 - Entre deux interruptions, le processeur dort (`hlt`).
 
 ## Sécurité de ton PC
