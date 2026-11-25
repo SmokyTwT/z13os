@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Essai de l'installateur de l'ISO dans une machine virtuelle, sans rien installer : l'ISO
 # démarre en mode texte (sur le port série) et on attend le résumé de l'installation.
-# Il doit être en français, avec les étapes « Configurations de la langue » et « Création de
-# l'utilisateur » (sinon : pas de compte, ou un mot de passe tapé en QWERTY).
+# Il doit être en français (la langue y est écrite « French (France) »), fuseau Europe/Paris, avec
+# les étapes « Configurations de la langue » et « Création de l'utilisateur » (sinon : pas de
+# compte, ou un mot de passe tapé en QWERTY). L'installateur tourne dans tmux : le résumé arrive
+# mêlé de codes d'écran et coupé à 80 colonnes, d'où des morceaux courts.
 #   sudo bash tests/iso/essai-installateur.sh smokyos.iso
 # Lancé par build-iso.yml après la construction de l'ISO. Paquets : qemu-system-x86, xorriso.
 set -uo pipefail
@@ -54,12 +56,12 @@ manque=""
 # des morceaux courts, qu'un retour à la ligne du résumé (deux colonnes) ne coupe pas
 grep -aqF "to begin installation" <<<"$resume" && manque+=" le français (l'installateur est resté en anglais) ;"
 grep -aqF "de la langue" <<<"$resume" || manque+=" l'étape de la langue et du clavier ;"
-grep -aqF "Français" <<<"$resume" || manque+=" la langue réglée sur le français ;"
+grep -aqE "French \(France\)|Français" <<<"$resume" || manque+=" la langue réglée sur le français ;"
 grep -aqF "utilisateur" <<<"$resume" || manque+=" l'étape « Création de l'utilisateur » ;"
 grep -aqF "Destination" <<<"$resume" || manque+=" le choix du disque ;"
+grep -aqF "Europe/Paris" <<<"$resume" || manque+=" le fuseau Europe/Paris ;"
 if [ -n "$manque" ]; then
   echo "RÉSULTAT : résumé de l'installation incomplet, il manque :${manque% ;}."
   exit 1
 fi
-grep -aqE "Configuration de réseau|Network configuration" <<<"$resume" && echo "note : l'étape du réseau est présente (elle devait être retirée)"
-echo "RÉSULTAT : l'installateur démarre en français ; langue, disque et création du compte sont proposés."
+echo "RÉSULTAT : l'installateur démarre en français, fuseau Europe/Paris ; langue, disque et création du compte sont proposés."

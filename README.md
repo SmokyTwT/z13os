@@ -136,8 +136,8 @@ télécharger les mises à jour.
 2. Copie `smokyos.iso` sur une clé USB (8 Go ou plus) avec **Fedora Media Writer** ou
    **balenaEtcher** (option « image personnalisée »).
 3. Allume le Z13 en maintenant **Échap** (ou **F2** → Boot), puis choisis la clé.
-4. L'installateur s'ouvre en français, clavier AZERTY. Il demande le disque, le fuseau horaire
-   (Europe/Paris) et le compte à créer : coche « Faire de cet utilisateur un administrateur »
+4. L'installateur s'ouvre en français, clavier AZERTY, fuseau Europe/Paris. Il demande le disque
+   et le compte à créer : coche « Faire de cet utilisateur un administrateur »
    (sinon pas de `sudo`). Avant le mot de passe, tape ton nom : si un « a » devient « q », le
    clavier est en QWERTY ; règle-le dans « Clavier » avant d'aller plus loin.
    **Attention : « récupérer tout l'espace » efface Windows et tout le disque.** Pour garder

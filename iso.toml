@@ -1,15 +1,19 @@
-# Installateur Anaconda : il s'ouvre en français avec le clavier AZERTY ; tu choisis le disque et
-# le fuseau horaire, et tu crées ton compte.
+# Installateur Anaconda : il s'ouvre en français, clavier AZERTY, fuseau Europe/Paris ; tu choisis
+# le disque et tu crées ton compte.
 # - Depuis la refonte du 24/11, l'image n'a plus d'assistant de premier démarrage : sans l'étape
 #   « Création de l'utilisateur » (module Users), une installation neuve n'aurait aucun compte.
 # - Sans le module Localization, les lignes lang et keyboard sont ignorées (bug Fedora 2436674) :
 #   l'installateur serait en anglais et en QWERTY, et un mot de passe tapé sur le clavier AZERTY
 #   du Z13 ne serait plus le même à l'écran de connexion (qui, lui, est en AZERTY).
+# - Fuseau Europe/Paris (sans cette ligne : America/New_York). Sans « --utc », l'horloge du PC
+#   reste à l'heure locale, comme Windows la lit : pas d'heure d'écart sous Windows (c'est aussi
+#   ce que fait l'installateur de Fedora quand il voit Windows sur le disque).
 # @IMAGE@ est remplacé par le workflow.
 [customizations.installer.kickstart]
 contents = """
 lang fr_FR.UTF-8
 keyboard --vckeymap=fr --xlayouts=fr
+timezone Europe/Paris
 %post
 bootc switch --mutate-in-place --transport registry @IMAGE@
 %end
