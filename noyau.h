@@ -12,7 +12,16 @@ enum { TOUCHE_TEXTE = 0, TOUCHE_ENTREE, TOUCHE_EFFACER, TOUCHE_ECHAP };
 void noyau_demarrer(const EFI_MEMORY_DESCRIPTOR *carte, UINTN taille, UINTN taille_desc);
 int noyau_touche(u32 *caractere, int *genre);     /* 1 si une touche attendait */
 void noyau_pousser_code(u8 code);                 /* code de touche PS/2 (jeu 1) venu d'ailleurs (USB) */
-u64 noyau_tics(void);
+u64 noyau_tics(void);                             /* 50 par seconde, comptés par le TSC */
+u64 noyau_microsecondes(void);                    /* depuis le démarrage du noyau */
+void noyau_journal(const char *texte);            /* port série COM1 (essais) */
+void noyau_journal_nombre(const char *texte, u64 valeur, int base);
+int noyau_mapper(u64 base, u64 taille);           /* registres d'un appareil rendus accessibles */
+const char *noyau_minuterie(void);                /* quelle minuterie réveille le processeur */
+const char *noyau_calibrage(void);                /* comment la fréquence du TSC a été trouvée */
+u64 noyau_frequence_tsc(void);
+void noyau_processeur(char *d, int max);          /* nom du processeur */
+int noyau_clavier_ps2(void);                      /* 1 : un contrôleur de clavier PS/2 a répondu */
 void noyau_attendre(void);                        /* dort jusqu'à la prochaine interruption */
 int noyau_heure(EFI_TIME *t);                     /* horloge CMOS du PC (lue par Smoky OS) */
 u64 noyau_memoire_totale(void);                   /* en octets */

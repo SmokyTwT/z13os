@@ -3,7 +3,14 @@
 démarre l'OS, prend des captures, tape des commandes comme sur un clavier AZERTY."""
 import json, os, shutil, socket, subprocess, sys, time
 BRANCHEMENT = "--branchement" in sys.argv          # clavier branché seulement après le démarrage
-sys.argv = [a for a in sys.argv if a != "--branchement"]
+SANS_PIT = "--sans-pit" in sys.argv                # comme un PC récent dont le firmware arrête le PIT
+HUBS = 2 if "--hubs" in sys.argv else 1 if "--hub" in sys.argv else 0   # clavier derrière 1 ou 2 hubs
+sys.argv = [a for a in sys.argv if a not in ("--branchement", "--sans-pit", "--hub", "--hubs")]
+# où brancher le clavier : port 2 du contrôleur, ou port 3 d'un hub (lui-même sur le port 1 d'un autre hub)
+CHEMIN = "2" if not HUBS else "2.3" if HUBS == 1 else "2.1.3"
+CONCENTRATEURS = [] if not HUBS else ["-device", "usb-hub,bus=xhci.0,port=2"] + (
+    ["-device", "usb-hub,bus=xhci.0,port=2.1"] if HUBS == 2 else [])
+CLAVIER = {"driver": "usb-kbd", "id": "clavier-usb", "bus": "xhci.0", "port": CHEMIN}
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 T = "/tmp/smokyos-essai"
@@ -11,12 +18,13 @@ shutil.rmtree(T, ignore_errors=True); os.makedirs(T)
 shutil.copy("/usr/share/OVMF/OVMF_VARS_4M.fd", f"{T}/vars.fd")
 qemu = subprocess.Popen([
     # sans contrôleur PS/2 (i8042=off) : comme un PC récent, seul le clavier USB existe
-    "qemu-system-x86_64", "-machine", "q35,i8042=off", "-m", "1024", "-display", "none", "-net", "none",
+    "qemu-system-x86_64", "-machine", "q35,i8042=off" + (",pit=off,hpet=off" if SANS_PIT else ""), "-m", "1024", "-display", "none", "-net", "none",
     "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
     "-drive", f"if=pflash,format=raw,file={T}/vars.fd",
     # démarrage depuis une clé USB virtuelle (copie jetable : l'image reste intacte)
-    "-device", "qemu-xhci", "-drive", f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img",
-    "-device", "usb-storage,drive=cle", *([] if BRANCHEMENT else ["-device", "usb-kbd,id=clavier-usb"]),
+    "-device", "qemu-xhci,id=xhci", "-drive", f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img",
+    "-device", "usb-storage,bus=xhci.0,port=1,drive=cle", *CONCENTRATEURS,
+    *([] if BRANCHEMENT else ["-device", f"usb-kbd,id=clavier-usb,bus=xhci.0,port={CHEMIN}"]),
     "-device", "virtio-vga", "-qmp", f"unix:{T}/qmp.sock,server,nowait", "-serial", f"file:{T}/serie.txt"],
     stderr=open(f"{T}/qemu.txt", "w"))
 s = socket.socket(socket.AF_UNIX)
@@ -42,11 +50,11 @@ def taper(touches):
 attente = float(sys.argv[1]) if len(sys.argv) > 1 else 40
 time.sleep(attente); capture("1-demarrage")
 if BRANCHEMENT:                                  # branché, débranché, rebranché
-    print(qmp("device_add", driver="usb-kbd", id="clavier-usb"))
+    print(qmp("device_add", **CLAVIER))
     time.sleep(3)
     print(qmp("device_del", id="clavier-usb"))
     time.sleep(3)
-    print(qmp("device_add", driver="usb-kbd", id="clavier-usb"))
+    print(qmp("device_add", **CLAVIER))
     time.sleep(3)
 taper(["q", "i", "d", "e", "ret"]); time.sleep(6)             # « aide » sur un clavier AZERTY
 taper(["semicolon", "e", "semicolon", "o", "i", "r", "e", "ret"]); time.sleep(6)   # « memoire »
@@ -57,6 +65,11 @@ for touches in (["shift", "q"], ["alt_r", "e"], ["bracket_left"], ["e"], ["2"]):
     qmp("send-key", keys=[{"type": "qcode", "data": k} for k in touches]); time.sleep(0.2)
 taper(["ret"]); time.sleep(4)
 capture("2-aide")
+taper(["e", "f", "f", "q", "c", "e", "r", "ret"]); time.sleep(3)                  # « effacer »
+taper(["u", "s", "b", "ret"]); time.sleep(4)                                       # « usb »
+capture("3-usb")
+taper(["b", "i", "l", "q", "n", "ret"]); time.sleep(4)                              # « bilan »
+capture("4-bilan")
 qmp("quit")
 qemu.wait(10)
 print(open(f"{T}/serie.txt", errors="replace").read()[-300:])
