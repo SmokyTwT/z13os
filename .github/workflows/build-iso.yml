@@ -61,3 +61,18 @@ jobs:
             smokyos.iso.sha256
           compression-level: 0
           retention-days: 14
+
+      # Après la mise à disposition : un échec ici n'empêche pas de récupérer l'ISO, il la signale.
+      - name: Essai de l'installateur (machine virtuelle, sans rien installer)
+        run: |
+          for essai in 1 2 3 4; do
+            if sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 xorriso; then break; fi
+            if [[ $essai == 4 ]]; then echo "::error::Impossible d'installer QEMU (machine virtuelle de test)"; exit 1; fi
+            echo "::warning::Installation de QEMU : essai $essai échoué, nouvel essai dans 30 s"
+            sleep 30
+          done
+          set -o pipefail
+          code=0
+          sudo bash tests/iso/essai-installateur.sh smokyos.iso | tee /tmp/installateur.txt || code=$?
+          { echo "### Essai de l'installateur"; echo '```'; grep -E "RÉSULTAT|note" /tmp/installateur.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
