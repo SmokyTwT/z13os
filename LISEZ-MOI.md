@@ -8,7 +8,7 @@ du firmware, écrites d'après la spécification UEFI) et le compilateur. Son no
 Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci est dans la branche
 `os-maison`.
 
-## Ce qu'il sait faire (version 0.4)
+## Ce qu'il sait faire (version 0.5)
 
 - Il démarre directement par le firmware UEFI du PC, comme un programme `BOOTX64.EFI`, puis il
   **congédie le firmware** (ExitBootServices). À partir de là, il gère seul (`noyau.c`) :
@@ -27,14 +27,26 @@ Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci 
     l'OS tourne, comme le clavier détachable du Z13. Il peut aussi être derrière un ou plusieurs
     **hubs USB 2** (un hub interne du PC, un dock, la partie USB 2 d'un hub USB 3). Un appareil qui
     refuse une requête ne bloque pas les suivantes. Un PC sans contrôleur PS/2 démarre aussi ;
-  - l'horloge du PC (puce CMOS) et la mémoire libre ;
+  - la **souris USB** (protocole de démarrage), branchée directement ou derrière un hub ;
+  - l'horloge du PC (puce CMOS), lue en temps universel et affichée à l'heure de Paris (heure d'été
+    comprise), et la mémoire libre ;
   - un écran d'erreur si le processeur signale une faute.
-- Il dessine tout lui-même : le fond aux braises, les cadres, et sa police, faite de traits sur une
-  grille. Celle-ci s'agrandit sans perte et a les accents français.
+- Il dessine tout lui-même : le fond aux braises, les fenêtres, la flèche de la souris, et sa
+  police, faite de traits sur une grille. Celle-ci s'agrandit sans perte et a les accents français.
+  L'écran n'est refait que là où quelque chose a changé.
+- Il ouvre des **fenêtres** : on les prend par leur barre de titre pour les déplacer, un clic les
+  met devant, le bouton × ou Échap les ferme (sauf le carnet), Alt+Tab passe à la suivante. Celle
+  de devant reçoit le clavier.
+  - **calculatrice** : au clavier ou à la souris ; priorités (puissance, puis × et ÷, puis + et −),
+    parenthèses, virgule ou point, `2(3+4)`, et après « = » on continue avec le résultat ;
+  - **notes** : un bloc-notes ; le texte reste tant que le PC est allumé (rien n'est écrit sur le
+    disque) ;
+  - **horloge** : l'heure en grand, la date, et un chronomètre (Espace pour démarrer ou arrêter).
 - Il tient un carnet de commandes : `aide`, `heure`, `memoire`, `ecran`, `systeme`, `usb` (la
   liste des appareils USB, avec leur chemin : `port 6 → 3` veut dire « port 3 du hub branché sur le
-  port 6 »), `bilan` (tout ce qu'il voit du PC sur un seul écran, à photographier), `effacer`,
-  `apropos`, `redemarrer` (par le contrôleur du clavier, sans le firmware) et `eteindre`.
+  port 6 »), `bilan` (tout ce qu'il voit du PC sur un seul écran, à photographier), `calculatrice`,
+  `notes`, `horloge`, `effacer`, `apropos`, `redemarrer` (par le contrôleur du clavier, sans le
+  firmware) et `eteindre`.
 - Entre deux interruptions, le processeur dort (`hlt`).
 
 ## Sécurité de ton PC
@@ -42,8 +54,8 @@ Ton Smoky OS de tous les jours (sur Linux) est dans la branche `main`. Celui-ci 
 Il n'a **aucun pilote de disque**. Il n'appelle jamais les fonctions d'écriture du firmware. Il ne
 peut donc ni lire ni modifier ton Windows, ton Smoky OS de tous les jours, ou un réglage du PC. Le
 firmware lui sert uniquement à démarrer et, pour `eteindre`, à couper le courant. Le pilote USB ne
-parle qu'aux claviers et aux hubs : une clé USB branchée est seulement reconnue (elle apparaît dans
-`usb`), jamais lue.
+parle qu'aux claviers, aux souris et aux hubs : une clé USB branchée est seulement reconnue (elle
+apparaît dans `usb`), jamais lue.
 
 ## Construire et essayer
 
@@ -56,8 +68,10 @@ parle qu'aux claviers et aux hubs : une clé USB branchée est seulement reconnu
 ```
 
 Les options se combinent (`--hubs --branchement`). Chaque essai tape `aide`, `memoire`, `systeme`,
-`heure`, une ligne avec Maj, Alt Gr et un accent, puis `usb` et `bilan`, et prend une capture après
-chaque étape dans `/tmp/smokyos-essai/`.
+`heure`, une ligne avec Maj, Alt Gr et un accent, puis `usb` et `bilan`. Ensuite il ouvre la
+calculatrice (un calcul tapé, puis 7 + 1 = 8 à la souris), la déplace par sa barre de titre, passe au
+carnet par Alt+Tab, écrit dans les notes, les ferme et les rouvre (le texte est toujours là), et
+lance le chronomètre. Il prend une capture après chaque étape dans `/tmp/smokyos-essai/`.
 
 La machine virtuelle n'a pas de contrôleur PS/2 (`i8042=off`) : tout ce qui est tapé passe par le
 clavier USB et le pilote maison (`systeme` affiche 0 interruption du clavier PS/2). Le journal du
@@ -74,4 +88,5 @@ qu'il n'est pas signé. On le fera ensemble, plus tard, avec ton accord. Ce jour
 | 0.2 | Fait : il prend la main (sa mémoire, ses interruptions, sa minuterie, son clavier, son horloge). |
 | 0.3 | Fait : clavier USB (pilote xHCI maison), branchement à chaud, PC sans PS/2. |
 | 0.4 | Fait : le temps par le compteur du processeur, la minuterie de l'APIC local (un PC dont le vieux PIT est arrêté fonctionne), les hubs USB 2, la reprise après une requête refusée, un contrôleur USB endormi réveillé, la commande `bilan`. Vérifié dans QEMU (avec et sans PIT, derrière un et deux hubs, branchement à chaud), pas encore sur le vrai Z13. Le mode x2APIC n'a pas pu être essayé (ce QEMU ne l'émule pas) : s'il ne répondait pas, l'OS prendrait le PIT, ou se passerait de minuterie. |
-| 0.5 | Fenêtres et petites applis : notes, calculatrice, horloge. |
+| 0.5 | Fait : souris USB, fenêtres (déplacer, mettre devant, fermer, Alt+Tab), calculatrice, notes, horloge avec chronomètre, heure de Paris. Vérifié dans QEMU. |
+| 0.6 | Le pavé tactile du clavier du Z13 (un appareil USB à plusieurs interfaces : clavier et pavé ensemble), puis l'écran tactile (I2C, plus gros morceau). |

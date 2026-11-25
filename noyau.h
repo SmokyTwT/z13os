@@ -5,12 +5,15 @@
 #pragma once
 #include "uefi.h"
 
-enum { TOUCHE_TEXTE = 0, TOUCHE_ENTREE, TOUCHE_EFFACER, TOUCHE_ECHAP };
+enum { TOUCHE_TEXTE = 0, TOUCHE_ENTREE, TOUCHE_EFFACER, TOUCHE_ECHAP, TOUCHE_TAB, TOUCHE_HAUT, TOUCHE_BAS,
+       TOUCHE_GAUCHE, TOUCHE_DROITE, TOUCHE_SUPPR, TOUCHE_DEBUT, TOUCHE_FIN };
+enum { MOD_CTRL = 1, MOD_ALT = 2, MOD_MAJ = 4 };   /* touches tenues, voir noyau_modificateurs() */
 
 #define TICS_PAR_SECONDE 50
 
 void noyau_demarrer(const EFI_MEMORY_DESCRIPTOR *carte, UINTN taille, UINTN taille_desc);
 int noyau_touche(u32 *caractere, int *genre);     /* 1 si une touche attendait */
+int noyau_modificateurs(void);                    /* Ctrl, Alt, Maj tenues au moment de la touche */
 void noyau_pousser_code(u8 code);                 /* code de touche PS/2 (jeu 1) venu d'ailleurs (USB) */
 u64 noyau_tics(void);                             /* 50 par seconde, comptés par le TSC */
 u64 noyau_microsecondes(void);                    /* depuis le démarrage du noyau */

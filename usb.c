@@ -92,7 +92,7 @@ struct controleur;
 struct appareil {
   struct controleur *hc;
   struct appareil *parent;              /* hub où il est branché ; 0 : directement sur le contrôleur */
-  int slot, port, vitesse, dci, interface, clavier, hub;
+  int slot, port, vitesse, dci, interface, clavier, hub, souris;
   int port_parent, etage;               /* port du hub parent ; étage 0 = sur le contrôleur */
   u32 route;                            /* chemin depuis le port du contrôleur : 4 bits par étage */
   int tt_slot, tt_port;                 /* traducteur du hub haut débit qu'empruntent les appareils lents */
@@ -118,7 +118,28 @@ struct controleur {
   u8 changement[256];
 };
 static struct controleur HC[4];
-static int nb_hc, nb_claviers;
+static int nb_hc, nb_claviers, nb_souris;
+
+/* souris : rapports (boutons, déplacement) mis en file pour l'interface */
+static struct { int dx, dy, boutons; } FILE_SOURIS[64];
+static int souris_tete, souris_queue;
+
+int usb_souris(int *dx, int *dy, int *boutons) {
+  if (souris_queue == souris_tete) return 0;
+  *dx = FILE_SOURIS[souris_queue].dx; *dy = FILE_SOURIS[souris_queue].dy; *boutons = FILE_SOURIS[souris_queue].boutons;
+  souris_queue = (souris_queue + 1) & 63;
+  return 1;
+}
+int usb_nb_souris(void) { return nb_souris; }
+
+static void rapport_souris(const volatile u8 *r) {
+  int suivant = (souris_tete + 1) & 63;
+  if (suivant == souris_queue) return;                  /* file pleine : l'interface ne suit pas */
+  FILE_SOURIS[souris_tete].boutons = r[0] & 7;
+  FILE_SOURIS[souris_tete].dx = (signed char)r[1];
+  FILE_SOURIS[souris_tete].dy = (signed char)r[2];
+  souris_tete = suivant;
+}
 
 static void poser(struct anneau *a, u64 param, u32 statut, u32 controle) {
   volatile trb *t = &a->trbs[a->index];
@@ -295,11 +316,12 @@ static void debrancher(struct appareil *a) {
   for (int i = 0; i < hc->nb_app; i++)
     if (hc->app[i].slot && hc->app[i].parent == a) debrancher(&hc->app[i]);
   if (a->clavier) nb_claviers--;
+  if (a->souris) nb_souris--;
   commande(hc, 0, T_DISABLE_SLOT << 10 | (u32)a->slot << 24, 0);
   hc->dcbaa[a->slot] = 0;
   if (a->parent) journal_nb("usb : appareil débranché d'un hub, port ", (u64)a->port_parent);
   else journal_nb("usb : appareil débranché du port ", (u64)a->port);
-  a->clavier = 0; a->hub = 0; a->a_voir = 0; a->port = 0; a->parent = 0; a->slot = 0;
+  a->clavier = 0; a->souris = 0; a->hub = 0; a->a_voir = 0; a->port = 0; a->parent = 0; a->slot = 0;
 }
 
 static int preparer_hub(struct appareil *a, int ep_mps) {
@@ -379,15 +401,17 @@ static void installer(struct controleur *hc, struct appareil *parent, int port_p
   int total = a->tampon[2] | a->tampon[3] << 8, valeur = a->tampon[5];
   if (total > 1024) total = 1024;
   if (total < 9 || !requete(a, 0x80, 6, 0x200, 0, (u16)total)) return;
-  /* une interface (réglage 0) de clavier de démarrage (3/1/1) ou de hub (9), et son point entrant */
+  /* une interface (réglage 0) de clavier de démarrage (3/1/1), de souris de démarrage (3/1/2) ou de
+   * hub (9), et son point entrant ; le clavier passe avant la souris d'un même appareil */
   int genre = 0, courant = 0, iface_courante = 0, iface = 0, ep_adresse = 0, ep_mps = 8, ep_intervalle = 10;
   for (int i = 0; i + 1 < total && a->tampon[i] >= 2; i += a->tampon[i]) {
     const volatile u8 *d = a->tampon + i;
     if (d[1] == 4) {
       if (!a->classe) a->classe = d[5];                 /* classe donnée par les interfaces : la première */
       iface_courante = d[2];
-      courant = d[3] ? 0 : d[5] == 3 && d[6] == 1 && d[7] == 1 ? 1 : d[5] == 9 ? 2 : 0;
-    } else if (d[1] == 5 && courant && !ep_adresse && (d[2] & 0x80) && (d[3] & 3) == 3) {
+      courant = d[3] ? 0 : d[5] == 3 && d[6] == 1 && d[7] == 1 ? 1 : d[5] == 9 ? 2 :
+                d[5] == 3 && d[6] == 1 && d[7] == 2 ? 3 : 0;
+    } else if (d[1] == 5 && courant && (!ep_adresse || (genre == 3 && courant == 1)) && (d[2] & 0x80) && (d[3] & 3) == 3) {
       genre = courant; iface = iface_courante;
       ep_adresse = d[2]; ep_mps = d[4] | (d[5] & 7) << 8; ep_intervalle = d[6];
     }
@@ -397,9 +421,9 @@ static void installer(struct controleur *hc, struct appareil *parent, int port_p
   a->interface = iface;
   a->dci = (ep_adresse & 15) * 2 + 1;
   if (genre == 2 && !preparer_hub(a, ep_mps)) return;
-  if (genre == 1) {
+  if (genre == 1 || genre == 3) {
     requete(a, 0x21, 0x0B, 0, (u16)iface, 0);           /* SET_PROTOCOL : protocole de démarrage */
-    requete(a, 0x21, 0x0A, 0, (u16)iface, 0);           /* SET_IDLE : rapport seulement au changement */
+    if (genre == 1) requete(a, 0x21, 0x0A, 0, (u16)iface, 0);   /* SET_IDLE : rapport seulement au changement */
     a->longueur = ep_mps > 64 ? 64 : ep_mps > 8 ? ep_mps : 8;
   }
   if (!nouvel_anneau(&a->ep)) return;
@@ -415,6 +439,10 @@ static void installer(struct controleur *hc, struct appareil *parent, int port_p
     nb_claviers++;
     if (parent) journal_nb("usb : clavier prêt derrière un hub, port ", (u64)port_parent);
     else journal_nb("usb : clavier prêt sur le port ", (u64)racine);
+  } else if (genre == 3) {
+    a->souris = 1;
+    nb_souris++;
+    journal_nb("usb : souris prête sur le port ", (u64)(parent ? port_parent : racine));
   } else {
     journal_nb("usb : hub prêt, ports : ", (u64)a->nb_ports_hub);
     allumer_hub(a);
@@ -492,10 +520,11 @@ static void traiter(struct controleur *hc, const trb *e) {
     int ok = code == 1 || code == 13;
     for (int i = 0; i < hc->nb_app; i++) {
       struct appareil *a = &hc->app[i];
-      if (!a->slot || a->slot != slot || a->dci != dci || !(a->clavier || a->hub)) continue;
+      if (!a->slot || a->slot != slot || a->dci != dci || !(a->clavier || a->hub || a->souris)) continue;
       if (!ok) { a->panne = 1; journal_nb("usb : erreur sur le point « interruption », code ", code); continue; }
       a->pannes = 0;
       if (a->clavier) { u8 r[8]; for (int k = 0; k < 8; k++) r[k] = a->rapport[k]; rapport(a, r); }
+      else if (a->souris) rapport_souris(a->rapport);
       else a->a_voir |= (a->rapport[0] | (u32)a->rapport[1] << 8) & tous_les_ports(a);
       demander_rapport(a);
     }
@@ -627,7 +656,7 @@ void usb_sonder(void) {
     }
     for (int i = 0; i < hc->nb_app; i++) {
       struct appareil *a = &hc->app[i];
-      if (!a->slot || !(a->clavier || a->hub)) continue;
+      if (!a->slot || !(a->clavier || a->hub || a->souris)) continue;
       if (a->panne) {                                   /* point « interruption » en erreur : relancé */
         a->panne = 0;
         if (++a->pannes <= 5) { relancer(a, a->dci, &a->ep); demander_rapport(a); }
@@ -664,12 +693,14 @@ void usb_etat(char *d, int max) {
   d[0] = 0;
   if (!nb_hc) { ajouter(d, &i, max, "USB : aucun contrôleur xHCI"); return; }
   ajouter(d, &i, max, nb_claviers ? "USB : clavier USB prêt" : "USB : contrôleur prêt, aucun clavier");
+  if (nb_souris) ajouter(d, &i, max, ", souris prête");
   if (hubs) { ajouter(d, &i, max, " ("); ajouter_nb(d, &i, max, (u64)hubs, 10, 1);
               ajouter(d, &i, max, hubs > 1 ? " hubs)" : " hub)"); }
 }
 
 static const char *genre_appareil(const struct appareil *a) {
   if (a->clavier) return "clavier";
+  if (a->souris) return "souris";
   if (a->hub) return "hub";
   switch (a->classe) {
     case 1: return "audio";

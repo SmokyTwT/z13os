@@ -23,7 +23,8 @@ qemu = subprocess.Popen([
     "-drive", f"if=pflash,format=raw,file={T}/vars.fd",
     # démarrage depuis une clé USB virtuelle (copie jetable : l'image reste intacte)
     "-device", "qemu-xhci,id=xhci", "-drive", f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img",
-    "-device", "usb-storage,bus=xhci.0,port=1,drive=cle", *CONCENTRATEURS,
+    "-device", "usb-storage,bus=xhci.0,port=1,drive=cle", "-device", "usb-mouse,id=souris,bus=xhci.0,port=3",
+    *CONCENTRATEURS,
     *([] if BRANCHEMENT else ["-device", f"usb-kbd,id=clavier-usb,bus=xhci.0,port={CHEMIN}"]),
     "-device", "virtio-vga", "-qmp", f"unix:{T}/qmp.sock,server,nowait", "-serial", f"file:{T}/serie.txt"],
     stderr=open(f"{T}/qemu.txt", "w"))
@@ -47,6 +48,25 @@ def capture(nom):
 def taper(touches):
     for t in touches:                           # seul clavier de la VM : le clavier USB
         qmp("send-key", keys=[{"type": "qcode", "data": t}]); time.sleep(0.15)
+def combo(*touches):                            # touches enfoncées ensemble (Maj + chiffre, Alt + Tab…)
+    qmp("send-key", keys=[{"type": "qcode", "data": k} for k in touches]); time.sleep(0.2)
+def mot(texte):                                 # texte tapé sur un clavier AZERTY (lettres, chiffres, signes)
+    azerty = {"a": "q", "z": "w", "q": "a", "w": "z", "m": "semicolon", " ": "spc", ",": "m", "*": "backslash",
+              "(": "5", ")": "minus", "-": "6", "=": "equal"}
+    for c in texte:
+        if c.isdigit(): combo("shift", c)
+        elif c == "+": combo("shift", "equal")
+        else: combo(azerty.get(c, c))
+def souris(dx, dy):                             # déplacement relatif, en petits pas
+    qmp("input-send-event", events=[{"type": "rel", "data": {"axis": "x", "value": dx}},
+                                    {"type": "rel", "data": {"axis": "y", "value": dy}}]); time.sleep(0.25)
+def aller(x, y):                                # coin en haut à gauche, puis la position voulue
+    souris(-5000, -5000); time.sleep(2)         # la souris de QEMU rend le déplacement par paquets de 127
+    souris(int(x), int(y)); time.sleep(1.5)
+def bouton(enfonce):
+    qmp("input-send-event", events=[{"type": "btn", "data": {"down": enfonce, "button": "left"}}]); time.sleep(0.25)
+def cliquer(x, y):
+    aller(x, y); bouton(True); bouton(False); time.sleep(0.4)
 attente = float(sys.argv[1]) if len(sys.argv) > 1 else 40
 time.sleep(attente); capture("1-demarrage")
 if BRANCHEMENT:                                  # branché, débranché, rebranché
@@ -70,6 +90,34 @@ taper(["u", "s", "b", "ret"]); time.sleep(4)                                    
 capture("3-usb")
 taper(["b", "i", "l", "q", "n", "ret"]); time.sleep(4)                              # « bilan »
 capture("4-bilan")
+# 0.5 : fenêtres. Mise en page de smokyos.c, pour un écran de 1920 × 1080 (U = 0,9)
+U = 1080 / 1200
+carnet_x, carnet_w = (1920 - 1080 * U) / 2, 1080 * U
+calc_x, calc_y, calc_w = min(max(carnet_x + carnet_w - 300 * U, 20), 1920 - 440 * U - 20), 220 * U, 440 * U
+def touche_calc(k):                             # centre de la touche n° k de la calculatrice
+    bw = (calc_w - 78 * U) / 4
+    return calc_x + 24 * U + (k % 4) * (bw + 10 * U) + bw / 2, calc_y + 214 * U + (k // 4) * 80 * U + 35 * U
+mot("effacer"); taper(["ret"]); time.sleep(2)
+mot("calculatrice"); taper(["ret"]); time.sleep(4)
+mot("12*(3+4)-2,5"); taper(["ret"]); time.sleep(3)          # au clavier : = 81,5
+capture("5-calculatrice")
+for k in (4, 15, 12, 19):                                    # à la souris : 7 + 1 = 8
+    cliquer(*touche_calc(k))
+time.sleep(2)
+capture("6-calculatrice-souris")
+aller(calc_x + 150 * U, calc_y + 25 * U); bouton(True)       # on la prend par sa barre de titre…
+souris(-400, 120); time.sleep(1.5); bouton(False); time.sleep(3)   # …et on la pose ailleurs
+combo("alt", "tab"); time.sleep(3)                           # le carnet repasse devant
+capture("7-deplacee-alt-tab")
+combo("alt", "tab"); time.sleep(1); combo("esc"); time.sleep(2)   # calculatrice devant, puis fermée
+mot("notes"); taper(["ret"]); time.sleep(3)
+mot("bonjour"); taper(["ret"]); mot("ca marche, 2+2=4"); time.sleep(2)
+capture("8-notes")
+combo("esc"); time.sleep(2); mot("notes"); taper(["ret"]); time.sleep(3)   # fermées puis rouvertes
+capture("9-notes-rouvertes")
+combo("esc"); time.sleep(1); mot("horloge"); taper(["ret"]); time.sleep(3)
+combo("spc"); time.sleep(3.2)                                # chrono lancé
+capture("10-horloge")
 qmp("quit")
 qemu.wait(10)
 print(open(f"{T}/serie.txt", errors="replace").read()[-300:])

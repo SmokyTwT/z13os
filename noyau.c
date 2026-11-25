@@ -245,7 +245,9 @@ static const u16 ALTGR[128] = {
   [0x0A] = '^', [0x0B] = '@', [0x0C] = ']', [0x0D] = '}', [0x12] = 0x20ac,
 };
 
-static int maj, altgr, verrou_maj, etendu;
+static int maj, altgr, alt, ctrl, verrou_maj, etendu;
+
+int noyau_modificateurs(void) { return (ctrl ? MOD_CTRL : 0) | (alt ? MOD_ALT : 0) | (maj ? MOD_MAJ : 0); }
 static u32 morte;                                      /* accent en attente (^ ou ¨) */
 
 static u32 accentuer(u32 morte_, u32 c) {
@@ -274,14 +276,22 @@ int noyau_touche(u32 *caractere, int *genre) {
     int relache = code & 0x80, touche = code & 0x7F, e = etendu;
     etendu = 0;
     if (touche == 0x2A || touche == 0x36) { maj = !relache; continue; }
-    if (touche == 0x38) { if (e) altgr = !relache; continue; }
-    if (touche == 0x1D) continue;
+    if (touche == 0x38) { if (e) altgr = !relache; else alt = !relache; continue; }
+    if (touche == 0x1D) { ctrl = !relache; continue; }
     if (relache) continue;
     if (touche == 0x3A) { verrou_maj = !verrou_maj; continue; }
-    if (touche == 0x1C) { *genre = TOUCHE_ENTREE; *caractere = 0; return 1; }
-    if (touche == 0x0E) { *genre = TOUCHE_EFFACER; *caractere = 0; return 1; }
-    if (touche == 0x01) { *genre = TOUCHE_ECHAP; *caractere = 0; return 1; }
-    if (e) continue;                                    /* flèches et autres : pas encore */
+    *caractere = 0;
+    if (touche == 0x1C) { *genre = TOUCHE_ENTREE; return 1; }
+    if (touche == 0x0E) { *genre = TOUCHE_EFFACER; return 1; }
+    if (touche == 0x01) { *genre = TOUCHE_ECHAP; return 1; }
+    if (touche == 0x0F) { *genre = TOUCHE_TAB; return 1; }
+    if (e) {                                            /* flèches et touches de déplacement */
+      static const u8 CODES[] = {0x48, 0x50, 0x4B, 0x4D, 0x53, 0x47, 0x4F};
+      static const u8 GENRES[] = {TOUCHE_HAUT, TOUCHE_BAS, TOUCHE_GAUCHE, TOUCHE_DROITE, TOUCHE_SUPPR, TOUCHE_DEBUT, TOUCHE_FIN};
+      for (unsigned i = 0; i < sizeof CODES; i++)
+        if (touche == CODES[i]) { *genre = GENRES[i]; return 1; }
+      continue;
+    }
     if (touche == 0x1A && !altgr) { morte = maj ? 0xa8 : '^'; continue; }
     u32 c = altgr ? ALTGR[touche] : (maj && MAJUSCULE[touche]) ? MAJUSCULE[touche] : NORMAL[touche];
     if (!c) continue;
