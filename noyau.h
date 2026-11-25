@@ -1,6 +1,6 @@
 /* Smoky OS 100 % maison — le noyau : ce qui fait tourner le PC une fois le firmware congédié.
  * Table des segments (GDT), table des interruptions (IDT), contrôleur d'interruptions (PIC 8259),
- * minuterie (PIT 8254), clavier PS/2 (AZERTY), horloge temps réel (CMOS), mémoire libre.
+ * minuterie (PIT 8254), clavier PS/2 et USB (AZERTY, voir usb.c), horloge temps réel (CMOS), mémoire libre.
  * Tout est écrit ici : aucun pilote du firmware n'est plus utilisé après noyau_demarrer(). */
 #pragma once
 #include "uefi.h"
@@ -11,6 +11,7 @@ enum { TOUCHE_TEXTE = 0, TOUCHE_ENTREE, TOUCHE_EFFACER, TOUCHE_ECHAP };
 
 void noyau_demarrer(const EFI_MEMORY_DESCRIPTOR *carte, UINTN taille, UINTN taille_desc);
 int noyau_touche(u32 *caractere, int *genre);     /* 1 si une touche attendait */
+void noyau_pousser_code(u8 code);                 /* code de touche PS/2 (jeu 1) venu d'ailleurs (USB) */
 u64 noyau_tics(void);
 void noyau_attendre(void);                        /* dort jusqu'à la prochaine interruption */
 int noyau_heure(EFI_TIME *t);                     /* horloge CMOS du PC (lue par Smoky OS) */

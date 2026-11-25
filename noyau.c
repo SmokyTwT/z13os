@@ -2,6 +2,7 @@
  * firmware ne sert : Smoky OS gère seul les interruptions, la minuterie, le clavier et l'horloge.
  * Toujours aucun pilote de disque. */
 #include "noyau.h"
+#include "usb.h"
 
 /* --- Ports d'entrée-sortie ----------------------------------------------------------------- */
 static void sortie(u16 port, u8 v) { __asm__ volatile("outb %0, %1" : : "a"(v), "Nd"(port)); }
@@ -157,8 +158,13 @@ static void reperer_apic(void) {
 static void attendre_ecriture(void) { for (int i = 0; i < 100000 && (entree(0x64) & 2); i++); }
 static void attendre_lecture(void) { for (int i = 0; i < 100000 && !(entree(0x64) & 1); i++); }
 
+static int ps2_present;
+
 static void preparer_clavier(void) {
-  while (entree(0x64) & 1) entree(0x60);              /* vide ce qui traîne */
+  file_queue = file_tete;
+  if (entree(0x64) == 0xFF) return;                    /* pas de contrôleur 8042 : PC récent, clavier USB */
+  ps2_present = 1;
+  for (int i = 0; i < 256 && (entree(0x64) & 1); i++) entree(0x60);   /* vide ce qui traîne */
   attendre_ecriture(); sortie(0x64, 0x20);
   attendre_lecture();
   u8 config = entree(0x60);
@@ -201,7 +207,16 @@ static u32 accentuer(u32 morte_, u32 c) {
   return c == ' ' ? morte_ : c;
 }
 
+void noyau_pousser_code(u8 code) {
+  u64 drapeaux;
+  __asm__ volatile("pushfq\n popq %0\n cli" : "=r"(drapeaux) : : "memory");   /* la routine du clavier PS/2 écrit aussi */
+  file_codes[file_tete] = code;
+  file_tete = (file_tete + 1) & 255;
+  if (drapeaux & 0x200) __asm__ volatile("sti" : : : "memory");
+}
+
 int noyau_touche(u32 *caractere, int *genre) {
+  usb_sonder();                                         /* touches des claviers USB */
   while (file_queue != file_tete) {
     u8 code = file_codes[file_queue];
     file_queue = (file_queue + 1) & 255;

@@ -1,4 +1,4 @@
-/* Smoky OS 100 % maison, version 0.2 — un système d'exploitation écrit de zéro, pour toi.
+/* Smoky OS 100 % maison, version 0.3 — un système d'exploitation écrit de zéro, pour toi.
  *
  * Aucun Linux, aucune bibliothèque : ce fichier, uefi.h (écrit d'après la spécification) et le
  * compilateur. Il démarre directement par le firmware UEFI du PC, dessine lui-même tout ce
@@ -11,6 +11,7 @@
  */
 #include "uefi.h"
 #include "noyau.h"
+#include "usb.h"
 
 static int noyau_actif;                 /* 1 dès que le firmware est congédié */
 
@@ -125,6 +126,14 @@ static const struct { u32 code; char base; const char *accent; } ACCENTS[] = {
   {0xef, '|', "1010 3030"}, {0xc9, 'E', "2130"}, {0xab, '<', ""}, {0xbb, '>', ""}, {0xd7, 'x', ""},
 };
 
+/* signes hors ASCII que le clavier AZERTY tape directement (Alt Gr, Maj) */
+static const struct { u32 code; const char *traits; } AUTRES[] = {
+  {0x20ac, "4130100105163645 0232 0434"},                  /* € */
+  {0xa3, "4130201116 0646 0333"},                         /* £ */
+  {0xb0, "102022121210"},                                 /* ° */
+  {0xb5, "0208 0205163645 4246"},                         /* µ */
+};
+
 static float couverture[340 * 340];
 
 static void traits(float x, float y, float s, float demi, const char *t, float *c, int x0, int y0, int w, int h) {
@@ -163,6 +172,8 @@ static float signe(float x, float y, float taille, float graisse, u32 coul, u32 
       base = ACCENTS[i].base == '|' ? "2226" : GLYPHES[(int)ACCENTS[i].base];
       accent = ACCENTS[i].accent;
     }
+  for (unsigned i = 0; !base && i < sizeof AUTRES / sizeof *AUTRES; i++)
+    if (AUTRES[i].code == code) base = AUTRES[i].traits;
   if (!base) base = "0006 0646 4640 4000";                  /* signe inconnu : une boîte */
   float s = taille / 8, demi = s * graisse;
   if (code == ' ') return s * 3.4f;
@@ -378,6 +389,7 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     noter("memoire     la mémoire vive du PC", 0xb6b7c2);
     noter("ecran       la définition de l'écran", 0xb6b7c2);
     noter("systeme     ce que Smoky OS gère lui-même", 0xb6b7c2);
+    noter("usb         les contrôleurs USB et le clavier USB", 0xb6b7c2);
     noter("effacer     vide le carnet", 0xb6b7c2);
     noter("apropos     ce qu'est cet OS", 0xb6b7c2);
     noter("redemarrer, eteindre", 0xb6b7c2);
@@ -401,7 +413,7 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   } else if (egal(s, n, "systeme") || egal(s, n, "système")) {
     char d[120], x[24];
     noter("Le firmware est congédié : Smoky OS gère seul", 0xf3f3f6);
-    noter("interruptions, minuterie, clavier AZERTY, horloge et mémoire.", 0xb6b7c2);
+    noter("interruptions, minuterie, claviers PS/2 et USB (AZERTY), horloge et mémoire.", 0xb6b7c2);
     u64 secondes = noyau_tics() / TICS_PAR_SECONDE;
     copier(d, "Allumé depuis "); nombre_libre(x, secondes / 60); copier(fin(d), x); copier(fin(d), " min ");
     nombre_libre(x, secondes % 60); copier(fin(d), x); copier(fin(d), " s");
@@ -409,10 +421,13 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     copier(d, "Interruptions : minuterie "); nombre_libre(x, noyau_interruptions(0)); copier(fin(d), x);
     copier(fin(d), ", clavier "); nombre_libre(x, noyau_interruptions(1)); copier(fin(d), x);
     noter(d, 0xb6b7c2);
+  } else if (egal(s, n, "usb")) {
+    char d[64]; usb_etat(d, sizeof d); noter(d, 0xf3f3f6);
+    noter("Pilote xHCI maison : il relève le contrôleur 50 fois par seconde.", 0xb6b7c2);
   } else if (egal(s, n, "effacer")) {
     nb_lignes = 0;
   } else if (egal(s, n, "apropos") || egal(s, n, "à-propos")) {
-    noter("Smoky OS 100 % maison 0.2 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
+    noter("Smoky OS 100 % maison 0.3 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
     noter("Il démarre par le firmware, puis se débrouille seul.", 0xb6b7c2);
     noter("Aucun pilote de disque : il ne peut pas toucher à tes systèmes.", 0xb6b7c2);
   } else if (egal(s, n, "redemarrer") || egal(s, n, "redémarrer")) {
@@ -461,7 +476,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
     return 1;
   dessiner_fond();
   float x = ecrire(44 * U, 74 * U, 44 * U, .55f, 0xff8f85, "smoky os");
-  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.2");
+  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.3");
   ecrire(44 * U, 108 * U, 17 * U, .4f, 0xb6b7c2, "100 % maison, écrit de zéro");
   ecrire(44 * U, H - 40 * U, 15 * U, .38f, 0x7c7c86,
          "Aucun pilote de disque : ton Windows et ton Smoky OS de tous les jours ne peuvent pas être touchés.");
@@ -490,6 +505,9 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
   }
   noyau_demarrer(carte, taille, taille_desc);
   noter("Firmware congédié : Smoky OS tourne seul. Tape « systeme ».", 0xb6b7c2);
+  dessiner_carnet();
+  usb_demarrer();                                         /* clavier USB (celui du Z13 en est un) */
+  { char d[64]; usb_etat(d, sizeof d); noter(d, usb_claviers() ? 0xb6b7c2 : 0x7c7c86); }
   dessiner_carnet();
   u64 derniere_seconde = 0;
   for (;;) {
