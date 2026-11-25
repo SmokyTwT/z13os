@@ -69,6 +69,36 @@ except ValueError:
     echo "$(basename "$c") : pilote ${pilote:-aucun}, marque $(lis "$c/device/vendor"), écrans branchés : ${ecrans:-aucun}"
   done
 
+  titre "Bureau : claviers, tablette, capteurs, heure"
+  python3 -I - "$SMOKY_LIB" <<'PY' 2>/dev/null || echo "claviers : illisibles"
+import sys
+sys.path.insert(0, sys.argv[1])
+from smokybureau import commun
+noms = commun.claviers_physiques()
+if noms is None:
+    print("vrais claviers : liste illisible")
+else:
+    print("vrais claviers vus : " + (", ".join(noms) if noms else "aucun (clavier détaché : le clavier à l'écran vient tout seul)"))
+conf = commun.lire_json(commun.ADAPTIVE, {})
+print("mode tablette choisi à la main : " + ("oui" if conf.get("tablet_mode") else "non"))
+PY
+  a gsettings && echo "clavier à l'écran permis (mode tablette ou clavier détaché) : $(gsettings get org.gnome.desktop.a11y.applications screen-keyboard-enabled 2>/dev/null || echo '?')"
+  echo "services du bureau : $(for s in smoky-bureau smoky-adaptive smoky-clavier-ecran; do printf '%s %s   ' "$s" "$(systemctl --user is-active "$s" 2>/dev/null || true)"; done)"
+  if a busctl; then
+    capteurs=""
+    for p in HasAccelerometer HasAmbientLight; do
+      v=$(busctl --system get-property net.hadess.SensorProxy /net/hadess/SensorProxy net.hadess.SensorProxy "$p" 2>/dev/null | awk '{print $2}')
+      case $p in HasAccelerometer) n="accéléromètre (rotation)" ;; *) n="capteur de lumière" ;; esac
+      capteurs+="$n : ${v:-?}   "
+    done
+    echo "capteurs : $capteurs"
+  fi
+  if a timedatectl; then
+    rtc=$(timedatectl show -p LocalRTC --value 2>/dev/null); ntp=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+    case $rtc in no) rtc="oui (Windows, qui la lit en heure locale, peut alors afficher une heure d'écart)" ;; yes) rtc=non ;; *) rtc="?" ;; esac
+    echo "heure : fuseau $(timedatectl show -p Timezone --value 2>/dev/null || echo '?'), synchronisée : ${ntp:-?}, horloge du PC en temps universel : $rtc"
+  fi
+
   titre "Démarrage"
   if a systemd-analyze; then
     systemd-analyze time 2>&1 | head -n 3
@@ -127,6 +157,8 @@ for ligne in sys.stdin:
     print(m)' 2>/dev/null | sort | uniq -c | sort -rn | head -n 15
 }
 
+SMOKY_LIB=/usr/lib/smoky
+[ -d "$SMOKY_LIB/smokybureau" ] || SMOKY_LIB="$(dirname "$(readlink -f "$0")")/../lib/smoky"            # dans le dépôt
 ENERGIE=/usr/libexec/smokyos/smoky-energie.py
 [ -f "$ENERGIE" ] || ENERGIE="$(dirname "$(readlink -f "$0")")/../libexec/smokyos/smoky-energie.py"   # dans le dépôt
 SECONDES=${2:-60}            # durée de la mesure d'énergie (les arguments du script, pas de la fonction)

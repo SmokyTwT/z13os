@@ -260,6 +260,8 @@ if printf '%s\n' "$rapport" | grep -qE 'camille|martin@|secret\.pdf|192\.168|aa:
   printf '%s\n' "$rapport" | grep -nE 'camille|martin@|secret\.pdf|192\.168|aa:bb:cc|abcdef0123456789|hunter2' | head -5
 elif printf '%s\n' "$rapport" | grep -q 's6-rc: info'; then
   echec "smoky-diagnostic : les messages ordinaires des conteneurs restent dans les erreurs"
+elif ! printf '%s\n' "$rapport" | grep -q '^mode tablette choisi à la main : non'; then
+  echec "smoky-diagnostic : section du bureau absente (claviers, mode tablette)"; printf '%s\n' "$rapport" | grep -A4 '^== Bureau' | head -6
 elif printf '%s\n' "$rapport" | grep -q 'wstoken=masqué' && printf '%s\n' "$rapport" | grep -q '^== Carte graphique'; then
   ok "rapport produit, informations personnelles masquées"
 else

@@ -136,15 +136,16 @@ télécharger les mises à jour.
 2. Copie `smokyos.iso` sur une clé USB (8 Go ou plus) avec **Fedora Media Writer** ou
    **balenaEtcher** (option « image personnalisée »).
 3. Allume le Z13 en maintenant **Échap** (ou **F2** → Boot), puis choisis la clé.
-4. L'installateur demande seulement le disque.
+4. L'installateur demande le disque, le fuseau horaire et le compte à créer : coche « Faire de cet
+   utilisateur un administrateur » (sinon pas de `sudo`).
    **Attention : « récupérer tout l'espace » efface Windows et tout le disque.** Pour garder
    Windows (double démarrage), il faut d'abord libérer de la place depuis Windows (Gestion des
    disques → Réduire le volume) et n'installer Smoky OS que dans cet espace libre.
 5. Problème connu, pas encore corrigé : l'installation depuis l'ISO peut s'arrêter à l'étape
    « chargeur de démarrage ». `tools/repair-boot.sh` (à lancer depuis Smoky OS démarré) réécrit
    alors le menu de démarrage Smoky OS / Windows.
-6. Au premier démarrage, connecte-toi avec le compte créé à l'installation (l'assistant de GNOME n'existe plus : à revoir pour l'ISO). Branche le Wi-Fi : Proton VPN,
-   Déjà Dup et mpv s'installent tout seuls dans les minutes qui suivent.
+6. Au premier démarrage, connecte-toi avec le compte créé à l'installation. Branche le Wi-Fi :
+   Proton VPN, Déjà Dup et mpv s'installent tout seuls dans les minutes qui suivent.
 7. Ouvre l'appli **Synchroniser mes notes avec Google Drive** et autorise l'accès (une seule
    fois). Les carnets des Notes (Notes/Carnets) et leurs exports PDF (Notes/PDF) sont dans le dossier **Notes**, donc
    synchronisés.
