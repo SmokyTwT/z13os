@@ -1,9 +1,15 @@
-# Installateur Anaconda : tu choisis le disque et le fuseau horaire, et tu crées ton compte
-# (depuis la refonte du 24/11, l'image n'a plus d'assistant de premier démarrage : sans l'étape
-# « Création de l'utilisateur », une installation neuve n'aurait aucun compte pour se connecter).
+# Installateur Anaconda : il s'ouvre en français avec le clavier AZERTY ; tu choisis le disque et
+# le fuseau horaire, et tu crées ton compte.
+# - Depuis la refonte du 24/11, l'image n'a plus d'assistant de premier démarrage : sans l'étape
+#   « Création de l'utilisateur » (module Users), une installation neuve n'aurait aucun compte.
+# - Sans le module Localization, les lignes lang et keyboard sont ignorées (bug Fedora 2436674) :
+#   l'installateur serait en anglais et en QWERTY, et un mot de passe tapé sur le clavier AZERTY
+#   du Z13 ne serait plus le même à l'écran de connexion (qui, lui, est en AZERTY).
 # @IMAGE@ est remplacé par le workflow.
 [customizations.installer.kickstart]
 contents = """
+lang fr_FR.UTF-8
+keyboard --vckeymap=fr --xlayouts=fr
 %post
 bootc switch --mutate-in-place --transport registry @IMAGE@
 %end
@@ -11,6 +17,7 @@ bootc switch --mutate-in-place --transport registry @IMAGE@
 
 [customizations.installer.modules]
 enable = [
+  "org.fedoraproject.Anaconda.Modules.Localization",
   "org.fedoraproject.Anaconda.Modules.Storage",
   "org.fedoraproject.Anaconda.Modules.Users",
   "org.fedoraproject.Anaconda.Modules.Timezone"

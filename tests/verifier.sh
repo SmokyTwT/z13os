@@ -234,6 +234,31 @@ for d in system_files/usr/lib/systemd/system/*.service.d/50-smokyos.conf; do
     || echec "complément incomplet : $d"
 done
 
+etape "Disposition du clavier (écran de connexion et session)"
+# un faux localectl : la disposition choisie à l'installation, ou rien de réglé (« (unset) »)
+k=$(mktemp -d); ko=0
+printf '#!/bin/sh\ncat "%s/sortie"\n' "$k" > "$k/localectl"; chmod +x "$k/localectl"
+clavier() {  # $1 = ce qu'écrit localectl, $2 = disposition attendue, $3 = variante attendue, $4 = fichier X11 (facultatif)
+  printf '%b\n' "$1" > "$k/sortie"
+  local obtenu
+  obtenu=$(env -u XKB_DEFAULT_LAYOUT -u XKB_DEFAULT_VARIANT PATH="$k:$PATH" SMOKY_CLAVIER_XORG="${4:-$k/absent}" \
+    bash -c '. system_files/usr/libexec/smokyos/smoky-clavier.sh; printf "%s|%s" "$XKB_DEFAULT_LAYOUT" "${XKB_DEFAULT_VARIANT:-}"')
+  [ "$obtenu" = "$2|$3" ] || { echec "smoky-clavier.sh : « ${1//\\n/ ; } » donne « $obtenu » au lieu de « $2|$3 »"; ko=1; }
+}
+clavier "   System Locale: LANG=fr_FR.UTF-8\n       VC Keymap: fr\n      X11 Layout: fr\n     X11 Variant: oss" fr oss
+clavier "   System Locale: LANG=fr_FR.UTF-8\n       VC Keymap: (unset)\n      X11 Layout: (unset)" fr ""
+clavier "   System Locale: n/a\n       VC Keymap: n/a\n      X11 Layout: n/a" fr ""
+clavier "      X11 Layout: us" us ""
+clavier "" fr ""
+printf 'Section "InputClass"\n  Option "XkbLayout" "be"\nEndSection\n' > "$k/xorg"
+clavier "      X11 Layout: (unset)" be "" "$k/xorg"
+rm -rf "$k"
+[ "$ko" -eq 0 ] && ok "smoky-clavier.sh : 6 cas (fr, rien de réglé, ancien systemd, autre disposition, fichier X11)"
+grep -q '"org.fedoraproject.Anaconda.Modules.Localization"' iso.toml && grep -q '^keyboard .*--xlayouts=fr' iso.toml \
+  && grep -q '^lang fr_FR.UTF-8' iso.toml && grep -q '"org.fedoraproject.Anaconda.Modules.Users"' iso.toml \
+  && ok "ISO : installateur en français et en AZERTY, création du compte" \
+  || echec "iso.toml : il faut les modules Localization et Users, et les lignes lang et keyboard (sinon mot de passe tapé en QWERTY, ou aucun compte)"
+
 etape "Diagnostic (smoky-diagnostic)"
 # de fausses commandes « bavardes » : le rapport ne doit rien laisser passer de personnel
 faux=$(mktemp -d)

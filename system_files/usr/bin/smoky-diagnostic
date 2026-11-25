@@ -98,6 +98,14 @@ PY
     case $rtc in no) rtc="oui (Windows, qui la lit en heure locale, peut alors afficher une heure d'écart)" ;; yes) rtc=non ;; *) rtc="?" ;; esac
     echo "heure : fuseau $(timedatectl show -p Timezone --value 2>/dev/null || echo '?'), synchronisée : ${ntp:-?}, horloge du PC en temps universel : $rtc"
   fi
+  if a localectl; then
+    loc=$(LC_ALL=C localectl status 2>/dev/null)
+    langue=$(printf '%s\n' "$loc" | sed -n 's/^ *System Locale: *//p' | head -n 1); langue=${langue#LANG=}
+    disposition=$(printf '%s\n' "$loc" | sed -n 's/^ *X11 Layout: *//p')
+    case $langue in ""|"(unset)"|n/a) langue="non réglée (anglais)" ;; esac
+    case $disposition in ""|"(unset)"|n/a) disposition="non réglée (le bureau prend fr)" ;; esac
+    echo "langue du système : $langue ; disposition du clavier : $disposition"
+  fi
 
   titre "Démarrage"
   if a systemd-analyze; then
