@@ -18,6 +18,7 @@ bash tests/atelier/lancer.sh     # tous les essais, avec un résumé
 | `connexion-clavier.py` | clavier tactile de l'écran de connexion et du verrouillage : mot de passe, ⏎, champ bloqué pendant la vérification |
 | `connexion-secours.py`, `verrou-secours.py` | panne simulée de l'affichage complet : l'écran de secours apparaît (champ, clavier tactile qui tape, boutons), l'écran reste verrouillé |
 | `connexion-windows.py` | bouton « Windows » de l'écran de connexion : confirmation, demande déposée, réponse affichée, repli |
+| `plateau.py` | zone de notification de la vraie barre : l'icône d'une fausse appli (comme Proton VPN) apparaît quand elle s'inscrit et disparaît quand elle s'en va (captures comparées) |
 | `chrome.sh` | Chrome sous Wayland : les 131 caractères et ⏎/⌫ (bons codes de touche), et Chrome signale son champ ; `CAPTURES=1` ajoute des captures du vrai clavier par-dessus Chrome |
 
 `bureau.sh commande…` lance l'atelier (avec le bureau, ou `SANS_BUREAU=1`) puis la commande, et
