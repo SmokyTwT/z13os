@@ -5,7 +5,10 @@
 #     entier, compte « essai » administrateur), puis extinction ;
 #  2. le système installé démarre ; un petit service injecté (identifiants SMBIOS, comme dans
 #     tests/image/demarrer.sh) attend l'écran de connexion et écrit sur le port série la langue,
-#     la disposition du clavier (système et écran de connexion), l'horloge et le compte.
+#     la disposition du clavier (système et écran de connexion), l'horloge et le compte ; puis il
+#     prépare une mise à jour (le même système, avec un paramètre de plus) et redémarre ;
+#  3. au démarrage suivant, c'est la mise à jour qui doit tourner : c'est ainsi que le PC reçoit
+#     tout seul ce qui arrive sur main (préparée en arrière-plan, appliquée à l'arrêt).
 # Rien ne touche au vrai PC : tout se passe dans des fichiers temporaires.
 #   sudo bash tests/iso/essai-installation.sh smokyos.iso
 #   SMOKY_FIRMWARE_FERME=1 : l'installateur ne peut pas écrire les variables du firmware (efi=noruntime),
@@ -59,7 +62,7 @@ attendre_fin() {   # attendre_fin SECONDES JOURNAL MOTIF → 0 si le motif appar
   return 1
 }
 
-echo "== 1/2 Installation${FERME:+ (variables du firmware impossibles à écrire, comme sur le Z13)}"
+echo "== 1/3 Installation${FERME:+ (variables du firmware impossibles à écrire, comme sur le Z13)}"
 cp "$VARS" "$T/vars.fd"
 truncate -s 40G "$T/disque.raw"
 : > "$T/installation.log"
@@ -87,7 +90,7 @@ fi
 if [ -n "$QEMU" ]; then attendre_fin 120 "$T/installation.log" ""; fi   # l'extinction, une fois l'installation finie
 echo "installation terminée en $duree_installation s"
 
-echo "== 2/2 Premier démarrage du système installé"
+echo "== 2/3 Premier démarrage du système installé"
 ESSAI_UNITE='[Unit]
 Description=Smoky OS : essai de l ISO (machine virtuelle de test)
 After=graphical.target
@@ -114,25 +117,36 @@ echo "ESSAI horloge $(tail -n 1 /etc/adjtime 2>/dev/null || echo absente)"
 echo "ESSAI fuseau $(timedatectl show -p Timezone --value)"
 echo "ESSAI compte $(id -nG essai 2>&1)"
 echo "ESSAI en échec : $(systemctl --failed --no-legend --plain | awk "{print \$1}" | tr "\n" " ")"
+echo "ESSAI ostree sysroot.bootloader : $(ostree config --repo=/ostree/repo get sysroot.bootloader 2>&1 | head -n 1)"
+c=$(ostree admin status 2>/dev/null | sed -n "s/^\* [^ ]* \([0-9a-f]\{64\}\)\..*/\1/p" | head -n 1)
+if [ -n "$c" ] && ostree admin deploy --stage --karg-append=smoky.essai=mise-a-jour "$c" > /dev/null 2>&1; then
+  echo "ESSAI mise à jour préparée"
+else
+  echo "ESSAI mise à jour impossible à préparer"
+fi
 echo "ESSAI fin"
 } > "$r" 2>&1
 { printf "\n\n"; cat "$r"; printf "\n"; } > /dev/ttyS0
 sleep 2
-systemctl poweroff
+systemctl reboot
 '
 b64() { printf '%s' "$1" | base64 -w0; }
-: > "$T/demarrage.log"
+systeme() {   # systeme JOURNAL SCRIPT : démarre le système installé (sans réseau), le script tourne au bureau atteint
+  : > "$1"
+  qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
+    -drive "if=pflash,format=raw,readonly=on,file=$CODE" -drive "if=pflash,format=raw,file=$T/vars.fd" \
+    -drive "file=$T/disque.raw,format=raw,if=virtio,cache=unsafe" \
+    -device virtio-vga -display none -nic none -monitor none -no-reboot \
+    -smbios "type=11,value=io.systemd.credential.binary:systemd.extra-unit.smoky-essai.service=$(b64 "$ESSAI_UNITE")" \
+    -smbios "type=11,value=io.systemd.credential.binary:systemd.unit-dropin.graphical.target=$(b64 "$ESSAI_LIEN")" \
+    -smbios "type=11,value=io.systemd.credential.binary:smoky.essai=$(b64 "$2")" \
+    -serial "file:$1" &
+  QEMU=$!
+}
 debut=$SECONDS
-qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
-  -drive "if=pflash,format=raw,readonly=on,file=$CODE" -drive "if=pflash,format=raw,file=$T/vars.fd" \
-  -drive "file=$T/disque.raw,format=raw,if=virtio,cache=unsafe" \
-  -device virtio-vga -display none -nic none -monitor none -no-reboot \
-  -smbios "type=11,value=io.systemd.credential.binary:systemd.extra-unit.smoky-essai.service=$(b64 "$ESSAI_UNITE")" \
-  -smbios "type=11,value=io.systemd.credential.binary:systemd.unit-dropin.graphical.target=$(b64 "$ESSAI_LIEN")" \
-  -smbios "type=11,value=io.systemd.credential.binary:smoky.essai=$(b64 "$ESSAI_SCRIPT")" \
-  -serial "file:$T/demarrage.log" &
-QEMU=$!
+systeme "$T/demarrage.log" "$ESSAI_SCRIPT"
 attendre_fin "$ATTENTE_DEMARRAGE" "$T/demarrage.log" "ESSAI fin"
+attendre_fin 120 "$T/demarrage.log" ""                   # le redémarrage (QEMU s'arrête : -no-reboot)
 duree_demarrage=$((SECONDS - debut))
 echo "-- ce que dit le système installé ($duree_demarrage s)"
 essai_lignes() { grep -ao 'ESSAI [^[:cntrl:]]*' "$T/demarrage.log"; }
@@ -142,6 +156,16 @@ if ! essai_lignes | grep -qx "ESSAI fin"; then
   echo "RÉSULTAT : installation faite ($duree_installation s), mais le système installé n'a pas répondu en $ATTENTE_DEMARRAGE s."
   exit 1
 fi
+
+echo "== 3/3 Démarrage d'après la mise à jour (préparée au premier démarrage, appliquée à l'arrêt)"
+APRES_SCRIPT='{ printf "\n\nESSAI après : %s\nESSAI fin après\n" "$(grep -o "smoky.essai=[a-z-]*" /proc/cmdline || echo "ancien système")"; } > /dev/ttyS0
+sleep 2
+systemctl poweroff
+'
+systeme "$T/apres.log" "$APRES_SCRIPT"
+attendre_fin "$ATTENTE_DEMARRAGE" "$T/apres.log" "ESSAI fin après"
+apres=$(grep -ao 'ESSAI après : [^[:cntrl:]]*' "$T/apres.log" | head -n 1)
+echo "${apres#ESSAI }"
 
 e=$(essai_lignes)
 manque=""
@@ -153,8 +177,10 @@ grep -qE "^ESSAI localectl X11 Layout: fr$" <<<"$e" || manque+=" disposition du 
 grep -qx "ESSAI horloge LOCAL" <<<"$e" || manque+=" horloge du PC à l'heure locale (comme Windows) ;"
 grep -qx "ESSAI fuseau Europe/Paris" <<<"$e" || manque+=" fuseau Europe/Paris ;"
 grep -qE "^ESSAI compte .*\<wheel\>" <<<"$e" || manque+=" compte « essai » administrateur ;"
+grep -qx "ESSAI mise à jour préparée" <<<"$e" || manque+=" mise à jour préparée ;"
+[ "$apres" = "ESSAI après : smoky.essai=mise-a-jour" ] || manque+=" mise à jour appliquée au redémarrage ;"
 if [ -n "$manque" ]; then
   echo "RÉSULTAT : installation faite ($duree_installation s) et système démarré, mais il manque :${manque% ;}."
   exit 1
 fi
-echo "RÉSULTAT : installation complète en $duree_installation s ; le système installé démarre jusqu'à l'écran de connexion, en français et en AZERTY, fuseau Europe/Paris, horloge à l'heure locale, compte administrateur créé."
+echo "RÉSULTAT : installation complète en $duree_installation s ; le système installé démarre jusqu'à l'écran de connexion, en français et en AZERTY, fuseau Europe/Paris, horloge à l'heure locale, compte administrateur créé ; une mise à jour préparée est bien appliquée au redémarrage."
