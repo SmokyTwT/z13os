@@ -116,6 +116,15 @@ struct appareil {
   volatile u8 *entree, *sortie, *tampon, *rapport;
   u8 avant[8];
   u16 repete; u64 repete_a;
+  struct {                              /* clé USB : stockage « bulk-only », commandes SCSI */
+    int actif, dci_in, dci_out;
+    u8 ep_in, ep_out;                   /* adresses des points sur la clé */
+    u32 numero;                         /* numéro de la dernière commande (« tag ») */
+    u64 secteurs;                       /* de 512 octets */
+    struct anneau in, out;
+    volatile u8 *cmd, *donnees;         /* commande et statut (CBW, CSW) ; secteurs (8 au plus) */
+    char nom[28];                       /* fabricant et modèle, tels que la clé les donne */
+  } cle;
 };
 
 struct controleur {
@@ -129,7 +138,8 @@ struct controleur {
   u8 changement[256];
 };
 static struct controleur HC[4];
-static int nb_hc, nb_claviers, nb_souris;
+static int nb_hc, nb_claviers, nb_souris, nb_cles;
+static u32 generation_cles;               /* change à chaque clé prête ou retirée */
 
 /* pointeurs : rapports (boutons, déplacement ou position) mis en file pour l'interface */
 static struct souris_evt FILE_SOURIS[64];
@@ -197,9 +207,10 @@ static int evenement(struct controleur *hc, trb *e) {
 
 static void traiter(struct controleur *hc, const trb *e);
 
-/* attend l'événement de fin de la commande ou du transfert posé en `adresse` */
-static int attendre_fin(struct controleur *hc, int type, u64 adresse, int slot, trb *r) {
-  u64 fin = noyau_tics() + 100;                         /* 2 s */
+/* attend l'événement de fin de la commande ou du transfert posé en `adresse` : 1 réussi, 0 refusé
+ * (l'événement est dans *r), −1 rien venu dans le délai (en tics) */
+static int attendre_fin_delai(struct controleur *hc, int type, u64 adresse, int slot, trb *r, u64 delai) {
+  u64 fin = noyau_tics() + delai;
   while (noyau_tics() < fin) {
     trb e;
     if (!evenement(hc, &e)) { pause(); continue; }
@@ -214,7 +225,10 @@ static int attendre_fin(struct controleur *hc, int type, u64 adresse, int slot, 
     traiter(hc, &e);                                    /* touche ou branchement arrivés entre-temps */
   }
   journal_hex("usb : délai dépassé, type ", (u64)type);
-  return 0;
+  return -1;
+}
+static int attendre_fin(struct controleur *hc, int type, u64 adresse, int slot, trb *r) {
+  return attendre_fin_delai(hc, type, adresse, slot, r, 100) == 1;   /* 2 s */
 }
 
 static int commande(struct controleur *hc, u64 param, u32 controle, trb *r) {
@@ -341,11 +355,12 @@ static void debrancher(struct appareil *a) {
   if (a->clavier) nb_claviers--;
   if (a->souris) nb_souris--;
   if (a->f2.actif) nb_souris--;
+  if (a->cle.actif) { nb_cles--; generation_cles++; }
   commande(hc, 0, T_DISABLE_SLOT << 10 | (u32)a->slot << 24, 0);
   hc->dcbaa[a->slot] = 0;
   if (a->parent) journal_nb("usb : appareil débranché d'un hub, port ", (u64)a->port_parent);
   else journal_nb("usb : appareil débranché du port ", (u64)a->port);
-  a->clavier = 0; a->souris = 0; a->f2.actif = 0; a->hub = 0; a->a_voir = 0; a->port = 0; a->parent = 0; a->slot = 0;
+  a->clavier = 0; a->souris = 0; a->f2.actif = 0; a->cle.actif = 0; a->hub = 0; a->a_voir = 0; a->port = 0; a->parent = 0; a->slot = 0;
 }
 
 static int preparer_hub(struct appareil *a, int ep_mps) {
@@ -369,16 +384,180 @@ static void allumer_hub(struct appareil *a) {
   a->a_voir = tous_les_ports(a);
 }
 
+/* --- Clé USB : stockage « bulk-only » (USB Mass Storage Class, Bulk-Only Transport 1.0) -------------
+ * Chaque commande SCSI passe en trois temps sur deux points « bulk » : la commande (CBW, 31 octets), les
+ * données s'il y en a, puis le statut (CSW, 13 octets). Un refus (« stall ») se dégage des deux côtés ;
+ * une clé qui ne suit plus est remise d'aplomb (Bulk-Only Mass Storage Reset). */
+static u32 grand32(const volatile u8 *p) { return (u32)p[0] << 24 | (u32)p[1] << 16 | (u32)p[2] << 8 | p[3]; }
+
+static void ecrire_ep_bulk(struct appareil *a, int dci, struct anneau *r, int mps, int entrant) {
+  volatile u32 *ep = ctx(a, dci + 1);
+  ep[0] = 0;
+  ep[1] = 3 << 1 | (u32)(entrant ? 6 : 2) << 3 | (u32)mps << 16;   /* 3 essais, « bulk » entrant ou sortant */
+  ep[2] = (u32)(u64)r->trbs | 1;
+  ep[3] = (u32)((u64)r->trbs >> 32);
+  ep[4] = 3072;                                         /* longueur moyenne d'un transfert (indicative) */
+}
+
+/* un transfert sur un point « bulk » de la clé : 1 réussi, 0 refusé, −1 rien venu (5 s) */
+static int transfert_cle(struct appareil *a, int entrant, volatile u8 *tampon, u32 n, u32 *passes) {
+  struct anneau *r = entrant ? &a->cle.in : &a->cle.out;
+  u64 adresse = (u64)&r->trbs[r->index];
+  poser(r, (u64)tampon, n, (T_NORMAL << 10) | (1 << 5) | (entrant ? 1 << 2 : 0));
+  sonner(a->hc, a->slot, entrant ? a->cle.dci_in : a->cle.dci_out);
+  trb e;
+  e.statut = n;
+  int ok = attendre_fin_delai(a->hc, T_TRANSFERT, adresse, a->slot, &e, 250);
+  if (passes) *passes = ok == 1 ? n - (e.statut & 0xFFFFFF) : 0;   /* paquet court : octets non passés */
+  return ok;
+}
+
+static void degager(struct appareil *a, int entrant) {  /* point refusé : dégagé sur la clé et au contrôleur */
+  relancer(a, entrant ? a->cle.dci_in : a->cle.dci_out, entrant ? &a->cle.in : &a->cle.out);
+  requete(a, 0x02, 1, 0, entrant ? a->cle.ep_in : a->cle.ep_out, 0);   /* CLEAR_FEATURE(ENDPOINT_HALT) */
+}
+
+static void reprendre_cle(struct appareil *a) {
+  requete(a, 0x21, 0xFF, 0, (u16)a->interface, 0);      /* Bulk-Only Mass Storage Reset */
+  degager(a, 1);
+  degager(a, 0);
+}
+
+/* une commande SCSI (cb : 6 à 12 octets) avec, au plus, n octets de données dans a->cle.donnees ;
+ * 1 si la clé dit l'avoir faite */
+static int scsi(struct appareil *a, const u8 *cb, int lg, int entrant, u32 n, u32 *passes) {
+  volatile u8 *cbw = a->cle.cmd, *csw = a->cle.cmd + 64;
+  zero(cbw, 32);
+  u32 numero = ++a->cle.numero;
+  cbw[0] = 'U'; cbw[1] = 'S'; cbw[2] = 'B'; cbw[3] = 'C';
+  for (int i = 0; i < 4; i++) { cbw[4 + i] = (u8)(numero >> (8 * i)); cbw[8 + i] = (u8)(n >> (8 * i)); }
+  cbw[12] = entrant ? 0x80 : 0;
+  cbw[14] = (u8)lg;
+  for (int i = 0; i < lg; i++) cbw[15 + i] = cb[i];
+  if (transfert_cle(a, 0, cbw, 31, 0) != 1) { reprendre_cle(a); return 0; }
+  u32 recus = 0;
+  if (n) {
+    int r = transfert_cle(a, entrant, a->cle.donnees, n, &recus);
+    if (r < 0) { reprendre_cle(a); return 0; }
+    if (!r) degager(a, entrant);                        /* données refusées : le statut dira pourquoi */
+  }
+  int r = transfert_cle(a, 1, csw, 13, 0);
+  if (!r) { degager(a, 1); r = transfert_cle(a, 1, csw, 13, 0); }   /* statut refusé : une seconde fois */
+  if (r != 1 || csw[0] != 'U' || csw[1] != 'S' || csw[2] != 'B' || csw[3] != 'S'
+      || (csw[4] | csw[5] << 8 | csw[6] << 16 | (u32)csw[7] << 24) != numero || csw[12] == 2) {
+    reprendre_cle(a);                                   /* statut absent, étranger, ou « erreur de phase » */
+    return 0;
+  }
+  if (passes) *passes = recus;
+  return csw[12] == 0;
+}
+
+static int preparer_cle(struct appareil *a, int iface, u8 ep_in, int mps_in, u8 ep_out, int mps_out) {
+  a->interface = iface;
+  a->cle.ep_in = ep_in; a->cle.ep_out = ep_out;
+  a->cle.dci_in = (ep_in & 15) * 2 + 1; a->cle.dci_out = (ep_out & 15) * 2;
+  if (!a->cle.cmd && !(a->cle.cmd = page())) return 0;
+  if (!a->cle.donnees && !(a->cle.donnees = page())) return 0;
+  if (!nouvel_anneau(&a->cle.in) || !nouvel_anneau(&a->cle.out)) return 0;
+  zero(a->entree, 4096);
+  ctx(a, 0)[1] = 1 | 1u << a->cle.dci_in | 1u << a->cle.dci_out;
+  ecrire_slot(a, a->cle.dci_in > a->cle.dci_out ? a->cle.dci_in : a->cle.dci_out);
+  ecrire_ep_bulk(a, a->cle.dci_in, &a->cle.in, mps_in, 1);
+  ecrire_ep_bulk(a, a->cle.dci_out, &a->cle.out, mps_out, 0);
+  if (!commande(a->hc, (u64)a->entree, T_CONFIGURE << 10 | (u32)a->slot << 24, 0)) {
+    journal("usb : le contrôleur refuse la clé\n"); return 0;
+  }
+  u8 inquiry[6] = {0x12, 0, 0, 0, 36, 0};               /* qui es-tu ? (une clé peut tarder à répondre) */
+  u32 recus = 0;
+  int repondu = 0;
+  for (int essai = 0; essai < 3 && !repondu; essai++) {
+    repondu = scsi(a, inquiry, 6, 1, 36, &recus) && recus >= 32;
+    if (!repondu) dormir_ms(150);
+  }
+  if (!repondu) { journal("usb : la clé ne répond pas\n"); return 0; }
+  if (a->cle.donnees[0] & 0x1F) { journal("usb : stockage qui n'est pas un disque\n"); return 0; }
+  int k = 0;
+  for (int i = 8; i < 32 && k < 27; i++) {               /* fabricant (8 lettres) puis modèle (16) */
+    char c = (char)a->cle.donnees[i];
+    if (c < 0x20 || c > 0x7E) c = ' ';
+    if (c == ' ' && (!k || a->cle.nom[k - 1] == ' ')) continue;
+    a->cle.nom[k++] = c;
+  }
+  while (k && a->cle.nom[k - 1] == ' ') k--;
+  a->cle.nom[k] = 0;
+  int prete = 0;                                        /* prête ? (sinon : pourquoi, puis on réessaie) */
+  for (int essai = 0; essai < 20 && !prete; essai++) {
+    u8 tur[6] = {0}, sense[6] = {0x03, 0, 0, 0, 18, 0};
+    if (scsi(a, tur, 6, 0, 0, 0)) prete = 1;
+    else { scsi(a, sense, 6, 1, 18, 0); dormir_ms(100); }
+  }
+  u8 capacite[10] = {0x25};
+  if (!prete || !scsi(a, capacite, 10, 1, 8, &recus) || recus < 8) { journal("usb : clé pas prête\n"); return 0; }
+  u32 dernier = grand32(a->cle.donnees), bloc = grand32(a->cle.donnees + 4);
+  if (bloc != 512) { journal_nb("usb : clé à secteurs non gérés, octets : ", bloc); return 0; }
+  if (dernier == 0xFFFFFFFFu) { journal("usb : clé de plus de 2 To, non gérée\n"); return 0; }
+  a->cle.secteurs = (u64)dernier + 1;
+  a->cle.actif = 1;
+  nb_cles++; generation_cles++;
+  journal_nb("usb : clé prête, secteurs : ", a->cle.secteurs);
+  return 1;
+}
+
+static struct appareil *cle(int n) {
+  for (int h = 0; h < nb_hc; h++)
+    for (int k = 0; k < HC[h].nb_app; k++) {
+      struct appareil *a = &HC[h].app[k];
+      if (a->slot && a->cle.actif && n-- == 0) return a;
+    }
+  return 0;
+}
+
+int usb_cles(void) { return nb_cles; }
+u32 usb_cle_generation(void) { return generation_cles; }
+u64 usb_cle_secteurs(int n) { struct appareil *a = cle(n); return a ? a->cle.secteurs : 0; }
+const char *usb_cle_nom(int n) { struct appareil *a = cle(n); return a ? a->cle.nom : ""; }
+
+static u8 *octets(void *p) { return p; }
+
+int usb_cle_lire(int n, u64 lba, u32 nb, void *dest) {   /* nb secteurs (8 au plus) ; 1 si réussi */
+  struct appareil *a = cle(n);
+  if (!a || !nb || nb > 8 || lba + nb > a->cle.secteurs) return 0;
+  u8 cb[10] = {0x28, 0, (u8)(lba >> 24), (u8)(lba >> 16), (u8)(lba >> 8), (u8)lba, 0, 0, (u8)nb, 0};
+  for (int essai = 0; essai < 3; essai++) {
+    u32 recus = 0;
+    if (scsi(a, cb, 10, 1, nb * 512, &recus) && recus == nb * 512) {
+      for (u32 i = 0; i < nb * 512; i++) octets(dest)[i] = a->cle.donnees[i];
+      return 1;
+    }
+  }
+  journal_nb("usb : lecture refusée par la clé, secteur ", lba);
+  return 0;
+}
+
+int usb_cle_ecrire(int n, u64 lba, u32 nb, const void *src) {
+  struct appareil *a = cle(n);
+  if (!a || !nb || nb > 8 || lba + nb > a->cle.secteurs) return 0;
+  u8 cb[10] = {0x2A, 0, (u8)(lba >> 24), (u8)(lba >> 16), (u8)(lba >> 8), (u8)lba, 0, 0, (u8)nb, 0};
+  for (int essai = 0; essai < 3; essai++) {
+    for (u32 i = 0; i < nb * 512; i++) a->cle.donnees[i] = ((const u8 *)src)[i];
+    if (scsi(a, cb, 10, 0, nb * 512, 0)) return 1;
+  }
+  journal_nb("usb : écriture refusée par la clé, secteur ", lba);
+  return 0;
+}
+
 /* un appareil vient d'être remis à zéro, son port est activé : on l'installe */
 static void installer(struct controleur *hc, struct appareil *parent, int port_parent, int racine, int vitesse) {
   struct appareil *a = place_libre(hc);
   if (!a) { journal("usb : trop d'appareils\n"); return; }
-  volatile u8 *pages[5] = {a->entree, a->sortie, a->tampon, a->rapport, a->f2.rapport};
-  volatile trb *anneaux[3] = {a->ep0.trbs, a->ep.trbs, a->f2.ep.trbs};
+  volatile u8 *pages[7] = {a->entree, a->sortie, a->tampon, a->rapport, a->f2.rapport, a->cle.cmd, a->cle.donnees};
+  volatile trb *anneaux[5] = {a->ep0.trbs, a->ep.trbs, a->f2.ep.trbs, a->cle.in.trbs, a->cle.out.trbs};
   zero(a, sizeof *a);
   a->entree = page_propre(pages[0]); a->sortie = page_propre(pages[1]);
   a->tampon = page_propre(pages[2]); a->rapport = page_propre(pages[3]); a->f2.rapport = page_propre(pages[4]);
   a->ep0.trbs = anneaux[0]; a->ep.trbs = anneaux[1]; a->f2.ep.trbs = anneaux[2];
+  a->cle.cmd = pages[5]; a->cle.donnees = pages[6];      /* pages de clé : seulement pour une clé */
+  a->cle.in.trbs = anneaux[3]; a->cle.out.trbs = anneaux[4];
   if (!a->entree || !a->sortie || !a->tampon || !a->rapport || !a->f2.rapport || !nouvel_anneau(&a->ep0)) return;
   a->hc = hc; a->parent = parent; a->port_parent = port_parent; a->port = racine; a->vitesse = vitesse;
   if (parent) {
@@ -427,7 +606,7 @@ static void installer(struct controleur *hc, struct appareil *parent, int port_p
   if (total < 9 || !requete(a, 0x80, 6, 0x200, 0, (u16)total)) return;
   /* interfaces (réglage 0) : classe, sous-classe, protocole, premier point « interruption » entrant, et
    * pour le HID la longueur de son descripteur de rapport */
-  struct { u8 num, classe, sous, proto, ep, intervalle; u16 mps, long_desc; } IF[6];
+  struct { u8 num, classe, sous, proto, ep, intervalle, bin, bout; u16 mps, long_desc, mps_bin, mps_bout; } IF[6];
   int nb = 0, courant = -1;
   for (int i = 0; i + 1 < total && a->tampon[i] >= 2; i += a->tampon[i]) {
     const volatile u8 *d = a->tampon + i;
@@ -436,25 +615,38 @@ static void installer(struct controleur *hc, struct appareil *parent, int port_p
       if (d[3] || nb >= 6) continue;                    /* autres réglages de l'interface : ignorés */
       if (!a->classe) a->classe = d[5];                 /* classe donnée par les interfaces : la première */
       IF[nb].num = d[2]; IF[nb].classe = d[5]; IF[nb].sous = d[6]; IF[nb].proto = d[7];
-      IF[nb].ep = 0; IF[nb].intervalle = 10; IF[nb].mps = 8; IF[nb].long_desc = 0;
+      IF[nb].ep = 0; IF[nb].intervalle = 10; IF[nb].mps = 8; IF[nb].long_desc = 0; IF[nb].bin = IF[nb].bout = 0;
       courant = nb++;
     } else if (d[1] == 0x21 && courant >= 0 && d[0] >= 9) {        /* descripteur HID */
       IF[courant].long_desc = (u16)(d[7] | d[8] << 8);
     } else if (d[1] == 5 && courant >= 0 && !IF[courant].ep && (d[2] & 0x80) && (d[3] & 3) == 3) {
       IF[courant].ep = d[2]; IF[courant].mps = (u16)(d[4] | (d[5] & 7) << 8); IF[courant].intervalle = d[6];
+    } else if (d[1] == 5 && courant >= 0 && (d[3] & 3) == 2) {      /* point « bulk » (clé USB) */
+      u16 m = (u16)(d[4] | (d[5] & 7) << 8);
+      if ((d[2] & 0x80) && !IF[courant].bin) { IF[courant].bin = d[2]; IF[courant].mps_bin = m; }
+      else if (!(d[2] & 0x80) && !IF[courant].bout) { IF[courant].bout = d[2]; IF[courant].mps_bout = m; }
     }
   }
   a->nb_ifs = nb;
-  int hub = -1, clavier = -1, hid = 0;
+  int hub = -1, clavier = -1, hid = 0, stockage = -1;
   for (int k = 0; k < nb; k++) {
     a->ifs[k].classe = IF[k].classe; a->ifs[k].sous = IF[k].sous; a->ifs[k].proto = IF[k].proto;
+    if (IF[k].classe == 8 && IF[k].sous == 6 && IF[k].proto == 0x50 && IF[k].bin && IF[k].bout && stockage < 0)
+      stockage = k;                                     /* disque USB « bulk-only », commandes SCSI */
     if (!IF[k].ep) continue;
     if (IF[k].classe == 9 && hub < 0) hub = k;
     if (IF[k].classe == 3) hid = 1;
     if (IF[k].classe == 3 && IF[k].sous == 1 && IF[k].proto == 1 && clavier < 0) clavier = k;
   }
-  if (hub < 0 && !hid) { journal_nb("usb : appareil (ni clavier ni pointeur) sur le port ", (u64)(parent ? port_parent : racine)); return; }
+  if (hub < 0 && !hid && stockage < 0) {
+    journal_nb("usb : appareil (ni clavier, ni pointeur, ni clé) sur le port ", (u64)(parent ? port_parent : racine)); return;
+  }
   requete(a, 0x00, 9, (u16)valeur, 0, 0);               /* SET_CONFIGURATION */
+  if (hub < 0 && !hid) {                                /* clé USB */
+    if (preparer_cle(a, IF[stockage].num, IF[stockage].bin, IF[stockage].mps_bin, IF[stockage].bout, IF[stockage].mps_bout))
+      a->ifs[stockage].utile = 1;
+    return;
+  }
   if (hub >= 0) {
     a->interface = IF[hub].num;
     a->dci = (IF[hub].ep & 15) * 2 + 1;
@@ -802,6 +994,7 @@ void usb_etat(char *d, int max) {
   if (!nb_hc) { ajouter(d, &i, max, "USB : aucun contrôleur xHCI"); return; }
   ajouter(d, &i, max, nb_claviers ? "USB : clavier USB prêt" : "USB : contrôleur prêt, aucun clavier");
   if (nb_souris) ajouter(d, &i, max, ", souris prête");
+  if (nb_cles) ajouter(d, &i, max, nb_cles > 1 ? ", clés USB prêtes" : ", clé USB prête");
   if (hubs) { ajouter(d, &i, max, " ("); ajouter_nb(d, &i, max, (u64)hubs, 10, 1);
               ajouter(d, &i, max, hubs > 1 ? " hubs)" : " hub)"); }
 }
@@ -814,13 +1007,14 @@ static const char *genre_appareil(const struct appareil *a) {
   if (a->souris) return "souris";
   if (a->pave_seul) return "pavé tactile (pas encore géré)";
   if (a->hub) return "hub";
+  if (a->cle.actif) return "clé USB";
   switch (a->classe) {
     case 1: return "audio";
     case 2: case 0x0A: return "communication";
     case 3: return "HID (pas un clavier simple)";
     case 6: return "images";
     case 7: return "imprimante";
-    case 8: return "stockage";
+    case 8: return "stockage (pas prêt, ou non géré)";
     case 9: return "hub (non géré)";
     case 0x0B: return "carte à puce";
     case 0x0E: return "caméra";

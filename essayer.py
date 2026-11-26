@@ -6,7 +6,9 @@ BRANCHEMENT = "--branchement" in sys.argv          # clavier branché seulement 
 SANS_PIT = "--sans-pit" in sys.argv                # comme un PC récent dont le firmware arrête le PIT
 HUBS = 2 if "--hubs" in sys.argv else 1 if "--hub" in sys.argv else 0   # clavier derrière 1 ou 2 hubs
 TABLETTE = "--tablette" in sys.argv             # pointeur absolu (tablette) au lieu d'une souris
-sys.argv = [a for a in sys.argv if a not in ("--branchement", "--sans-pit", "--hub", "--hubs", "--tablette")]
+CLE = "--cle" in sys.argv                       # clé : notes enregistrées (Ctrl+S) sur une copie de la clé, « cle »
+CLE_SUITE = "--cle-suite" in sys.argv           # second démarrage sur la même copie : les notes doivent revenir
+sys.argv = [a for a in sys.argv if a not in ("--branchement", "--sans-pit", "--hub", "--hubs", "--tablette", "--cle", "--cle-suite")]
 # où brancher le clavier : port 2 du contrôleur, ou port 3 d'un hub (lui-même sur le port 1 d'un autre hub)
 CHEMIN = "2" if not HUBS else "2.3" if HUBS == 1 else "2.1.3"
 CONCENTRATEURS = [] if not HUBS else ["-device", "usb-hub,bus=xhci.0,port=2"] + (
@@ -15,6 +17,10 @@ CLAVIER = {"driver": "usb-kbd", "id": "clavier-usb", "bus": "xhci.0", "port": CH
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 T = "/tmp/smokyos-essai"
+IMAGE_CLE = "/tmp/smokyos-cle.img"              # copie gardée d'un démarrage à l'autre (--cle puis --cle-suite)
+if CLE: shutil.copy(f"{ICI}/construit/smokyos.img", IMAGE_CLE)
+DISQUE = (f"if=none,id=cle,format=raw,file={IMAGE_CLE}" if CLE or CLE_SUITE
+          else f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img")
 shutil.rmtree(T, ignore_errors=True); os.makedirs(T)
 shutil.copy("/usr/share/OVMF/OVMF_VARS_4M.fd", f"{T}/vars.fd")
 qemu = subprocess.Popen([
@@ -23,7 +29,7 @@ qemu = subprocess.Popen([
     "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
     "-drive", f"if=pflash,format=raw,file={T}/vars.fd",
     # démarrage depuis une clé USB virtuelle (copie jetable : l'image reste intacte)
-    "-device", "qemu-xhci,id=xhci", "-drive", f"if=none,id=cle,format=raw,snapshot=on,file={ICI}/construit/smokyos.img",
+    "-device", "qemu-xhci,id=xhci", "-drive", DISQUE,
     "-device", "usb-storage,bus=xhci.0,port=1,drive=cle", "-device", ("usb-tablet" if TABLETTE else "usb-mouse") + ",id=souris,bus=xhci.0,port=3",
     *CONCENTRATEURS,
     *([] if BRANCHEMENT else ["-device", f"usb-kbd,id=clavier-usb,bus=xhci.0,port={CHEMIN}"]),
@@ -53,7 +59,7 @@ def combo(*touches):                            # touches enfoncées ensemble (M
     qmp("send-key", keys=[{"type": "qcode", "data": k} for k in touches]); time.sleep(0.2)
 def mot(texte):                                 # texte tapé sur un clavier AZERTY (lettres, chiffres, signes)
     azerty = {"a": "q", "z": "w", "q": "a", "w": "z", "m": "semicolon", " ": "spc", ",": "m", "*": "backslash",
-              "(": "5", ")": "minus", "-": "6", "=": "equal"}
+              "(": "5", ")": "minus", "-": "6", "=": "equal", "é": "2", "è": "7", "à": "0"}
     for c in texte:
         if c.isdigit(): combo("shift", c)
         elif c == "+": combo("shift", "equal")
@@ -75,6 +81,23 @@ def cliquer(x, y):
     aller(x, y); bouton(True); bouton(False); time.sleep(0.4)
 attente = float(sys.argv[1]) if len(sys.argv) > 1 else 40
 time.sleep(attente); capture("1-demarrage")
+if CLE or CLE_SUITE:                             # 0.7 : la clé USB de Smoky OS
+    if CLE:
+        mot("notes"); taper(["ret"]); time.sleep(3)
+        mot("bonjour depuis smoky os"); taper(["ret"]); mot("été, à bientôt"[:4]); time.sleep(1)
+        combo("ctrl", "s"); time.sleep(5)
+        capture("cle-1-notes-enregistrees")
+        combo("esc"); time.sleep(2)
+        mot("cle"); taper(["ret"]); time.sleep(5)
+        capture("cle-2-fichiers")
+    else:
+        capture("cle-3-demarrage-suivant")
+        mot("notes"); taper(["ret"]); time.sleep(3)
+        capture("cle-4-notes-reprises")
+    qmp("quit")
+    qemu.wait(10)
+    print(open(f"{T}/serie.txt", errors="replace").read()[-600:])
+    sys.exit(0)
 if BRANCHEMENT:                                  # branché, débranché, rebranché
     print(qmp("device_add", **CLAVIER))
     time.sleep(3)

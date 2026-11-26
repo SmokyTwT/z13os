@@ -6,6 +6,8 @@ mkdir -p construit/esp/EFI/BOOT
 # essai du lecteur de descripteurs HID, sur cette machine, avant de construire l'OS
 cc -std=c11 -O1 -Wall -Wextra -Werror -I. essais/hid.c hid.c -o construit/essai-hid
 construit/essai-hid
+# essai des fichiers FAT32 (fat.c) sur de vraies images de clé, vérifiées ensuite par fsck.vfat et mtools
+bash essais/fat.sh
 clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -fshort-wchar -mno-red-zone \
   -fno-stack-protector -mno-stack-arg-probe -fno-math-errno -Wall -Wextra -Werror \
   -c smokyos.c -o construit/smokyos.o
@@ -18,7 +20,10 @@ clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -f
 clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -fshort-wchar -mno-red-zone \
   -fno-stack-protector -mno-stack-arg-probe -fno-math-errno -Wall -Wextra -Werror \
   -c hid.c -o construit/hid.o
-lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:construit/esp/EFI/BOOT/BOOTX64.EFI construit/smokyos.o construit/noyau.o construit/usb.o construit/hid.o
+clang -target x86_64-unknown-windows -std=c11 -O2 -ffreestanding -fno-builtin -fshort-wchar -mno-red-zone \
+  -fno-stack-protector -mno-stack-arg-probe -fno-math-errno -Wall -Wextra -Werror \
+  -c fat.c -o construit/fat.o
+lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:construit/esp/EFI/BOOT/BOOTX64.EFI construit/smokyos.o construit/noyau.o construit/usb.o construit/hid.o construit/fat.o
 ls -l construit/esp/EFI/BOOT/BOOTX64.EFI
 # Image de clé USB : table de partitions GPT avec une seule partition EFI (FAT32) qui contient
 # EFI/BOOT/BOOTX64.EFI. C'est ce que le firmware du Z13 sait démarrer depuis une clé.

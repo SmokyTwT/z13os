@@ -1,4 +1,4 @@
-/* Smoky OS 100 % maison, version 0.6 — un système d'exploitation écrit de zéro, pour toi.
+/* Smoky OS 100 % maison, version 0.7 — un système d'exploitation écrit de zéro, pour toi.
  *
  * Aucun Linux, aucune bibliothèque : ce fichier, uefi.h (écrit d'après la spécification) et le
  * compilateur. Il démarre directement par le firmware UEFI du PC, dessine lui-même tout ce
@@ -6,12 +6,15 @@
  * et ouvre des fenêtres : le carnet de commandes, une calculatrice, des notes, une horloge. Le firmware ne sert qu'à démarrer : ensuite Smoky OS le congédie et gère
  * seul les interruptions, la minuterie, le clavier et l'horloge (noyau.c).
  *
- * Sécurité de ton PC : il n'a AUCUN pilote de disque et n'appelle jamais les fonctions
+ * Sécurité de ton PC : il n'a AUCUN pilote pour le disque du PC et n'appelle jamais les fonctions
  * d'écriture du firmware (variables EFI). Il ne peut ni lire ni modifier Windows ou Smoky OS.
+ * Il lit les clés USB (usb.c, fat.c), mais n'écrit que sur la sienne (celle qui porte
+ * EFI/BOOT/BOOTX64.EFI), et seulement dans son dossier SMOKY : les notes y sont gardées.
  */
 #include "uefi.h"
 #include "noyau.h"
 #include "usb.h"
+#include "fat.h"
 
 static int noyau_actif;                 /* 1 dès que le firmware est congédié */
 
@@ -674,14 +677,90 @@ static void calc_clic(float px, float py) {
     }
 }
 
-/* --- Les notes : texte gardé tant que le PC est allumé (aucun pilote de disque) ---------------------- */
+/* --- Les notes : gardées sur la clé USB de Smoky OS (SMOKY/NOTES.TXT), sinon tant que le PC est allumé --- */
 #define NOTES_MAX 6000
 static u32 notes_texte[NOTES_MAX];
-static int notes_n;
+static int notes_n, notes_modifiees;
 
 static int notes_debuts[NOTES_MAX + 1];
 #define NOTES_TAILLE (21 * U)
 #define NOTES_PAS (32 * U)
+
+/* --- La clé USB de Smoky OS -----------------------------------------------------------------------
+ * Seule la clé qui porte EFI/BOOT/BOOTX64.EFI sert, et Smoky OS n'y écrit que dans le dossier SMOKY.
+ * Si elle est retirée (ou une autre branchée), rien n'est plus écrit avant de l'avoir retrouvée. */
+static struct disque_fat cle_disque;
+static struct volume_fat cle_vol;
+static int cle_ok;
+static u32 cle_gen;                                         /* clés USB du moment où elle a été trouvée */
+static u8 cle_tampon[NOTES_MAX * 3 + 16];
+
+static int cle_lire(void *ctx, u64 lba, void *s) { return usb_cle_lire((int)(u64)ctx, lba, 1, s); }
+static int cle_ecrire(void *ctx, u64 lba, const void *s) { return usb_cle_ecrire((int)(u64)ctx, lba, 1, s); }
+static int cle_prete(void) { return cle_ok && usb_cle_generation() == cle_gen; }
+
+static int cle_monter(void) {
+  cle_ok = 0;
+  for (int k = 0; k < usb_cles(); k++) {
+    struct entree_fat e;
+    cle_disque.lire = cle_lire; cle_disque.ecrire = cle_ecrire;
+    cle_disque.ctx = (void *)(u64)k; cle_disque.secteurs = usb_cle_secteurs(k);
+    if (fat_monter(&cle_disque, &cle_vol) && fat_chemin(&cle_vol, "EFI/BOOT/BOOTX64.EFI", &e) && !(e.attributs & 0x10)) {
+      cle_ok = 1; cle_gen = usb_cle_generation();
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static void notes_charger(void) {                          /* UTF-8, fins de ligne Windows ou Linux */
+  struct entree_fat e;
+  if (!cle_prete() || !fat_chemin(&cle_vol, "SMOKY/NOTES.TXT", &e) || (e.attributs & 0x10)) return;
+  long n = fat_lire(&cle_vol, &e, cle_tampon, sizeof cle_tampon);
+  if (n < 0) return;
+  long i = n >= 3 && cle_tampon[0] == 0xEF && cle_tampon[1] == 0xBB && cle_tampon[2] == 0xBF ? 3 : 0;
+  int k = 0;
+  while (i < n && k < NOTES_MAX) {
+    u32 c = cle_tampon[i++];
+    if (c >= 0xC2 && c < 0xE0 && i < n && (cle_tampon[i] & 0xC0) == 0x80) c = (c & 31) << 6 | (cle_tampon[i++] & 63);
+    else if (c >= 0xE0 && c < 0xF0 && i + 1 < n && (cle_tampon[i] & 0xC0) == 0x80 && (cle_tampon[i + 1] & 0xC0) == 0x80) {
+      c = (c & 15) << 12 | (u32)(cle_tampon[i] & 63) << 6 | (cle_tampon[i + 1] & 63); i += 2;
+    } else if (c >= 0x80) { while (i < n && (cle_tampon[i] & 0xC0) == 0x80) i++; c = '?'; }
+    else if (c == '\t') c = ' ';
+    else if (c < 0x20 && c != '\n') continue;             /* « \r » des fins de ligne Windows */
+    notes_texte[k++] = c;
+  }
+  notes_n = k;
+  notes_modifiees = 0;
+}
+
+static struct date_fat maintenant(void) {                  /* heure de Paris, comme Windows la note */
+  EFI_TIME t;
+  struct date_fat q = {(u16)((2026 - 1980) << 9 | 1 << 5 | 1), 0};
+  if (lire_heure(&t) && t.annee >= 1980 && t.annee < 2100) {
+    q.date = (u16)((t.annee - 1980) << 9 | t.mois << 5 | t.jour);
+    q.heure = (u16)(t.heure << 11 | t.minute << 5 | t.seconde / 2);
+  }
+  return q;
+}
+
+static int notes_enregistrer(void) {                       /* 1 : fait ; 0 : pas de clé ; −1 : la clé a refusé */
+  if (!cle_prete()) return 0;
+  u32 n = 0;
+  for (int k = 0; k < notes_n; k++) {
+    u32 c = notes_texte[k];
+    if (c == '\n') { cle_tampon[n++] = '\r'; cle_tampon[n++] = '\n'; }
+    else if (c < 0x80) cle_tampon[n++] = (u8)c;
+    else if (c < 0x800) { cle_tampon[n++] = (u8)(0xC0 | c >> 6); cle_tampon[n++] = (u8)(0x80 | (c & 63)); }
+    else { cle_tampon[n++] = (u8)(0xE0 | c >> 12); cle_tampon[n++] = (u8)(0x80 | (c >> 6 & 63)); cle_tampon[n++] = (u8)(0x80 | (c & 63)); }
+  }
+  struct date_fat q = maintenant();
+  u32 dossier;
+  if (!fat_dossier(&cle_vol, fat_racine(&cle_vol), "SMOKY", q, &dossier)
+      || !fat_ecrire(&cle_vol, dossier, "NOTES.TXT", cle_tampon, n, q)) return -1;
+  notes_modifiees = 0;
+  return 1;
+}
 
 /* découpe en lignes (saut de ligne, ou bord droit) ; renvoie le nombre de lignes */
 static int notes_lignes(void) {
@@ -700,7 +779,23 @@ static int notes_lignes(void) {
 }
 static int notes_visibles(void) { return (int)((FEN[F_NOTES].h - 170 * U) / NOTES_PAS) + 1; }
 
+static void abimer_pied_notes(void) {
+  abimer(FEN[F_NOTES].x + 20 * U, FEN[F_NOTES].y + FEN[F_NOTES].h - 56 * U, FEN[F_NOTES].w - 40 * U, 40 * U);
+}
+static void notes_message(const char *t, u32 couleur) { noter(t, couleur); abimer_fenetre(F_CARNET); }
+
 static void notes_touche(u32 c, int genre) {
+  if (genre == TOUCHE_TEXTE && (noyau_modificateurs() & MOD_CTRL)) {   /* Ctrl+S : sur la clé */
+    if (c == 's' || c == 'S') {
+      int r = notes_enregistrer();
+      notes_message(r > 0 ? "Notes enregistrées sur la clé (SMOKY/NOTES.TXT)." :
+                    r < 0 ? "La clé a refusé l'écriture : notes gardées en mémoire seulement." :
+                            "Clé de Smoky OS introuvable : notes gardées en mémoire seulement.", r > 0 ? 0xb6b7c2 : 0xff8f85);
+      abimer_pied_notes();
+    }
+    return;
+  }
+  if (!notes_modifiees) { notes_modifiees = 1; abimer_pied_notes(); }
   int avant = notes_lignes();
   if (genre == TOUCHE_EFFACER) { if (notes_n) notes_n--; }
   else {
@@ -736,7 +831,9 @@ static void dessiner_notes(void) {
   if (!notes_n) ecrire(gauche + 12 * U, haut, taille, .38f, 0x55555e, "Écris ici.");
   if (devant() == F_NOTES) bloc(cx + 2 * U, cy - 22 * U, 3 * U, 26 * U, 1.5f * U, 0xff8f85, 1);
   ecrire(gauche, Y + Hn - 30 * U, 15 * U, .36f, 0x7c7c86,
-         "Gardées tant que le PC est allumé : rien n'est écrit sur le disque.");
+         !cle_prete() ? "Clé de Smoky OS introuvable : notes gardées tant que le PC est allumé." :
+         notes_modifiees ? "Ctrl+S : enregistrer sur la clé (aussi fait en éteignant)." :
+         "Gardées sur la clé de Smoky OS : SMOKY/NOTES.TXT.");
 }
 
 /* --- L'horloge : heure de Paris en grand, et un chronomètre -------------------------------------- */
@@ -905,6 +1002,42 @@ static void memoire(char *d) {
   copier(fin(d), " libres");
 }
 
+/* une entrée de la clé, en une ligne du carnet (dossiers et fichiers cachés du système : non montrés) */
+static int lister_cle(void *ctx, const struct entree_fat *e) {
+  char d[160], x[24];
+  if ((e->attributs & 0x06) == 0x06) return 0;
+  copier(d, "  "); copier(fin(d), (const char *)ctx); copier(fin(d), e->nom);
+  if (e->attributs & 0x10) { copier(fin(d), "/"); noter(d, 0xb6b7c2); return 0; }
+  copier(fin(d), " : ");
+  if (e->taille < 1024) { nombre_libre(x, e->taille); copier(fin(d), x); copier(fin(d), e->taille > 1 ? " octets" : " octet"); }
+  else {
+    u64 n = e->taille, k = n < 1048576 ? 1024 : 1048576;
+    nombre_libre(x, n / k); copier(fin(d), x); copier(fin(d), ",");
+    nombre_libre(x, n % k * 10 / k); copier(fin(d), x); copier(fin(d), k == 1024 ? " Ko" : " Mo");
+  }
+  if (e->date) {                                            /* date de dernière écriture */
+    copier(fin(d), ", le "); nombre(x, e->date & 31, 2); copier(fin(d), x); copier(fin(d), "/");
+    nombre(x, e->date >> 5 & 15, 2); copier(fin(d), x); copier(fin(d), "/");
+    nombre(x, 1980 + (e->date >> 9), 4); copier(fin(d), x); copier(fin(d), " à ");
+    nombre(x, e->heure >> 11, 2); copier(fin(d), x); copier(fin(d), ":"); nombre(x, e->heure >> 5 & 63, 2); copier(fin(d), x);
+  }
+  noter(d, 0x7c7c86);
+  return 0;
+}
+
+static void cle_resume(char *d) {                           /* une ligne : la clé de Smoky OS */
+  if (!cle_prete()) {
+    copier(d, usb_cles() ? "Clé USB : aucune ne porte Smoky OS (rien n'y sera écrit)" : "Clé USB de Smoky OS : introuvable");
+    return;
+  }
+  copier(d, "Clé de Smoky OS : ");
+  copier(fin(d), cle_vol.etiquette[0] ? cle_vol.etiquette : "sans nom");
+  copier(fin(d), ", "); copier(fin(d), usb_cle_nom((int)(u64)cle_disque.ctx)); copier(fin(d), ", ");
+  taille_texte(d, usb_cle_secteurs((int)(u64)cle_disque.ctx) * 512); copier(fin(d), ", FAT32");
+}
+
+static int insiste;                                         /* « eteindre » retapé malgré des notes perdues */
+
 static int executer(void) {                                 /* renvoie 1 pour quitter */
   char ligne[160] = "> ";
   char *p = fin(ligne);
@@ -920,6 +1053,8 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   while (n && *s == ' ') { s++; n--; }
   while (n && s[n - 1] == ' ') n--;
   int quitter = 0;
+  if (n && !egal(s, n, "eteindre") && !egal(s, n, "éteindre") && !egal(s, n, "redemarrer") && !egal(s, n, "redémarrer"))
+    insiste = 0;
   if (!n) ;
   else if (egal(s, n, "aide")) {
     noter("heure       l'heure et la date", 0xb6b7c2);
@@ -929,6 +1064,8 @@ static int executer(void) {                                 /* renvoie 1 pour qu
     noter("usb         les appareils USB branchés", 0xb6b7c2);
     noter("bilan       tout ce que Smoky OS voit du PC, pour une photo", 0xb6b7c2);
     noter("calculatrice, notes, horloge   ouvrent leur fenêtre", 0xb6b7c2);
+    noter("cle         la clé USB de Smoky OS et ses fichiers", 0xb6b7c2);
+    noter("enregistrer les notes, sur la clé (Ctrl+S dans les notes)", 0xb6b7c2);
     noter("effacer     vide le carnet", 0xb6b7c2);
     noter("apropos     ce qu'est cet OS", 0xb6b7c2);
     noter("redemarrer, eteindre", 0xb6b7c2);
@@ -978,7 +1115,7 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   } else if (egal(s, n, "bilan")) {
     char d[120], x[24];
     nb_lignes = 0;                                        /* le carnet entier, pour une seule photo */
-    noter("Bilan de ce PC par Smoky OS 100 % maison 0.6", 0xf3f3f6);
+    noter("Bilan de ce PC par Smoky OS 100 % maison 0.7", 0xf3f3f6);
     copier(d, "Processeur : "); noyau_processeur(fin(d), 64); noter(d, 0xb6b7c2);
     copier(d, "Compteur du processeur : "); nombre_libre(x, noyau_frequence_tsc() / 1000000); copier(fin(d), x);
     copier(fin(d), " MHz (mesuré par : "); copier(fin(d), noyau_calibrage()); copier(fin(d), ")");
@@ -994,6 +1131,24 @@ static int executer(void) {                                 /* renvoie 1 pour qu
       noter(d, 0xb6b7c2);
       if (usb_interfaces(k, d, sizeof d)) noter(d, 0x7c7c86);
     }
+    cle_resume(d); noter(d, cle_prete() ? 0xb6b7c2 : 0x7c7c86);
+  } else if (egal(s, n, "cle") || egal(s, n, "clé") || egal(s, n, "fichiers")) {
+    char d[120];
+    cle_resume(d); noter(d, cle_prete() ? 0xf3f3f6 : 0xff8f85);
+    if (cle_prete()) {
+      struct entree_fat smoky;
+      int r = fat_lister(&cle_vol, fat_racine(&cle_vol), lister_cle, "");
+      if (r >= 0 && fat_chemin(&cle_vol, "SMOKY", &smoky) && (smoky.attributs & 0x10))
+        r = fat_lister(&cle_vol, smoky.cluster, lister_cle, "SMOKY/");
+      if (r < 0) noter("La clé n'a pas pu être lue jusqu'au bout.", 0xff8f85);
+      noter("Smoky OS n'écrit que dans le dossier SMOKY de cette clé.", 0x7c7c86);
+    }
+  } else if (egal(s, n, "enregistrer")) {
+    int r = notes_enregistrer();
+    noter(r > 0 ? "Notes enregistrées sur la clé (SMOKY/NOTES.TXT)." :
+          r < 0 ? "La clé a refusé l'écriture : notes gardées en mémoire seulement." :
+                  "Clé de Smoky OS introuvable : notes gardées en mémoire seulement.", r > 0 ? 0xf3f3f6 : 0xff8f85);
+    if (FEN[F_NOTES].ouverte) abimer_pied_notes();
   } else if (egal(s, n, "calculatrice") || egal(s, n, "calc")) {
     ouvrir(F_CALC);
   } else if (egal(s, n, "notes")) {
@@ -1003,13 +1158,23 @@ static int executer(void) {                                 /* renvoie 1 pour qu
   } else if (egal(s, n, "effacer")) {
     nb_lignes = 0;
   } else if (egal(s, n, "apropos") || egal(s, n, "à-propos")) {
-    noter("Smoky OS 100 % maison 0.6 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
+    noter("Smoky OS 100 % maison 0.7 : écrit de zéro, sans Linux ni bibliothèque.", 0xf3f3f6);
     noter("Il démarre par le firmware, puis se débrouille seul.", 0xb6b7c2);
-    noter("Aucun pilote de disque : il ne peut pas toucher à tes systèmes.", 0xb6b7c2);
-  } else if (egal(s, n, "redemarrer") || egal(s, n, "redémarrer")) {
-    noyau_redemarrer();
-  } else if (egal(s, n, "eteindre") || egal(s, n, "éteindre")) {
-    RT->redemarrer(EFI_RESET_ARRET, EFI_SUCCESS, 0, 0);
+    noter("Aucun pilote pour le disque du PC : il ne peut pas toucher à tes systèmes.", 0xb6b7c2);
+    noter("Il n'écrit que sur sa clé USB, dans le dossier SMOKY (tes notes).", 0xb6b7c2);
+  } else if (egal(s, n, "redemarrer") || egal(s, n, "redémarrer") || egal(s, n, "eteindre") || egal(s, n, "éteindre")) {
+    int eteindre = s[0] == 'e' || s[0] == 0xe9;
+    if (notes_modifiees && cle_prete()) {                  /* les notes d'abord, sur la clé */
+      if (notes_enregistrer() > 0) noter("Notes enregistrées sur la clé.", 0xb6b7c2);
+      else if (!insiste) {
+        noter("Les notes n'ont pas pu être enregistrées sur la clé.", 0xff8f85);
+        noter(eteindre ? "Retape « eteindre » pour éteindre quand même." : "Retape « redemarrer » pour redémarrer quand même.", 0xff8f85);
+        insiste = 1; nb_saisie = 0;
+        return 0;
+      }
+    }
+    if (eteindre) RT->redemarrer(EFI_RESET_ARRET, EFI_SUCCESS, 0, 0);
+    else noyau_redemarrer();
   } else {
     noter("Commande inconnue. Tape « aide ».", 0xff8f85);
   }
@@ -1052,10 +1217,10 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
     return 1;
   dessiner_fond();
   float x = ecrire(44 * U, 74 * U, 44 * U, .55f, 0xff8f85, "smoky os");
-  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.6");
+  ecrire(x + 12 * U, 74 * U, 17 * U, .4f, 0x7c7c86, "0.7");
   ecrire(44 * U, 108 * U, 17 * U, .4f, 0xb6b7c2, "100 % maison, écrit de zéro");
   ecrire(44 * U, H - 40 * U, 15 * U, .38f, 0x7c7c86,
-         "Aucun pilote de disque : ton Windows et ton Smoky OS de tous les jours ne peuvent pas être touchés.");
+         "Le disque du PC n'a aucun pilote : Windows et Smoky OS restent hors d'atteinte. Tes notes vont sur la clé (SMOKY).");
   memcpy(fond, image, (UINTN)L * H * 4);
   montrer(0, 0, L, H);
   FEN[F_CARNET].w = 1080 * U; FEN[F_CARNET].h = 760 * U;
@@ -1106,6 +1271,12 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
       if (usb_interfaces(k, d, sizeof d)) noter(d, 0x7c7c86);
     }
   }
+  if (cle_monter()) {                                       /* la clé de démarrage : tes notes y attendent */
+    notes_charger();
+    char d[120]; cle_resume(d); noter(d, 0xb6b7c2);
+    if (notes_n) noter("Tes notes ont été reprises de la clé : tape « notes ».", 0xb6b7c2);
+  }
+  u32 cles_vues = usb_cle_generation();
   int claviers_avant = usb_claviers();
   abimer_fenetre(F_CARNET);
   rafraichir();
@@ -1148,6 +1319,14 @@ EFI_STATUS efi_main(EFI_HANDLE image_os, EFI_SYSTEM_TABLE *st) {
       curseur_abime = 1;
     }
     if (souris_vue && !usb_nb_souris()) { souris_vue = 0; deplace = -1; effacer_curseur(); }
+    if (usb_cle_generation() != cles_vues) {                /* clé branchée ou retirée */
+      int avant = cle_prete();
+      cles_vues = usb_cle_generation();
+      if (cle_monter()) noter(avant ? "Clé de Smoky OS toujours là." : "Clé de Smoky OS retrouvée : Ctrl+S enregistre de nouveau les notes.", 0xb6b7c2);
+      else if (avant) noter("Clé de Smoky OS retirée : les notes restent en mémoire.", 0x7c7c86);
+      if (FEN[F_NOTES].ouverte) abimer_pied_notes();
+      abimer_fenetre(F_CARNET);
+    }
     if (usb_claviers() != claviers_avant) {                 /* clavier branché ou débranché après le démarrage */
       noter(usb_claviers() > claviers_avant ? "Clavier prêt : tape « bilan » puis Entrée." : "Clavier débranché.",
             usb_claviers() > claviers_avant ? 0xf3f3f6 : 0x7c7c86);
