@@ -93,8 +93,10 @@ ExecStart=/usr/bin/bash /run/credentials/@system/smoky.essai
 ESSAI_LIEN='[Unit]
 Wants=smoky-essai.service
 '
-# écrit sur le port série (le noyau du système installé n'y écrit pas : pas de console=ttyS0)
-ESSAI_SCRIPT='exec >/dev/ttyS0 2>&1
+# écrit sur le port série, en une fois à la fin : le noyau du système installé y écrit aussi (l'installateur
+# lui a transmis console=ttyS0), et ses messages se mêleraient aux nôtres
+ESSAI_SCRIPT='r=/run/smoky-essai.txt
+{
 echo "ESSAI début"
 for i in $(seq 1 90); do pgrep -u greetd -x labwc >/dev/null && break; sleep 2; done
 p=$(pgrep -u greetd -x labwc | head -n 1)
@@ -107,6 +109,9 @@ echo "ESSAI fuseau $(timedatectl show -p Timezone --value)"
 echo "ESSAI compte $(id -nG essai 2>&1)"
 echo "ESSAI en échec : $(systemctl --failed --no-legend --plain | awk "{print \$1}" | tr "\n" " ")"
 echo "ESSAI fin"
+} > "$r" 2>&1
+{ printf "\n\n"; cat "$r"; printf "\n"; } > /dev/ttyS0
+sleep 2
 systemctl poweroff
 '
 b64() { printf '%s' "$1" | base64 -w0; }
@@ -124,14 +129,15 @@ QEMU=$!
 attendre_fin "$ATTENTE_DEMARRAGE" "$T/demarrage.log" "ESSAI fin"
 duree_demarrage=$((SECONDS - debut))
 echo "-- ce que dit le système installé ($duree_demarrage s)"
-grep -a "^ESSAI " "$T/demarrage.log" | tr -d '\r' | sed 's/^ESSAI //'
-if ! grep -aq "^ESSAI fin" "$T/demarrage.log"; then
+essai_lignes() { grep -ao 'ESSAI [^[:cntrl:]]*' "$T/demarrage.log"; }
+essai_lignes | sed 's/^ESSAI //'
+if ! essai_lignes | grep -qx "ESSAI fin"; then
   echo "-- fin du journal série"; tail -n 30 "$T/demarrage.log" | tr -d '\r' | cut -c1-200
   echo "RÉSULTAT : installation faite ($duree_installation s), mais le système installé n'a pas répondu en $ATTENTE_DEMARRAGE s."
   exit 1
 fi
 
-e=$(grep -a "^ESSAI " "$T/demarrage.log" | tr -d '\r')
+e=$(essai_lignes)
 manque=""
 grep -qx "ESSAI greetd active" <<<"$e" || manque+=" greetd actif ;"
 grep -qx "ESSAI écran de connexion lancé" <<<"$e" || manque+=" écran de connexion lancé ;"
