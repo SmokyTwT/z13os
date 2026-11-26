@@ -143,9 +143,11 @@ télécharger les mises à jour.
    **Attention : « récupérer tout l'espace » efface Windows et tout le disque.** Pour garder
    Windows (double démarrage), il faut d'abord libérer de la place depuis Windows (Gestion des
    disques → Réduire le volume) et n'installer Smoky OS que dans cet espace libre.
-5. Problème connu, pas encore corrigé : l'installation depuis l'ISO peut s'arrêter à l'étape
-   « chargeur de démarrage ». `tools/repair-boot.sh` (à lancer depuis Smoky OS démarré) réécrit
-   alors le menu de démarrage Smoky OS / Windows.
+5. L'installateur n'écrit pas d'entrée de démarrage dans le firmware : celui du Z13 les refuse, et
+   c'est ce qui arrêtait l'installation à l'étape « chargeur de démarrage ». Si le PC redémarre sur
+   Windows, appuie sur **Échap** au démarrage et choisis Smoky OS (ou Fedora). Une fois Smoky OS
+   démarré, `sudo bash tools/repair-boot.sh` remet le menu Smoky OS / Windows et le bouton
+   « Redémarrer sur Windows ».
 6. Au premier démarrage, connecte-toi avec le compte créé à l'installation. Branche le Wi-Fi :
    Proton VPN, Déjà Dup et mpv s'installent tout seuls dans les minutes qui suivent.
 7. Ouvre l'appli **Synchroniser mes notes avec Google Drive** et autorise l'accès (une seule

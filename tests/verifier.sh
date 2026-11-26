@@ -256,9 +256,10 @@ rm -rf "$k"
 [ "$ko" -eq 0 ] && ok "smoky-clavier.sh : 6 cas (fr, rien de réglé, ancien systemd, autre disposition, fichier X11)"
 grep -q '"org.fedoraproject.Anaconda.Modules.Localization"' iso.toml && grep -q '^keyboard .*--xlayouts=fr' iso.toml \
   && grep -q '^lang fr_FR.UTF-8' iso.toml && grep -q '^timezone Europe/Paris$' iso.toml \
+  && grep -q '^bootloader --leavebootorder$' iso.toml \
   && grep -q '"org.fedoraproject.Anaconda.Modules.Users"' iso.toml \
   && ok "ISO : installateur en français et en AZERTY, fuseau Europe/Paris, création du compte" \
-  || echec "iso.toml : il faut les modules Localization et Users, et les lignes lang, keyboard et timezone (sinon mot de passe tapé en QWERTY, ou aucun compte)"
+  || echec "iso.toml : il faut les modules Localization et Users, et les lignes lang, keyboard, timezone et bootloader --leavebootorder (sinon mot de passe tapé en QWERTY, aucun compte, ou installation arrêtée par le firmware du Z13)"
 
 etape "Diagnostic (smoky-diagnostic)"
 # de fausses commandes « bavardes » : le rapport ne doit rien laisser passer de personnel

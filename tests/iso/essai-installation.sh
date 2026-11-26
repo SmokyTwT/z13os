@@ -11,8 +11,9 @@
 #     tout seul ce qui arrive sur main (préparée en arrière-plan, appliquée à l'arrêt).
 # Rien ne touche au vrai PC : tout se passe dans des fichiers temporaires.
 #   sudo bash tests/iso/essai-installation.sh smokyos.iso
-#   SMOKY_FIRMWARE_FERME=1 : l'installateur ne peut pas écrire les variables du firmware (efi=noruntime),
-#                            comme sur le Z13, dont le firmware ASUS les refuse.
+# L'installateur n'écrit pas d'entrée de démarrage (iso.toml : bootloader --leavebootorder) : le système
+# installé démarre ici par le chemin de secours EFI/BOOT/BOOTX64.EFI, comme sur le Z13 dont le firmware
+# refuse ces écritures. (efi=noruntime ne l'imite pas : l'installateur ne monte plus efivarfs du tout.)
 # Paquets : qemu-system-x86, xorriso, ovmf. Sans KVM, l'essai est sauté (il durerait des heures).
 set -uo pipefail
 ISO=${1:?usage : essai-installation.sh smokyos.iso}
@@ -20,7 +21,6 @@ T=$(mktemp -d); QEMU=""
 trap '[ -n "$QEMU" ] && kill "$QEMU" 2>/dev/null; rm -rf "$T"' EXIT
 ATTENTE_INSTALLATION=${SMOKY_ATTENTE_INSTALLATION:-2400}
 ATTENTE_DEMARRAGE=${SMOKY_ATTENTE_DEMARRAGE:-600}
-FERME=""; [ -n "${SMOKY_FIRMWARE_FERME:-}" ] && FERME="efi=noruntime"
 
 if [ ! -w /dev/kvm ]; then echo "RÉSULTAT : essai d'installation sauté (pas de KVM ici)."; exit 0; fi
 CODE=/usr/share/OVMF/OVMF_CODE_4M.fd VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -62,7 +62,7 @@ attendre_fin() {   # attendre_fin SECONDES JOURNAL MOTIF → 0 si le motif appar
   return 1
 }
 
-echo "== 1/3 Installation${FERME:+ (variables du firmware impossibles à écrire, comme sur le Z13)}"
+echo "== 1/3 Installation"
 cp "$VARS" "$T/vars.fd"
 truncate -s 40G "$T/disque.raw"
 : > "$T/installation.log"
@@ -70,14 +70,14 @@ debut=$SECONDS
 qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
   -drive "if=pflash,format=raw,readonly=on,file=$CODE" -drive "if=pflash,format=raw,file=$T/vars.fd" \
   -kernel "$T/vmlinuz" -initrd "$T/initrd.img" \
-  -append "$opts inst.ks=hd:LABEL=ESSAIKS:/ks.cfg inst.text console=ttyS0,115200 $FERME" \
+  -append "$opts inst.ks=hd:LABEL=ESSAIKS:/ks.cfg inst.text console=ttyS0,115200" \
   -drive "file=$ISO,media=cdrom,if=none,id=iso,readonly=on" -device ide-cd,drive=iso,bus=ide.0 \
   -drive "file=$T/ks.iso,media=cdrom,if=none,id=ks,readonly=on" -device ide-cd,drive=ks,bus=ide.1 \
   -drive "file=$T/disque.raw,format=raw,if=virtio,cache=unsafe" \
   -display none -nic none -monitor none -no-reboot -serial "file:$T/installation.log" &
 QEMU=$!
 # une erreur de l'installateur l'arrête sur un message : inutile d'attendre la fin du délai
-ERREUR_INSTALLATEUR="failed to write boot loader|BootloaderInstallationError|An unknown error has occurred|erreur inconnue s'est produite|chargeur de démarrage.{0,80}(échou|erreur)|[Ee]rreur.{0,80}chargeur de démarrage"
+ERREUR_INSTALLATEUR="failed to write boot loader|BootloaderInstallationError|unknown error has occu?rred|erreur inconnue s'est produite|chargeur de démarrage.{0,80}(échou|erreur)|[Ee]rreur.{0,80}chargeur de démarrage"
 if ! attendre_fin "$ATTENTE_INSTALLATION" "$T/installation.log" "$ERREUR_INSTALLATEUR"; then
   echo "-- fin du journal de l'installation"; tail -n 60 "$T/installation.log" | tr -d '\r' | cut -c1-200
   echo "RÉSULTAT : l'installation ne s'est pas terminée en $ATTENTE_INSTALLATION s."; exit 1

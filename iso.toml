@@ -8,12 +8,17 @@
 # - Fuseau Europe/Paris (sans cette ligne : America/New_York). Sans « --utc », l'horloge du PC
 #   reste à l'heure locale, comme Windows la lit : pas d'heure d'écart sous Windows (c'est aussi
 #   ce que fait l'installateur de Fedora quand il voit Windows sur le disque).
+# - « bootloader --leavebootorder » : l'installateur n'écrit pas d'entrée de démarrage dans le firmware.
+#   Le firmware ASUS du Z13 refuse ces écritures, et l'installation s'arrêtait alors à l'étape du
+#   chargeur de démarrage (bootupctl --update-firmware). Le système démarre par l'entrée qui existe
+#   déjà, ou par le chemin de secours EFI/BOOT/BOOTX64.EFI (essayé par build-iso, firmware « fermé »).
 # @IMAGE@ est remplacé par le workflow.
 [customizations.installer.kickstart]
 contents = """
 lang fr_FR.UTF-8
 keyboard --vckeymap=fr --xlayouts=fr
 timezone Europe/Paris
+bootloader --leavebootorder
 %post
 bootc switch --mutate-in-place --transport registry @IMAGE@
 %end
