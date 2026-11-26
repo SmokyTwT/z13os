@@ -2,8 +2,16 @@ name: build-iso
 # ISO d'installation (clé USB), construite à partir de l'image publiée (latest).
 # Elle ne sert qu'à installer ou réinstaller : elle est refaite après la construction du lundi,
 # ou à la demande (Actions → build-iso → Run workflow). Les mises à jour du PC n'en dépendent pas.
+# Après la construction, deux essais en machine virtuelle : l'installateur démarre (résumé en
+# français), puis une installation complète et le premier démarrage du système installé.
+# « reprendre » : refaire seulement les essais, sur l'ISO d'une exécution précédente.
 on:
   workflow_dispatch:
+    inputs:
+      reprendre:
+        description: "Essais seuls : numéro de l'exécution de build-iso dont on reprend l'ISO (vide : construire)"
+        required: false
+        default: ''
   workflow_run:
     workflows: [build-image]
     types: [completed]
@@ -12,6 +20,7 @@ on:
 permissions:
   contents: read
   packages: read
+  actions: read
 
 jobs:
   iso:
@@ -33,6 +42,7 @@ jobs:
           df -h /
 
       - name: Construire l'ISO
+        if: inputs.reprendre == ''
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}:latest"
           sed -i "s|@IMAGE@|$IMAGE|" iso.toml
@@ -53,6 +63,7 @@ jobs:
           ls -lh smokyos.iso
 
       - name: Mettre l'ISO à disposition
+        if: inputs.reprendre == ''
         uses: actions/upload-artifact@v4
         with:
           name: smokyos-iso
@@ -62,11 +73,19 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+      - name: Reprendre l'ISO d'une exécution précédente
+        if: inputs.reprendre != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: smokyos-iso
+          run-id: ${{ inputs.reprendre }}
+          github-token: ${{ github.token }}
+
       # Après la mise à disposition : un échec ici n'empêche pas de récupérer l'ISO, il la signale.
       - name: Essai de l'installateur (machine virtuelle, sans rien installer)
         run: |
           for essai in 1 2 3 4; do
-            if sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 xorriso; then break; fi
+            if sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 xorriso ovmf; then break; fi
             if [[ $essai == 4 ]]; then echo "::error::Impossible d'installer QEMU (machine virtuelle de test)"; exit 1; fi
             echo "::warning::Installation de QEMU : essai $essai échoué, nouvel essai dans 30 s"
             sleep 30
@@ -75,4 +94,17 @@ jobs:
           code=0
           sudo bash tests/iso/essai-installateur.sh smokyos.iso | tee /tmp/installateur.txt || code=$?
           { echo "### Essai de l'installateur"; echo '```'; grep -E "RÉSULTAT|note" /tmp/installateur.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Essai d'installation complète (machine virtuelle)
+        if: success() || failure()
+        run: |
+          # place pour le disque virtuel : l'image et le constructeur ne servent plus
+          sudo podman rmi -af >/dev/null 2>&1 || true
+          sudo rm -rf output
+          df -h /
+          set -o pipefail
+          code=0
+          sudo bash tests/iso/essai-installation.sh smokyos.iso | tee /tmp/installation.txt || code=$?
+          { echo "### Essai d'installation complète"; echo '```'; grep -E "RÉSULTAT|note|installation terminée" /tmp/installation.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit "$code"
