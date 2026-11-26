@@ -112,4 +112,5 @@ et comment les morceaux se parlent.
   plus gros gain restant.
 - **Mesures sur ton PC :** `powertop` et `smoky-diagnostic --energie` sur batterie, pour régler
   la suite sur des chiffres.
-- **Zone de notification** (icônes de Proton VPN, Discord…) : à ajouter si tu en utilises.
+- **Zone de notification** (icônes de Proton VPN, Discord…) : faite le 26/11 (`smokybureau/plateau.py`,
+  StatusNotifierItem et menus dbusmenu), à droite de la barre.

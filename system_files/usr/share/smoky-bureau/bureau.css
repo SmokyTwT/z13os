@@ -59,6 +59,8 @@ window.smoky-barre {
   border-radius: 9px; padding: 8px 14px; min-height: 30px;
 }
 .menu-entree:hover { background: rgba(255, 255, 255, 0.08); }
+.menu-entree:disabled { color: #55555e; }
+.menu-titre { color: #7c7c86; font-size: 0.9em; padding: 6px 14px 2px; }   /* sous-menu d'une icône */
 
 /* --- lanceur --------------------------------------------------------------------------- */
 .voile { background: rgba(9, 9, 10, 0.88); }

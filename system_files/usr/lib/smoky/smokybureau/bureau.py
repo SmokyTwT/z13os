@@ -1,5 +1,5 @@
-"""Smoky OS — le bureau : fond d'écran, barre, dock, lanceur, réglages rapides, bulles et
-notifications. Un seul programme, lancé par systemd (smoky-bureau.service), relancé s'il tombe.
+"""Smoky OS — le bureau : fond d'écran, barre (avec la zone de notification), dock, lanceur, réglages
+rapides, bulles et notifications. Un seul programme, lancé par systemd (smoky-bureau.service), relancé s'il tombe.
 
 Règles d'autonomie : aucune minuterie de moins d'une seconde, l'heure à la minute, la batterie
 toutes les 30 s, rien ne se redessine quand rien ne change, pas d'animation continue.
@@ -27,7 +27,7 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 from gi.repository import Gtk4LayerShell as LS  # noqa: E402
 
-from . import commun, reseau, wayland  # noqa: E402
+from . import commun, plateau, reseau, wayland  # noqa: E402
 
 JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
 MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
@@ -149,6 +149,7 @@ class Bureau(Gtk.Application):
         self.ecran = Gdk.Display.get_default().get_monitors().get_item(0)
         self.creer_fonds()
         self.creer_barre()
+        self.creer_plateau()
         self.creer_dock()
         self.creer_lanceur()
         self.creer_panneau()
@@ -220,6 +221,8 @@ class Bureau(Gtk.Application):
         self.bouton_clavier.set_child(icone("input-keyboard-symbolic"))
         self.bouton_clavier.connect("clicked", lambda *a: self.basculer_clavier())
         fin = Gtk.Box(spacing=2)
+        self.boite_plateau = Gtk.Box(spacing=2, visible=False)   # icônes d'applis (zone de notification)
+        fin.append(self.boite_plateau)
         fin.append(self.bouton_clavier)
         fin.append(droite)
         boite.set_start_widget(gauche)
@@ -227,6 +230,79 @@ class Bureau(Gtk.Application):
         boite.set_end_widget(fin)
         w.set_child(boite)
         w.present()
+
+    # --- zone de notification : icônes d'applis comme Proton VPN (plateau.py) -----------------------
+    def creer_plateau(self):
+        self.plateau = None
+        try:
+            self.plateau = plateau.Plateau(Gio.bus_get_sync(Gio.BusType.SESSION), self.maj_plateau)
+            self.plateau.demarrer()
+        except GLib.Error as e:
+            print("zone de notification indisponible :", e.message, flush=True)
+
+    def maj_plateau(self, elements):
+        enfant = self.boite_plateau.get_first_child()
+        while enfant:
+            suivant = enfant.get_next_sibling()
+            self.boite_plateau.remove(enfant)
+            enfant = suivant
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        for el in elements:
+            if not el.visible:
+                continue
+            if el.chemin_icones and el.chemin_icones not in (theme.get_search_path() or []):
+                theme.add_search_path(el.chemin_icones)
+            nom = el.nom_icone()
+            if nom and theme.has_icon(nom):
+                image = icone(nom)
+            elif el.image:
+                l, h, octets = plateau.rgba(el.image)
+                texture = Gdk.MemoryTexture.new(l, h, Gdk.MemoryFormat.R8G8B8A8, GLib.Bytes.new(octets), l * 4)
+                image = Gtk.Image.new_from_paintable(texture)
+                image.set_pixel_size(16)
+            else:
+                image = icone(nom or "application-x-executable-symbolic")
+            b = Gtk.Button(css_classes=["barre-bouton", "plateau"], can_focus=False, focus_on_click=False,
+                           tooltip_text=el.bulle or el.titre or el.ident or None)
+            b.set_child(image)
+            b.connect("clicked", lambda bouton, el=el: self.menu_plateau(bouton, el) if el.est_menu else self.plateau.activer(el))
+            milieu = Gtk.GestureClick(button=2)
+            milieu.connect("pressed", lambda *a, el=el: self.plateau.activer_second(el))
+            b.add_controller(milieu)
+            appui_long_ou_droit(b, lambda b=b, el=el: self.menu_plateau(b, el))
+            self.boite_plateau.append(b)
+        self.boite_plateau.set_visible(any(el.visible for el in elements))
+
+    def menu_plateau(self, bouton, el):
+        if not el.menu:
+            self.plateau.menu_de_l_appli(el)
+            return
+        self.plateau.lire_menu(el, lambda arbre: self.montrer_menu_plateau(bouton, el, arbre))
+
+    def montrer_menu_plateau(self, bouton, el, arbre):
+        if not arbre or not bouton.get_root():
+            return
+        pop = Gtk.Popover(css_classes=["menu-dock"])
+        pop.set_parent(bouton)
+        boite = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+
+        def ajouter(entrees, retrait):
+            for e in entrees:
+                if e.get("separateur"):
+                    boite.append(Gtk.Separator())
+                    continue
+                if e["enfants"]:                  # sous-menu : son titre, puis ses entrées en retrait
+                    boite.append(Gtk.Label(label=e["texte"], xalign=0, css_classes=["menu-titre"]))
+                    ajouter(e["enfants"], retrait + 1)
+                    continue
+                texte = ("✓ " if e["coche"] else "    " if e["coche"] is False else "") + e["texte"]
+                b = Gtk.Button(label="   " * retrait + texte, css_classes=["menu-entree"], sensitive=e["actif"])
+                b.connect("clicked", lambda *x, i=e["id"]: (pop.popdown(), self.plateau.choisir(el, i)))
+                boite.append(b)
+        ajouter(arbre, 0)
+        pop.set_child(boite)
+        pop.connect("closed", lambda *x: pop.unparent())
+        pop.popup()
 
     def tic_minute(self):
         t = time.localtime()

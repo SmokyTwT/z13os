@@ -11,7 +11,7 @@ complète, et la version précédente reste dans le menu de démarrage en cas de
 | Chrome | Google Chrome, réglé pour Wayland et le décodage vidéo par la puce Intel |
 | Netflix, Disney+, Prime Video, TF1+, M6+, Spotify, WhatsApp | Applis web dans le dock (il n'existe pas d'appli WhatsApp officielle pour Linux) |
 | Maison | **Smoky Home** : robot Xiaomi X20 Max avec la carte, lumières Tapo, Google Home Mini et Nest Hub (Home Assistant + dreame-vacuum + Xiaomi Home, versions figées) |
-| Proton VPN, Déjà Dup, mpv | Applis officielles (Flatpak), installées au 1er démarrage |
+| Proton VPN, Déjà Dup, mpv | Applis officielles (Flatpak), installées au 1er démarrage ; les icônes que posent ces applis (Proton VPN…) vont à droite de la barre : clic pour l'ouvrir, clic droit ou appui long pour son menu |
 | Moodle, Google Drive | Applis dans le dock + Drive dans Fichiers (Paramètres > Comptes en ligne) |
 | Claude | Appli Claude dans le dock |
 | Optimisation Z13 | asusctl / supergfxctl, RTX coupée (autonomie), charge limitée à 80 %, thermald, codecs, mises à jour auto ; moins de réveils du processeur au repos ; consommation et autonomie estimée en direct dans Smoky → Système → Énergie, mesure détaillée par `smoky-diagnostic --energie` |

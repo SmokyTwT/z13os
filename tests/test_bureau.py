@@ -8,6 +8,8 @@ L'apparence se vérifie à part (essai visuel sans écran) et le démarrage en m
 """
 import json
 import os
+import shutil
+import time
 import ctypes
 import ctypes.util
 import socket
@@ -646,6 +648,160 @@ class TestBatterie(unittest.TestCase):
                 (bat / "status").write_text("Charging")
                 self.assertIsNone(b.etat()["minutes"])
                 self.assertEqual(commun.duree(200), "3 h 20")
+
+
+class TestPlateau(unittest.TestCase):
+    """Zone de notification : une fausse appli (comme Proton VPN) s'inscrit auprès du veilleur du bureau, sur
+    un bus de session à part (dbus-daemon). Le bureau lit son icône, son titre, sa bulle et son menu, l'ouvre
+    d'un clic, choisit une entrée du menu, suit ses changements et la retire quand elle s'en va."""
+
+    ITEM_XML = """<node>
+     <interface name="org.kde.StatusNotifierItem">
+      <method name="Activate"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
+      <method name="SecondaryActivate"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
+      <method name="ContextMenu"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
+      <property name="Id" type="s" access="read"/><property name="Title" type="s" access="read"/>
+      <property name="Status" type="s" access="read"/><property name="IconName" type="s" access="read"/>
+      <property name="AttentionIconName" type="s" access="read"/>
+      <property name="IconPixmap" type="a(iiay)" access="read"/><property name="Menu" type="o" access="read"/>
+      <property name="ItemIsMenu" type="b" access="read"/><property name="ToolTip" type="(sa(iiay)ss)" access="read"/>
+      <signal name="NewTitle"/><signal name="NewStatus"><arg type="s"/></signal>
+     </interface>
+     <interface name="com.canonical.dbusmenu">
+      <method name="GetLayout"><arg type="i" direction="in"/><arg type="i" direction="in"/><arg type="as" direction="in"/>
+       <arg type="u" direction="out"/><arg type="(ia{sv}av)" direction="out"/></method>
+      <method name="Event"><arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="in"/>
+       <arg type="u" direction="in"/></method>
+      <method name="AboutToShow"><arg type="i" direction="in"/><arg type="b" direction="out"/></method>
+     </interface></node>"""
+
+    def setUp(self):
+        try:
+            from gi.repository import Gio, GLib
+            from smokybureau import plateau
+        except ImportError:
+            self.skipTest("liaisons GTK (gi) absentes pour ce Python : essai fait avec le Python du système")
+        if not shutil.which("dbus-daemon"):
+            self.skipTest("dbus-daemon absent")
+        self.Gio, self.GLib, self.plateau = Gio, GLib, plateau
+        self.bus = Gio.TestDBus.new(Gio.TestDBusFlags.NONE)
+        self.bus.up()
+        self.addCleanup(self.bus.down)
+        self.vues = []
+        self.hote = self.connexion()
+        self.p = plateau.Plateau(self.hote, lambda liste: self.vues.append(len(liste)))
+        self.p.demarrer()
+        self.addCleanup(self.p.arreter)
+        self.attendre(lambda: self.p.actif, "le veilleur prend son nom")
+
+    def connexion(self):
+        Gio = self.Gio
+        return Gio.DBusConnection.new_for_address_sync(
+            self.bus.get_bus_address(),
+            Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+
+    def attendre(self, condition, quoi, delai=5):
+        contexte, fin = self.GLib.MainContext.default(), time.monotonic() + delai
+        while not condition():
+            if time.monotonic() > fin:
+                self.fail("délai dépassé : " + quoi)
+            contexte.iteration(False)
+            time.sleep(0.005)
+
+    def fausse_appli(self, chemin="/StatusNotifierItem"):
+        """Une appli à icône : ses propriétés, ses appels reçus, son menu."""
+        GLib, Gio = self.GLib, self.Gio
+        v = GLib.Variant
+        appli = {"connexion": self.connexion(), "appels": [], "props": {
+            "Id": v("s", "proton-vpn"), "Title": v("s", "Proton VPN"), "Status": v("s", "Active"),
+            "IconName": v("s", "proton-vpn-logo"), "AttentionIconName": v("s", "proton-alerte"),
+            "IconPixmap": v("a(iiay)", [(2, 2, bytes(16)), (24, 24, bytes(range(256)) * 9)]),
+            "Menu": v("o", "/MenuBar"), "ItemIsMenu": v("b", False),
+            "ToolTip": v("(sa(iiay)ss)", ("", [], "Proton VPN", "Connecté à la France"))}}
+
+        def noeud(ident, props, enfants=()):
+            genres = {"enabled": "b", "visible": "b", "toggle-state": "i"}
+            return v("(ia{sv}av)", (ident, {k: v(genres.get(k, "s"), x) for k, x in props.items()}, list(enfants)))
+        menu = noeud(0, {"children-display": "submenu"}, [
+            noeud(1, {"label": "_Connecter"}), noeud(2, {"type": "separator"}),
+            noeud(3, {"label": "Tuer le __VPN", "enabled": False}), noeud(4, {"label": "Caché", "visible": False}),
+            noeud(5, {"label": "Démarrage auto", "toggle-type": "checkmark", "toggle-state": 1}),
+            noeud(6, {"label": "Pays", "children-display": "submenu"}, [noeud(7, {"label": "France"})])])
+
+        def appel(c, expediteur, ch, interface, methode, params, invocation):
+            appli["appels"].append((methode, params.unpack()))
+            if methode == "GetLayout":
+                invocation.return_value(GLib.Variant.new_tuple(v("u", 1), menu))
+            elif methode == "AboutToShow":
+                invocation.return_value(v("(b)", (False,)))
+            else:
+                invocation.return_value(None)
+        info = Gio.DBusNodeInfo.new_for_xml(self.ITEM_XML)
+        appli["connexion"].register_object(chemin, info.interfaces[0], appel, lambda *a: appli["props"][a[4]], None)
+        appli["connexion"].register_object("/MenuBar", info.interfaces[1], appel, None, None)
+        return appli
+
+    def inscrire(self, appli, service):
+        appli["connexion"].call("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher", "org.kde.StatusNotifierWatcher",
+                                "RegisterStatusNotifierItem", self.GLib.Variant("(s)", (service,)), None,
+                                self.Gio.DBusCallFlags.NONE, 3000, None, None)
+
+    def test_une_appli_dans_la_barre(self):
+        appli = self.fausse_appli()
+        self.inscrire(appli, "/StatusNotifierItem")
+        self.attendre(lambda: any(e.titre for e in self.p.liste()), "l'icône est lue")
+        (el,) = self.p.liste()
+        self.assertEqual(el.cle, appli["connexion"].get_unique_name() + "/StatusNotifierItem")
+        self.assertEqual((el.ident, el.icone, el.menu, el.est_menu, el.etat), ("proton-vpn", "proton-vpn-logo", "/MenuBar", False, "Active"))
+        self.assertEqual(el.bulle, "Proton VPN — Connecté à la France")
+        self.assertEqual(el.image[:2], (24, 24), "l'image de 24 px, pas celle de 2 px")
+        self.assertEqual(self.plateau.rgba((1, 1, bytes([0x80, 1, 2, 3])))[2], bytes([1, 2, 3, 0x80]), "ARGB → RGBA")
+
+        self.p.activer(el)                                       # clic gauche : l'appli s'ouvre
+        self.attendre(lambda: ("Activate", (0, 0)) in appli["appels"], "clic transmis")
+        arbres = []
+        self.p.lire_menu(el, arbres.append)                      # clic droit : son menu
+        self.attendre(lambda: arbres, "menu lu")
+        menu = arbres[0]
+        self.assertEqual([e.get("texte", "—") for e in menu], ["Connecter", "—", "Tuer le _VPN", "Démarrage auto", "Pays"],
+                         "soulignés retirés, entrée cachée absente")
+        self.assertFalse(menu[2]["actif"])
+        self.assertTrue(menu[3]["coche"])
+        self.assertIsNone(menu[0]["coche"])
+        self.assertEqual(menu[4]["enfants"][0]["texte"], "France")
+        self.p.choisir(el, 1)
+        self.attendre(lambda: any(m == "Event" and a[:2] == (1, "clicked") for m, a in appli["appels"]), "entrée choisie")
+
+        # l'appli change : titre, puis « à voir » (autre icône), puis cachée
+        appli["props"]["Title"] = self.GLib.Variant("s", "Proton VPN (déconnecté)")
+        appli["props"]["Status"] = self.GLib.Variant("s", "NeedsAttention")
+        appli["connexion"].emit_signal(None, "/StatusNotifierItem", "org.kde.StatusNotifierItem", "NewTitle", None)
+        self.attendre(lambda: el.titre == "Proton VPN (déconnecté)", "nouveau titre lu")
+        self.assertEqual(el.nom_icone(), "proton-alerte")
+        appli["props"]["Status"] = self.GLib.Variant("s", "Passive")
+        appli["connexion"].emit_signal(None, "/StatusNotifierItem", "org.kde.StatusNotifierItem", "NewStatus",
+                                       self.GLib.Variant("(s)", ("Passive",)))
+        self.attendre(lambda: not el.visible, "icône cachée quand l'appli le demande")
+
+        appli["connexion"].close_sync(None)                      # l'appli s'en va : l'icône aussi
+        self.attendre(lambda: not self.p.liste(), "icône retirée")
+
+    def test_inscription_par_nom_et_appli_muette(self):
+        appli = self.fausse_appli()
+        nom = appli["connexion"].get_unique_name()
+        self.inscrire(appli, nom)                                # un nom : l'objet est au chemin habituel
+        self.attendre(lambda: any(e.titre for e in self.p.liste()), "icône lue")
+        self.assertEqual(self.p.liste()[0].cle, nom + "/StatusNotifierItem")
+        self.inscrire(appli, nom)                                # inscrite deux fois : une seule icône
+        muette = self.connexion()                                # objet introuvable : rien de lu, pas d'erreur
+        self.inscrire({"connexion": muette}, "/Rien")
+        self.attendre(lambda: len(self.p.liste()) == 2, "seconde inscription notée")
+        time.sleep(0.2)
+        for _ in range(50):
+            self.GLib.MainContext.default().iteration(False)
+        self.assertEqual(sorted(bool(e.titre) for e in self.p.liste()), [False, True])
+        self.assertEqual(self.p._propriete(None, None, None, None, "RegisteredStatusNotifierItems").unpack(),
+                         [e.cle for e in self.p.liste()])
 
 
 if __name__ == "__main__":
