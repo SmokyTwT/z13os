@@ -108,3 +108,14 @@ jobs:
           sudo bash tests/iso/essai-installation.sh smokyos.iso | tee /tmp/installation.txt || code=$?
           { echo "### Essai d'installation complète"; echo '```'; grep -E "RÉSULTAT|note|installation terminée" /tmp/installation.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit "$code"
+
+      # Le firmware ASUS du Z13 refuse qu'on écrive ses variables (entrées de démarrage) : l'installation
+      # doit aboutir quand même, et le système démarrer par le chemin de secours EFI/BOOT/BOOTX64.EFI.
+      - name: Essai d'installation, firmware qui refuse ses variables (comme le Z13)
+        if: success() || failure()
+        run: |
+          set -o pipefail
+          code=0
+          sudo SMOKY_FIRMWARE_FERME=1 bash tests/iso/essai-installation.sh smokyos.iso | tee /tmp/installation-z13.txt || code=$?
+          { echo "### Essai d'installation, firmware fermé (comme le Z13)"; echo '```'; grep -E "RÉSULTAT|note|installation terminée" /tmp/installation-z13.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
